@@ -1,0 +1,33 @@
+name: Adyapan HRMS CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js 20
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Build & Test Backend
+        run: |
+          cd backend
+          npm ci
+          npx prisma generate
+          npm run build
+
+      - name: Build Frontend
+        run: |
+          cd frontend
+          npm ci
+          npm run build

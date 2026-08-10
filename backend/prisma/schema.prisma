@@ -1,0 +1,620 @@
+// Prisma Schema for Adyapan HRMS
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ------------------------------------------------------
+// Enums
+// ------------------------------------------------------
+
+enum RoleName {
+  SUPER_ADMIN
+  HR_ADMIN
+  HR_EXECUTIVE
+  FINANCE
+  DEPARTMENT_HEAD
+  TEAM_LEADER
+  EMPLOYEE
+}
+
+enum EmploymentType {
+  FULL_TIME
+  PART_TIME
+  INTERN
+  CONTRACT
+  CONSULTANT
+}
+
+enum EmployeeStatus {
+  ACTIVE
+  PROBATION
+  NOTICE_PERIOD
+  RESIGNED
+  TERMINATED
+  INACTIVE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  HALF_DAY
+  LATE
+  LEAVE
+  WEEK_OFF
+  HOLIDAY
+  WORK_FROM_HOME
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CANCELLED
+}
+
+enum PayrollStatus {
+  DRAFT
+  ATTENDANCE_CALCULATED
+  SALARY_CALCULATED
+  HR_REVIEWED
+  FINANCE_REVIEWED
+  APPROVED
+  PROCESSED
+}
+
+enum CandidateStatus {
+  APPLIED
+  SCREENING
+  SHORTLISTED
+  INTERVIEW
+  TECHNICAL_ROUND
+  HR_ROUND
+  SELECTED
+  OFFERED
+  JOINED
+  REJECTED
+}
+
+enum AssetStatus {
+  AVAILABLE
+  ASSIGNED
+  IN_USE
+  RETURNED
+  MAINTENANCE
+  DISPOSED
+}
+
+enum ExpenseStatus {
+  PENDING
+  MANAGER_APPROVED
+  FINANCE_APPROVED
+  REIMBURSED
+  REJECTED
+}
+
+enum ExitStatus {
+  SUBMITTED
+  MANAGER_APPROVED
+  HR_APPROVED
+  CLEARANCE_IN_PROGRESS
+  SETTLED
+  COMPLETED
+  REJECTED
+}
+
+// ------------------------------------------------------
+// Models
+// ------------------------------------------------------
+
+model User {
+  id              String         @id @default(uuid())
+  email           String         @unique
+  passwordHash    String
+  role            RoleName       @default(EMPLOYEE)
+  isEmailVerified Boolean        @default(false)
+  isMfaEnabled    Boolean        @default(false)
+  mfaSecret       String?
+  refreshToken    String?
+  lastLoginAt     DateTime?
+  failedAttempts  Int            @default(0)
+  isLocked        Boolean        @default(false)
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  employee        Employee?
+  auditLogs       AuditLog[]
+  notifications   Notification[]
+}
+
+model Department {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  code        String   @unique
+  description String?
+  headId      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  teams       Team[]
+  employees   Employee[]
+  jobs        JobOpening[]
+}
+
+model Team {
+  id           String     @id @default(uuid())
+  name         String
+  departmentId String
+  leaderId     String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  department   Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+  employees    Employee[]
+}
+
+model Designation {
+  id          String   @id @default(uuid())
+  title       String   @unique
+  code        String   @unique
+  level       Int      @default(1)
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employees   Employee[]
+}
+
+model Employee {
+  id               String         @id @default(uuid())
+  employeeCode     String         @unique
+  userId           String         @unique
+  firstName        String
+  lastName         String
+  profilePhoto     String?
+  gender           String?
+  dateOfBirth      DateTime?
+  mobileNumber     String?
+  personalEmail    String?
+  address          String?
+  
+  departmentId     String?
+  teamId           String?
+  designationId    String?
+  reportingManagerId String?
+  teamLeaderId     String?
+  employmentType   EmploymentType @default(FULL_TIME)
+  joiningDate      DateTime       @default(now())
+  confirmationDate DateTime?
+  probationDays    Int            @default(90)
+  workLocation     String         @default("Headquarters")
+  workMode         String         @default("In-Office")
+  status           EmployeeStatus @default(PROBATION)
+
+  bankAccountNo    String?
+  ifscCode         String?
+  bankName         String?
+  accountHolder    String?
+
+  emergencyContactName String?
+  emergencyRelation    String?
+  emergencyPhone       String?
+
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+
+  user             User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department       Department?    @relation(fields: [departmentId], references: [id])
+  team             Team?          @relation(fields: [teamId], references: [id])
+  designation      Designation?   @relation(fields: [designationId], references: [id])
+  
+  manager          Employee?      @relation("ReportingManager", fields: [reportingManagerId], references: [id])
+  subordinates     Employee[]     @relation("ReportingManager")
+
+  attendances      AttendanceRecord[]
+  leaveBalances    LeaveBalance[]
+  leaveRequests    LeaveRequest[]
+  salaryStructure  SalaryStructure?
+  payrollRecords   PayrollRecord[]
+  documents        EmployeeDocument[]
+  goals            Goal[]
+  reviews          PerformanceReview[]
+  assetAssignments AssetAssignment[]
+  expenseClaims    ExpenseClaim[]
+  resignation      Resignation?
+  fnfSettlement    FnFSettlement?
+  trainings        TrainingEnrollment[]
+}
+
+model AttendancePolicy {
+  id             String   @id @default(uuid())
+  name           String   @default("Standard Policy")
+  officeStartTime String  @default("09:30")
+  officeEndTime   String  @default("18:30")
+  gracePeriodMins Int     @default(15)
+  lateThresholdMins Int   @default(30)
+  halfDayThresholdHours Float @default(4.0)
+  overtimeMinMins Int     @default(60)
+  weeklyOffs     String   @default("Saturday,Sunday")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model AttendanceRecord {
+  id           String           @id @default(uuid())
+  employeeId   String
+  date         DateTime
+  checkInTime  DateTime?
+  checkOutTime DateTime?
+  workHours    Float            @default(0.0)
+  lateMinutes  Int              @default(0)
+  overtimeHours Float           @default(0.0)
+  status       AttendanceStatus @default(PRESENT)
+  source       String           @default("WEB")
+  notes        String?
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  employee     Employee         @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, date])
+}
+
+model LeaveType {
+  id           String   @id @default(uuid())
+  name         String   @unique
+  code         String   @unique
+  annualDays   Int      @default(12)
+  isEncashable Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  balances     LeaveBalance[]
+  requests     LeaveRequest[]
+}
+
+model LeaveBalance {
+  id          String   @id @default(uuid())
+  employeeId  String
+  leaveTypeId String
+  totalDays   Float
+  usedDays    Float    @default(0)
+  year        Int      @default(2026)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType   LeaveType @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+
+  @@unique([employeeId, leaveTypeId, year])
+}
+
+model LeaveRequest {
+  id           String      @id @default(uuid())
+  employeeId   String
+  leaveTypeId  String
+  startDate    DateTime
+  endDate      DateTime
+  totalDays    Float
+  reason       String
+  status       LeaveStatus @default(PENDING)
+  approvedById String?
+  rejectionReason String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  employee     Employee    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  leaveType    LeaveType   @relation(fields: [leaveTypeId], references: [id], onDelete: Cascade)
+}
+
+model Holiday {
+  id          String   @id @default(uuid())
+  title       String
+  date        DateTime @unique
+  type        String   @default("NATIONAL") // NATIONAL, COMPANY, REGIONAL, OPTIONAL
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model SalaryStructure {
+  id               String   @id @default(uuid())
+  employeeId       String   @unique
+  ctc              Float
+  basicSalary      Float
+  hra              Float
+  conveyance       Float    @default(0)
+  specialAllowance Float    @default(0)
+  pfDeduction      Float    @default(0)
+  esiDeduction     Float    @default(0)
+  ptDeduction      Float    @default(0)
+  tdsDeduction     Float    @default(0)
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  employee         Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model PayrollCycle {
+  id            String        @id @default(uuid())
+  month         Int
+  year          Int
+  status        PayrollStatus @default(DRAFT)
+  totalGross    Float         @default(0)
+  totalDeductions Float       @default(0)
+  totalNet      Float         @default(0)
+  processedAt   DateTime?
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  records       PayrollRecord[]
+
+  @@unique([month, year])
+}
+
+model PayrollRecord {
+  id             String       @id @default(uuid())
+  payrollCycleId String
+  employeeId     String
+  workingDays    Int          @default(30)
+  presentDays    Float        @default(30)
+  lopDays        Float        @default(0)
+  grossSalary    Float
+  totalDeductions Float
+  netSalary      Float
+  payslipPdfUrl  String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  payrollCycle   PayrollCycle @relation(fields: [payrollCycleId], references: [id], onDelete: Cascade)
+  employee       Employee     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([payrollCycleId, employeeId])
+}
+
+model JobOpening {
+  id           String   @id @default(uuid())
+  title        String
+  code         String   @unique
+  departmentId String
+  description  String
+  requirements String
+  vacancies    Int      @default(1)
+  location     String   @default("Remote/Hybrid")
+  minExpYears  Int      @default(0)
+  maxSalary    Float?
+  status       String   @default("OPEN") // OPEN, CLOSED, ON_HOLD
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  department   Department  @relation(fields: [departmentId], references: [id])
+  candidates   Candidate[]
+}
+
+model Candidate {
+  id           String          @id @default(uuid())
+  jobId        String
+  name         String
+  email        String
+  phone        String
+  resumeUrl    String?
+  skills       String?
+  experienceYrs Float          @default(0)
+  currentCtc   Float?
+  expectedCtc  Float?
+  noticePeriodDays Int         @default(30)
+  matchScore   Float?
+  aiAnalysis   String?
+  status       CandidateStatus @default(APPLIED)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  job          JobOpening      @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  offerLetter  OfferLetter?
+}
+
+model OfferLetter {
+  id          String    @id @default(uuid())
+  candidateId String    @unique
+  designation String
+  offeredCtc  Float
+  joiningDate DateTime
+  status      String    @default("SENT") // SENT, ACCEPTED, REJECTED, EXPIRED
+  pdfUrl      String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  candidate   Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+}
+
+model EmployeeDocument {
+  id          String   @id @default(uuid())
+  employeeId  String
+  title       String
+  category    String   // PAN, AADHAAR, OFFER_LETTER, PASSPORT, CERTIFICATE, PAYSLIP
+  fileUrl     String
+  fileSize    Int      @default(0)
+  isVerified  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model Goal {
+  id          String   @id @default(uuid())
+  employeeId  String
+  title       String
+  description String?
+  targetValue Float    @default(100)
+  currentValue Float   @default(0)
+  unit        String   @default("%")
+  dueDate     DateTime
+  status      String   @default("IN_PROGRESS") // NOT_STARTED, IN_PROGRESS, COMPLETED
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  employee    Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model PerformanceReview {
+  id               String   @id @default(uuid())
+  employeeId       String
+  cycleName        String   @default("Annual Review 2026")
+  selfRating       Int?
+  selfComments     String?
+  managerRating    Int?
+  managerComments  String?
+  finalRating      Float?
+  recommendation   String?  // PROMOTION, INCREMENT, PIP, CONFIRMATION
+  status           String   @default("SUBMITTED") // DRAFT, SUBMITTED, COMPLETED
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  employee         Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model Asset {
+  id           String      @id @default(uuid())
+  assetTag     String      @unique
+  name         String
+  category     String      // LAPTOP, MOBILE, MONITOR, ACCESSORY
+  serialNumber String?
+  purchaseDate DateTime?
+  warrantyExpiry DateTime?
+  status       AssetStatus @default(AVAILABLE)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  assignments  AssetAssignment[]
+}
+
+model AssetAssignment {
+  id          String    @id @default(uuid())
+  assetId     String
+  employeeId  String
+  assignedAt  DateTime  @default(now())
+  returnedAt  DateTime?
+  condition   String    @default("EXCELLENT")
+  notes       String?
+
+  asset       Asset     @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  employee    Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model ExpenseClaim {
+  id          String        @id @default(uuid())
+  employeeId  String
+  title       String
+  category    String        // TRAVEL, MEALS, SUPPLIES, INTERNET
+  amount      Float
+  expenseDate DateTime
+  receiptUrl  String?
+  status      ExpenseStatus @default(PENDING)
+  approvedAt  DateTime?
+  reimbursedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  employee    Employee      @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model Resignation {
+  id              String     @id @default(uuid())
+  employeeId      String     @unique
+  resignationDate DateTime   @default(now())
+  lastWorkingDay  DateTime
+  reason          String
+  status          ExitStatus @default(SUBMITTED)
+  managerApproval Boolean    @default(false)
+  hrApproval      Boolean    @default(false)
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+
+  employee        Employee   @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model FnFSettlement {
+  id              String   @id @default(uuid())
+  employeeId      String   @unique
+  pendingSalary   Float    @default(0)
+  leaveEncashment Float    @default(0)
+  bonusIncentives Float    @default(0)
+  deductions      Float    @default(0)
+  netSettlement   Float    @default(0)
+  statementPdfUrl String?
+  isSettled       Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  employee        Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+}
+
+model TrainingCourse {
+  id          String   @id @default(uuid())
+  title       String
+  category    String
+  description String
+  durationHrs Int      @default(10)
+  lmsUrl      String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  enrollments TrainingEnrollment[]
+}
+
+model TrainingEnrollment {
+  id          String         @id @default(uuid())
+  courseId    String
+  employeeId  String
+  status      String         @default("ENROLLED") // ENROLLED, IN_PROGRESS, COMPLETED
+  progressPct Float          @default(0)
+  completedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  course      TrainingCourse @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  employee    Employee       @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+
+  @@unique([courseId, employeeId])
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  title     String
+  message   String
+  type      String   @default("INFO")
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  userId    String?
+  userEmail String?
+  action    String
+  module    String
+  recordId  String?
+  details   String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+}
+
+model OrganizationSetting {
+  id            String   @id @default(uuid())
+  companyName   String   @default("Adyapan Edutech Pvt. Ltd.")
+  companyLogo   String?
+  supportEmail  String   @default("hr@adyapan.com")
+  currency      String   @default("INR")
+  timezone      String   @default("Asia/Kolkata")
+  updatedAt     DateTime @updatedAt
+}
