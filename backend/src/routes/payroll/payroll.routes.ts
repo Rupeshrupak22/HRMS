@@ -136,4 +136,70 @@ router.get('/salary-structure/:employeeId', async (req: AuthRequest, res: Respon
   }
 });
 
+// GET /api/payroll/manual
+router.get('/manual', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const records = await prisma.manualPayrollRecord.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+    res.json({ success: true, data: records });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/payroll/manual
+router.post('/manual', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const record = await prisma.manualPayrollRecord.create({
+      data: req.body
+    });
+    res.status(201).json({ success: true, data: record });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// PUT /api/payroll/manual/:id
+router.put('/manual/:id', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const record = await prisma.manualPayrollRecord.update({
+      where: { id: req.params.id },
+      data: req.body
+    });
+    res.json({ success: true, data: record });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/payroll/manual/:id
+router.delete('/manual/:id', async (req: AuthRequest, res: Response, next) => {
+  try {
+    await prisma.manualPayrollRecord.delete({
+      where: { id: req.params.id }
+    });
+    res.json({ success: true, message: 'Deleted successfully' });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/payroll/manual/bulk
+router.post('/manual/bulk', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const records = req.body;
+    if (!Array.isArray(records)) {
+       res.status(400).json({ success: false, message: 'Expected an array' });
+       return;
+    }
+    const created = await prisma.$transaction(
+      records.map((r: any) => prisma.manualPayrollRecord.create({ data: r }))
+    );
+    res.status(201).json({ success: true, data: created });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

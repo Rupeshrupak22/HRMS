@@ -550,3 +550,34 @@ model DailyReport {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 }
+
+model ManualPayrollRecord {
+  id                 String   @id @default(uuid())
+  employeeId         String?
+  employeeName       String?
+  department         String?
+  joinDate           String?
+  exitDate           String?
+  workingDays        String?
+  attendanceFreeze   String?
+  freezeReason       String?
+  leavesTaken        String?
+  lopDays            String?
+  salaryChangeDate   String?
+  oldSalary          String?
+  newSalary          String?
+  salaryChangeReason String?
+  performanceRating  String?
+  performanceComment String?
+  deductionType      String?
+  lopDeduction       String?
+  netPay             String?
+  verifiedBy         String?
+  verificationDate   String?
+  headApproval       String?
+  headApprovalDate   String?
+  headSignature      String?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
