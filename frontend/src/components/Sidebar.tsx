@@ -39,6 +39,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Attendance', href: '/attendance', icon: Clock, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
     { label: 'Leave Management', href: '/leaves', icon: CalendarDays, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
     { label: 'Payroll & Payslips', href: '/payroll', icon: CreditCard, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE', 'EMPLOYEE'] },
+    { label: 'Payroll Management', href: '/payroll-management', icon: CreditCard, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'] },
     { label: 'Recruitment (ATS)', href: '/recruitment', icon: UserPlus, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD'] },
     { label: 'Performance & Goals', href: '/performance', icon: Target, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
     { label: 'Asset Management', href: '/assets', icon: Laptop, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE'] },
@@ -49,9 +50,15 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Settings', href: '/settings', icon: Settings, roles: ['SUPER_ADMIN', 'HR_ADMIN'] },
   ];
 
-  const navItems = allNavItems.filter((item) =>
+  let navItems = allNavItems.filter((item) =>
     item.roles.includes(user?.role || 'EMPLOYEE'),
   );
+
+  if (user?.email === 'charitha@adyapan.com') {
+    navItems = allNavItems.filter((item) => 
+      ['/dashboard', '/daily-reports', '/attendance', '/payroll-management'].includes(item.href)
+    );
+  }
 
   return (
     <>

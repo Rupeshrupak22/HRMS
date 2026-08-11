@@ -121,4 +121,33 @@ export class PayrollService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  async getManualRecords() {
+    return this.prisma.manualPayrollRecord.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async addManualRecord(data: any) {
+    return this.prisma.manualPayrollRecord.create({ data });
+  }
+
+  async addBulkManualRecords(records: any[]) {
+    return this.prisma.manualPayrollRecord.createMany({
+      data: records,
+    });
+  }
+
+  async updateManualRecord(id: string, data: any) {
+    return this.prisma.manualPayrollRecord.update({
+      where: { id },
+      data,
+    });
+  }
+
+  async deleteManualRecord(id: string) {
+    return this.prisma.manualPayrollRecord.delete({
+      where: { id },
+    });
+  }
 }

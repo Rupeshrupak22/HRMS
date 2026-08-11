@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Put, Body, Param, UseGuards, Request } from '@nestjs/common';
+import { Controller, Get, Post, Put, Delete, Body, Param, UseGuards, Request } from '@nestjs/common';
 import { ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { PayrollService } from './payroll.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
@@ -46,5 +46,36 @@ export class PayrollController {
   @Get('my-payslips')
   async getMyPayslips(@Request() req: any) {
     return this.payrollService.getMyPayslips(req.user.employeeId);
+  }
+}
+
+@ApiTags('Manual Payroll')
+@Controller('payroll/manual')
+export class ManualPayrollController {
+  constructor(private payrollService: PayrollService) {}
+
+  @Get()
+  async getManualRecords() {
+    return this.payrollService.getManualRecords();
+  }
+
+  @Post('bulk')
+  async addBulkManualRecords(@Body() body: { records: any[] }) {
+    return this.payrollService.addBulkManualRecords(body.records);
+  }
+
+  @Post()
+  async addManualRecord(@Body() body: any) {
+    return this.payrollService.addManualRecord(body);
+  }
+
+  @Put(':id')
+  async updateManualRecord(@Param('id') id: string, @Body() body: any) {
+    return this.payrollService.updateManualRecord(id, body);
+  }
+
+  @Delete(':id')
+  async deleteManualRecord(@Param('id') id: string) {
+    return this.payrollService.deleteManualRecord(id);
   }
 }
