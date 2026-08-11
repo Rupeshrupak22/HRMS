@@ -8,14 +8,14 @@ export default function ProfilePage() {
   const { user } = useAuth();
 
   const profile = {
-    name: user?.name || 'Abbu Veena',
+    name: user ? `${user.firstName || ''} ${user.lastName || ''}`.trim() : 'Abbu Veena',
     email: user?.email || 'veena@adyapan.com',
-    phone: user?.phone || '6300745565',
+    phone: '6300745565',
     employeeId: user?.employeeCode || 'ADP0417',
-    designation: user?.designation || 'HR Talent Acquisition',
-    department: user?.department || 'HR',
+    designation: user?.specialization || 'HR Talent Acquisition',
+    department: user?.departmentId || 'HR',
     role: user?.role || 'HR Manager',
-    avatar: user?.profilePhoto || null,
+    avatar: null,
   };
 
   return (
@@ -34,7 +34,7 @@ export default function ProfilePage() {
               <img src={profile.avatar} alt={profile.name} className="w-16 h-16 rounded-full object-cover" />
             ) : (
               <div className="w-16 h-16 rounded-full bg-gradient-to-br from-slate-300 to-slate-400 flex items-center justify-center text-xl font-bold text-white">
-                {profile.name.split(' ').map(n => n[0]).join('')}
+                {profile.name.split(' ').map((n: string) => n[0]).join('')}
               </div>
             )}
             <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-orange-500 border-2 border-white flex items-center justify-center">
