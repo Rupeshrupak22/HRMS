@@ -199,30 +199,17 @@ export class ReportsService {
     const dropoutRecords = await this.prisma.dropoutRecord.findMany({ orderBy: { createdAt: 'desc' } });
 
     // Compute stats from actual data
-<<<<<<< HEAD
     const totalScreened = reports.reduce((sum: any, r: any) => sum + r.numScreened, 0);
     const totalInterviews = reports.reduce((sum: any, r: any) => sum + r.numInterviews, 0);
     const totalOffersSent = reports.reduce((sum: any, r: any) => sum + r.numOffersSent, 0);
     const totalJoined = reports.reduce((sum: any, r: any) => sum + r.numJoined, 0);
-    const totalDropouts = reports.reduce((sum: any, r: any) => sum + r.numDropouts, 0);
-=======
-    const totalScreened = reports.reduce((sum, r) => sum + r.numScreened, 0);
-    const totalInterviews = reports.reduce((sum, r) => sum + r.numInterviews, 0);
-    const totalOffersSent = reports.reduce((sum, r) => sum + r.numOffersSent, 0);
-    const totalJoined = reports.reduce((sum, r) => sum + r.numJoined, 0);
-    const totalDropouts = dropoutRecords.length || reports.reduce((sum, r) => sum + r.numDropouts, 0);
+    const totalDropouts = dropoutRecords.length || reports.reduce((sum: any, r: any) => sum + r.numDropouts, 0);
     const totalCandidates = recruitmentEntries.length;
->>>>>>> 9271bbe6045a1c54faebaad934fa2144ab3338bc
 
     // Source breakdown from recruitment entries
     const sourceCounts: Record<string, number> = {};
-<<<<<<< HEAD
-    reports.forEach((r: any) => {
-      const src = r.candidateSource || 'Other';
-=======
-    recruitmentEntries.forEach((r) => {
+    recruitmentEntries.forEach((r: any) => {
       const src = r.source || 'Other';
->>>>>>> 9271bbe6045a1c54faebaad934fa2144ab3338bc
       sourceCounts[src] = (sourceCounts[src] || 0) + 1;
     });
     // Fallback to daily reports if no recruitment entries
@@ -243,40 +230,19 @@ export class ReportsService {
       { stage: 'Dropout', candidates: totalDropouts },
     ];
 
-<<<<<<< HEAD
-    // Recent activity from last 10 reports
-    const recentActivities = reports.slice(0, 10).map((r: any) => ({
-      time: r.date,
-      text: `${r.role} — ${r.keyUpdates || r.selectionStatus}`,
-      type: r.joinedOnboarded === 'YES' ? 'onboard' : r.offerLetterSent === 'YES' ? 'offer' : r.numDropouts > 0 ? 'dropout' : 'interview',
-    }));
-
-    // Upcoming joiners (those confirmed but not yet onboarded)
-    const upcomingJoiners = reports
-      .filter((r: any) => r.joiningConfirmation === 'CONFIRMED' && r.joinedOnboarded !== 'YES')
-      .map((r: any) => ({
-        name: r.role,
-        role: r.candidateSource,
-        date: r.date,
-        ctc: '-',
-        docStatus: r.screeningCompleted === 'YES' ? 'Verified' : 'Pending',
-        assetStatus: r.joinedOnboarded === 'IN_ONBOARDING' ? 'Assigned' : 'Pending',
-      }));
-=======
     // Recent activity from recruitment entries + reports
     const recentActivities = [
-      ...recruitmentEntries.slice(0, 5).map((r) => ({
+      ...recruitmentEntries.slice(0, 5).map((r: any) => ({
         time: r.applicationDate,
         text: `${r.employeeName} — ${r.roleApplied} (${r.currentStage})`,
         type: r.currentStage === 'Onboarding' || r.currentStage === 'Completed' ? 'onboard' : r.currentStage === 'Offer' ? 'offer' : 'interview',
       })),
-      ...dropoutRecords.slice(0, 3).map((d) => ({
+      ...dropoutRecords.slice(0, 3).map((d: any) => ({
         time: d.dropoutDate,
         text: `Dropout: ${d.candidateName} — ${d.dropoutReason}`,
         type: 'dropout',
       })),
     ].slice(0, 8);
->>>>>>> 9271bbe6045a1c54faebaad934fa2144ab3338bc
 
     // Open jobs count
     const openJobs = await this.prisma.jobOpening.count({ where: { status: 'OPEN' } });
