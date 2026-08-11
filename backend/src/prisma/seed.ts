@@ -2,12 +2,7 @@ import { PrismaClient } from '@prisma/client';
 import { RoleName, EmploymentType, EmployeeStatus } from './enums';
 import * as bcrypt from 'bcrypt';
 
-import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3';
-import * as path from 'path';
-
-const dbPath = process.env.DATABASE_URL?.replace('file:', '') || path.join(process.cwd(), 'dev.db');
-const adapter = new PrismaBetterSqlite3({ url: dbPath } as any);
-const prisma = new PrismaClient({ adapter });
+const prisma = new PrismaClient();
 
 async function main() {
   console.log('Seeding Adyapan HRMS database...');

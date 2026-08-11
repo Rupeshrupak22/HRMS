@@ -106,7 +106,7 @@ export function Navbar({ onToggleMobileSidebar }: NavbarProps) {
                 {/* Nav Links */}
                 <div className="py-1">
                   <Link
-                    href={`/employees/${user?.id || 'emp-001'}`}
+                    href="/my-profile"
                     onClick={() => setIsUserMenuOpen(false)}
                     className="flex items-center gap-2.5 px-4 py-2 text-xs text-slate-700 hover:bg-orange-50 hover:text-orange-600 font-medium transition-colors"
                   >
@@ -123,6 +123,7 @@ export function Navbar({ onToggleMobileSidebar }: NavbarProps) {
                     <span>Dashboard</span>
                   </Link>
 
+                  {(user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN') && (
                   <Link
                     href="/settings"
                     onClick={() => setIsUserMenuOpen(false)}
@@ -131,6 +132,7 @@ export function Navbar({ onToggleMobileSidebar }: NavbarProps) {
                     <Settings className="w-4 h-4 text-slate-400" />
                     <span>Settings</span>
                   </Link>
+                  )}
                 </div>
 
                 {/* Logout Action */}

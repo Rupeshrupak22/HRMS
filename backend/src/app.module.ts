@@ -13,6 +13,9 @@ import { AssetModule } from './asset/asset.module';
 import { DocumentModule } from './document/document.module';
 import { ExpenseModule } from './expense/expense.module';
 import { ExitModule } from './exit/exit.module';
+import { AravindModule } from './aravind/aravind.module';
+import { NitishaModule } from './nitisha/nitisha.module';
+import { VeenaModule } from './veena/veena.module';
 import { AiModule } from './ai/ai.module';
 import { ReportsModule } from './reports/reports.module';
 
@@ -32,6 +35,9 @@ import { ReportsModule } from './reports/reports.module';
     DocumentModule,
     ExpenseModule,
     ExitModule,
+    AravindModule,
+    NitishaModule,
+    VeenaModule,
     AiModule,
     ReportsModule,
   ],

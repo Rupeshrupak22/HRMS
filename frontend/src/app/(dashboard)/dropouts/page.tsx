@@ -127,14 +127,21 @@ export default function DropoutTrackerPage() {
     URL.revokeObjectURL(url);
   };
 
-  const handleImportCSV = (text: string) => {
+  const handleImportCSV = async (text: string) => {
     const lines = text.split('\n').filter(Boolean);
     if (lines.length < 2) return;
-    const newEntries = lines.slice(1).map((line, i) => {
+    const newEntries = lines.slice(1).map((line) => {
       const cols = line.split(',').map((c) => c.replace(/"/g, '').trim());
-      return { id: `DROP-${String(dropouts.length + i + 1).padStart(3, '0')}`, candidateName: cols[1] || '', employeeId: cols[2] || '', role: cols[3] || '', source: cols[4] || '', dropoutDate: cols[5] || '', dropoutStage: cols[6] || '', dropoutReason: cols[7] || '', recruiter: cols[8] || '', remarks: cols[9] || '' };
+      return { candidateName: cols[1] || '', employeeId: cols[2] || '', role: cols[3] || '', source: cols[4] || '', dropoutDate: cols[5] || '', dropoutStage: cols[6] || '', dropoutReason: cols[7] || '', recruiter: cols[8] || '', remarks: cols[9] || '' };
     });
-    setDropouts((prev) => [...newEntries, ...prev]);
+    try {
+      for (const entry of newEntries) {
+        await apiRequest('/veena/dropouts', { method: 'POST', body: JSON.stringify(entry) });
+      }
+      loadDropouts();
+    } catch {
+      setDropouts((prev) => [...newEntries.map((e, i) => ({ ...e, id: `DROP-${Date.now()}-${i}` })), ...prev]);
+    }
   };
 
   // Stats
