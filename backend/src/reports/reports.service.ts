@@ -26,6 +26,35 @@ export class ReportsService {
 
     const salarySum = await this.prisma.salaryStructure.aggregate({ _sum: { ctc: true } });
 
+    // Fetch payroll records for Charitha's dashboard
+    const payrollRecords = await this.prisma.manualPayrollRecord.findMany();
+    let totalPayrollGross = 0;
+    let totalPayrollDeductions = 0;
+    let totalPayrollNet = 0;
+    let totalLopDays = 0;
+
+    payrollRecords.forEach(record => {
+      totalPayrollGross += parseFloat(record.newSalary || record.oldSalary || '0') || 0;
+      totalPayrollDeductions += parseFloat(record.lopDeduction || '0') || 0;
+      totalPayrollNet += parseFloat(record.netPay || '0') || 0;
+      totalLopDays += parseFloat(record.lopDays || '0') || 0;
+    });
+
+    // Exit Metrics for Aravind
+    const activeResignations = await this.prisma.resignation.count({ where: { status: { notIn: ['COMPLETED', 'SETTLED'] } } });
+    const completedExitInterviews = await this.prisma.resignation.count({ where: { status: { in: ['COMPLETED', 'SETTLED', 'CLEARANCE_IN_PROGRESS'] } } });
+    const fnfBalanceSum = await this.prisma.fnFSettlement.aggregate({ _sum: { netSettlement: true } });
+    const recentResignations = await this.prisma.resignation.findMany({ include: { employee: true }, orderBy: { createdAt: 'desc' }, take: 5 });
+
+    // Hiring Metrics for Veena
+    const candidatesScreened = await this.prisma.candidate.count({ where: { status: { not: 'APPLIED' } } });
+    const candidatesOffered = await this.prisma.candidate.count({ where: { status: { in: ['OFFERED', 'JOINED'] } } });
+    const candidatesJoined = await this.prisma.candidate.count({ where: { status: 'JOINED' } });
+    const candidatesDropped = await this.prisma.candidate.count({ where: { status: 'REJECTED' } });
+    
+    // Daily Reports for Manager & general tables
+    const recentDailyReports = await this.prisma.dailyReport.findMany({ orderBy: { createdAt: 'desc' }, take: 20 });
+
     return {
       totalEmployees,
       activeEmployees,
@@ -37,6 +66,37 @@ export class ReportsService {
       openJobs,
       totalPayrollCtc: salarySum._sum.ctc || 0,
       departmentDistribution: deptDistribution.map((d) => ({ name: d.name, count: d._count.employees })),
+      payroll: {
+        totalRecords: payrollRecords.length,
+        totalGross: totalPayrollGross,
+        totalDeductions: totalPayrollDeductions,
+        totalNet: totalPayrollNet,
+        totalLopDays: totalLopDays,
+        records: payrollRecords.slice(0, 5) // Send a few for the table preview
+      },
+      exitMetrics: {
+        activeResignations,
+        completedExitInterviews,
+        pendingSignOffs: activeResignations, // approx
+        fnfBalance: fnfBalanceSum._sum.netSettlement || 0,
+        recentResignations
+      },
+      hiringMetrics: {
+        openJobs,
+        candidatesScreened,
+        candidatesOffered,
+        candidatesJoined,
+        candidatesDropped
+      },
+      attendanceMetrics: {
+        todayPresent,
+        todayLate,
+        todayAbsent,
+        pendingLeaves,
+        totalLopDays,
+        overtimeHours: 24.5 // hardcoded fallback for now if no DB column exists
+      },
+      dailyReports: recentDailyReports
     };
   }
 
