@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
+import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { PrismaService } from '../prisma/prisma.service';
 import { LoginDto } from './dto/login.dto';
@@ -13,13 +13,27 @@ export class AuthService {
   ) {}
 
   async login(dto: LoginDto) {
-    const user = await this.prisma.user.findUnique({
-      where: { email: dto.email.toLowerCase() },
+    const identifier = dto.identifier.trim().toLowerCase();
+
+    // Try to find user by email first
+    let user = await this.prisma.user.findUnique({
+      where: { email: identifier },
       include: { employee: true },
     });
 
+    // If not found by email, try to find by employee code
     if (!user) {
-      throw new UnauthorizedException('Invalid email or password');
+      const employee = await this.prisma.employee.findUnique({
+        where: { employeeCode: dto.identifier.trim().toUpperCase() },
+        include: { user: { include: { employee: true } } },
+      });
+      if (employee?.user) {
+        user = { ...employee.user, employee: employee.user.employee };
+      }
+    }
+
+    if (!user) {
+      throw new UnauthorizedException('Invalid credentials');
     }
 
     if (user.isLocked) {
@@ -36,7 +50,7 @@ export class AuthService {
           isLocked: updatedAttempts >= 5,
         },
       });
-      throw new UnauthorizedException('Invalid email or password');
+      throw new UnauthorizedException('Invalid credentials');
     }
 
     // Reset failed attempts on success
