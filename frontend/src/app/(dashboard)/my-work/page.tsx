@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/context/AuthContext';
+import { apiRequest } from '@/lib/api';
 import {
   CheckSquare,
   Plus,
@@ -21,29 +22,39 @@ export default function MyWorkPage() {
   const [newTaskTitle, setNewTaskTitle] = useState('');
   const [tasks, setTasks] = useState<any[]>([]);
 
-  const toggleTask = (id: string) => {
-    setTasks(
-      tasks.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)),
-    );
+  const loadTasks = async () => {
+    try {
+      const data = await apiRequest('/veena/tasks');
+      setTasks(Array.isArray(data) ? data : []);
+    } catch { setTasks([]); }
   };
 
-  const handleAddTask = (e: React.FormEvent) => {
+  useEffect(() => { loadTasks(); }, []);
+
+  const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTaskTitle.trim()) return;
-
-    const newTask = {
-      id: `task-${Date.now()}`,
-      title: newTaskTitle,
-      dueDate: new Date().toISOString().split('T')[0],
-      priority: 'MEDIUM',
-      completed: false,
-    };
-    setTasks([newTask, ...tasks]);
+    try {
+      await apiRequest('/veena/tasks', { method: 'POST', body: JSON.stringify({ title: newTaskTitle, dueDate: new Date().toISOString().split('T')[0], priority: 'MEDIUM' }) });
+    } catch {
+      setTasks([{ id: `task-${Date.now()}`, title: newTaskTitle, dueDate: new Date().toISOString().split('T')[0], priority: 'MEDIUM', completed: false }, ...tasks]);
+    }
     setNewTaskTitle('');
+    loadTasks();
   };
 
-  const handleDeleteTask = (id: string) => {
-    if (window.confirm('Delete this task?')) setTasks(tasks.filter((t) => t.id !== id));
+  const handleDeleteTask = async (id: string) => {
+    if (window.confirm('Delete this task?')) {
+      try { await apiRequest(`/veena/tasks/${id}`, { method: 'DELETE' }); } catch {}
+      setTasks(tasks.filter((t) => t.id !== id));
+    }
+  };
+
+  const toggleTask = async (id: string) => {
+    const task = tasks.find((t) => t.id === id);
+    if (!task) return;
+    try { await apiRequest(`/veena/tasks/${id}`, { method: 'PUT', body: JSON.stringify({ completed: !task.completed }) }); } catch {}
+    setTasks(tasks.map((t) => (t.id === id ? { ...t, completed: !t.completed } : t)));
   };
 
   const exportTasks = () => {
@@ -91,7 +102,7 @@ export default function MyWorkPage() {
 
       {/* Action Bar */}
       <ActionBar
-        onRefresh={() => setTasks([...tasks])}
+        onRefresh={loadTasks}
         onImportCSV={handleImportCSV}
         onExport={exportTasks}
         onAdd={() => document.getElementById('task-input')?.focus()}

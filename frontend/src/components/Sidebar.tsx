@@ -1,6 +1,5 @@
 'use client';
 
-import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
@@ -22,6 +21,7 @@ import {
   UserCheck,
   UserX,
   CheckSquare,
+  User,
   X,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -54,6 +54,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Exit & F&F', href: '/exit-management', icon: LogOut, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE', 'DEPARTMENT_HEAD'] },
     { label: 'Reports & Analytics', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE', 'DEPARTMENT_HEAD'] },
     { label: 'Settings', href: '/settings', icon: Settings, roles: ['SUPER_ADMIN', 'HR_ADMIN'] },
+    { label: 'Profile', href: '/profile', icon: User, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
   ];
 
   const userEmail = (user?.email || '').toLowerCase();
@@ -63,7 +64,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
 
     // Specialized HR Team Member Sidebar Filtering
     if (userEmail === 'veena@adyapan.com' || user?.specialization === 'ONBOARDING_HIRING') {
-      return ['/dashboard', '/my-work', '/recruitment-tracker', '/dropouts', '/recruitment', '/daily-reports', '/documents'].includes(item.href);
+      return ['/dashboard', '/my-work', '/recruitment-tracker', '/dropouts', '/daily-reports', '/profile'].includes(item.href);
     }
     if (userEmail === 'charitha@adyapan.com' || user?.specialization === 'SALARY_PAYROLL') {
       return ['/dashboard', '/daily-reports', '/payroll', '/payroll-management'].includes(item.href);

@@ -602,3 +602,54 @@ model DailyReport {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
+
+model DropoutRecord {
+  id              String   @id @default(uuid())
+  candidateName   String
+  employeeId      String
+  role            String
+  source          String
+  dropoutDate     String
+  dropoutStage    String
+  dropoutReason   String
+  recruiter       String
+  remarks         String?
+  createdBy       String   @default("veena@adyapan.com")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model WorkTask {
+  id          String   @id @default(uuid())
+  title       String
+  dueDate     String
+  priority    String   @default("MEDIUM")
+  completed   Boolean  @default(false)
+  userEmail   String   @default("veena@adyapan.com")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model RecruitmentEntry {
+  id                  String   @id @default(uuid())
+  employeeName        String
+  mobileNumber        String?
+  email               String?
+  collegeUniversity   String?
+  location            String?
+  source              String
+  roleApplied         String
+  recruiter           String   @default("Veena")
+  applicationDate     String
+  currentStage        String   @default("Application")
+  status              String   @default("Pending")
+  interviews          String?
+  selection           String?
+  offers              String?
+  joining             String?
+  onboarding          String?
+  remarks             String?
+  createdBy           String   @default("veena@adyapan.com")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
