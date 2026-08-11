@@ -16,13 +16,31 @@ export function AiCopilotDrawer({ isOpen, onClose }: { isOpen: boolean; onClose:
   const { user } = useAuth();
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: 'welcome',
-      sender: 'ai',
-      text: `Hello ${user?.firstName || 'there'}! I am **Adyapan HR AI Copilot**.\nHow can I assist your organization today?\n\nSuggested questions:\n- *How many employees are absent today?*\n- *Show pending leave approvals*\n- *What is the total payroll for Technology department?*`,
-    },
-  ]);
+
+  // Role-based suggested questions
+  const getSuggestions = () => {
+    const email = user?.email?.toLowerCase() || '';
+    if (email === 'veena@adyapan.com' || user?.specialization === 'ONBOARDING_HIRING') {
+      return '- *How many candidates are in pipeline?*\n- *Show recruitment status*\n- *What is the onboarding progress?*';
+    }
+    if (email === 'charitha@adyapan.com' || user?.specialization === 'SALARY_PAYROLL') {
+      return '- *Show total payroll budget*\n- *How many employees are active?*\n- *What is pending salary processing?*';
+    }
+    return '- *How many employees are absent today?*\n- *Show pending leave approvals*\n- *What is the total employee count?*';
+  };
+
+  const [messages, setMessages] = useState<Message[]>([]);
+
+  // Update welcome message when user changes
+  React.useEffect(() => {
+    setMessages([
+      {
+        id: 'welcome',
+        sender: 'ai',
+        text: `Hello ${user?.firstName || 'there'}! I am **Adyapan HR AI Copilot**.\nHow can I assist you today?\n\nSuggested questions:\n${getSuggestions()}`,
+      },
+    ]);
+  }, [user?.firstName, user?.email]);
 
   if (!isOpen) return null;
 
@@ -143,7 +161,7 @@ export function AiCopilotDrawer({ isOpen, onClose }: { isOpen: boolean; onClose:
             </button>
           </div>
           <div className="mt-2 text-[10px] text-slate-400 flex items-center justify-between">
-            <span>Powered by Gemini 2.5 SDK</span>
+            <span>Powered by xAI Grok</span>
             <span className="flex items-center gap-1 text-orange-600 font-semibold">
               <Lock className="w-2.5 h-2.5" /> RBAC Enforced
             </span>

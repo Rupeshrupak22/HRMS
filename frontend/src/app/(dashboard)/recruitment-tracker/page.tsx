@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   UserCheck,
   Search,
@@ -25,6 +25,7 @@ import {
   Plus,
   SlidersHorizontal,
 } from 'lucide-react';
+import { apiRequest } from '@/lib/api';
 
 interface RecruitmentEntry {
   id: string;
@@ -63,6 +64,15 @@ export default function RecruitmentTrackerPage() {
   const [viewingEntry, setViewingEntry] = useState<RecruitmentEntry | null>(null);
   const [entries, setEntries] = useState<RecruitmentEntry[]>([]);
 
+  const loadEntries = async () => {
+    try {
+      const data = await apiRequest('/veena/recruitment');
+      setEntries(Array.isArray(data) ? data : []);
+    } catch { setEntries([]); }
+  };
+
+  useEffect(() => { loadEntries(); }, []);
+
   const emptyForm = {
     employeeName: '', mobileNumber: '', email: '', collegeUniversity: '',
     location: '', source: '', roleApplied: '', recruiter: '', applicationDate: '',
@@ -87,16 +97,25 @@ export default function RecruitmentTrackerPage() {
     setFormData((prev) => ({ ...prev, [ev.target.name]: ev.target.value }));
   };
 
-  const handleSubmit = (ev: React.FormEvent) => {
+  const handleSubmit = async (ev: React.FormEvent) => {
     ev.preventDefault();
-    if (editingId) {
-      setEntries((prev) => prev.map((e) => e.id === editingId ? { ...e, ...formData } : e));
-      setEditingId(null);
-    } else {
-      setEntries((prev) => [{ id: `REC-${String(prev.length + 1).padStart(3, '0')}`, ...formData }, ...prev]);
+    try {
+      if (editingId) {
+        await apiRequest(`/veena/recruitment/${editingId}`, { method: 'PUT', body: JSON.stringify(formData) });
+      } else {
+        await apiRequest('/veena/recruitment', { method: 'POST', body: JSON.stringify(formData) });
+      }
+    } catch {
+      if (editingId) {
+        setEntries((prev) => prev.map((e) => e.id === editingId ? { ...e, ...formData } : e));
+      } else {
+        setEntries((prev) => [{ id: `REC-${Date.now()}`, ...formData }, ...prev]);
+      }
     }
+    setEditingId(null);
     setFormData(emptyForm);
     setShowForm(false);
+    loadEntries();
   };
 
   const handleEdit = (entry: RecruitmentEntry) => {
@@ -112,8 +131,9 @@ export default function RecruitmentTrackerPage() {
     setShowForm(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this record?')) {
+      try { await apiRequest(`/veena/recruitment/${id}`, { method: 'DELETE' }); } catch {}
       setEntries((prev) => prev.filter((e) => e.id !== id));
     }
   };
