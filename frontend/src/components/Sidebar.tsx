@@ -93,10 +93,18 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Daily Reports', href: '/reports/all-daily', icon: ClipboardList },
   ];
 
+  // Charitha (Payroll) - specific sidebar
+  const charithaNavItems = [
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Payroll', href: '/payroll-management', icon: CreditCard },
+    { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
+  ];
+
   // Use specialist-specific nav based on specialization
   const isAravind = user?.specialization === 'RESIGNATION_EXIT';
   const isNitisha = user?.specialization === 'DISCIPLINE_POSH';
   const isVeena = user?.specialization === 'ONBOARDING_HIRING';
+  const isCharitha = user?.specialization === 'SALARY_PAYROLL';
   const isNandini = user?.specialization === 'HR_MANAGER_ALL' || user?.email === 'nandini@adyapan.com' || user?.email === 'nandani@adyapan.com';
 
   const navItems = isAravind
@@ -105,6 +113,8 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     ? nitishaNavItems
     : isVeena
     ? veenaNavItems
+    : isCharitha
+    ? charithaNavItems
     : isNandini
     ? nandiniNavItems
     : allNavItems.filter((item) => item.roles.includes(user?.role || 'EMPLOYEE'));

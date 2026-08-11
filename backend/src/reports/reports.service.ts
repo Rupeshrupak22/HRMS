@@ -26,6 +26,37 @@ export class ReportsService {
 
     const salarySum = await this.prisma.salaryStructure.aggregate({ _sum: { ctc: true } });
 
+    // Charitha Payroll Data
+    const manualRecords = await this.prisma.manualPayrollRecord.findMany();
+    
+    const payrollTotalEmployees = manualRecords.length;
+    const payrollTotalGross = manualRecords.reduce((sum: number, r: any) => sum + (parseFloat(r.newSalary || '0') || 0), 0);
+    const payrollTotalDeductions = manualRecords.reduce((sum: number, r: any) => sum + (parseFloat(r.lopDeduction || '0') || 0), 0);
+    const payrollTotalNetPay = manualRecords.reduce((sum: number, r: any) => sum + (parseFloat(r.netPay || '0') || 0), 0);
+    const payrollTotalLopDays = manualRecords.reduce((sum: number, r: any) => sum + (parseFloat(r.lopDays || '0') || 0), 0);
+    const payrollTotalWorkingDays = manualRecords.reduce((sum: number, r: any) => sum + (parseFloat(r.workingDays || '0') || 0), 0);
+    const payrollTotalLeavesTaken = manualRecords.reduce((sum: number, r: any) => sum + (parseFloat(r.leavesTaken || '0') || 0), 0);
+    const payrollAttendanceFrozen = manualRecords.filter((r: any) => r.attendanceFreeze === 'YES').length;
+    const payrollSalaryChanges = manualRecords.filter((r: any) => r.salaryChangeDate && r.salaryChangeDate !== '').length;
+
+    const payroll = {
+      totalRecords: payrollTotalEmployees,
+      totalGross: payrollTotalGross,
+      totalDeductions: payrollTotalDeductions,
+      totalNet: payrollTotalNetPay,
+      totalLopDays: payrollTotalLopDays,
+      totalWorkingDays: payrollTotalWorkingDays,
+      totalLeavesTaken: payrollTotalLeavesTaken,
+      attendanceFrozen: payrollAttendanceFrozen,
+      salaryChanges: payrollSalaryChanges,
+      records: manualRecords.slice(0, 10), // Send recent records
+    };
+
+    const dailyReports = await this.prisma.dailyReport.findMany({
+      orderBy: { createdAt: 'desc' },
+      take: 10,
+    });
+
     return {
       totalEmployees,
       activeEmployees,
@@ -37,6 +68,8 @@ export class ReportsService {
       openJobs,
       totalPayrollCtc: salarySum._sum.ctc || 0,
       departmentDistribution: deptDistribution.map((d) => ({ name: d.name, count: d._count.employees })),
+      payroll,
+      dailyReports,
     };
   }
 
