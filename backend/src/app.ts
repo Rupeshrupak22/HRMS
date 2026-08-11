@@ -23,6 +23,9 @@ import organizationRoutes from './routes/organization/organization.routes';
 import trainingRoutes from './routes/training/training.routes';
 import reportRoutes from './routes/reports/report.routes';
 import notificationRoutes from './routes/notifications/notification.routes';
+import aravindRoutes from './routes/specialists/aravind.routes';
+import nitishaRoutes from './routes/specialists/nitisha.routes';
+import veenaRoutes from './routes/specialists/veena.routes';
 
 const app = express();
 
@@ -60,9 +63,29 @@ apiRouter.use('/organization', organizationRoutes);
 apiRouter.use('/training', trainingRoutes);
 apiRouter.use('/reports', reportRoutes);
 apiRouter.use('/notifications', notificationRoutes);
+apiRouter.use('/aravind', aravindRoutes);
+apiRouter.use('/nitisha', nitishaRoutes);
+apiRouter.use('/veena-portal', veenaRoutes);
 
 app.use('/api', apiRouter);
 app.use('/api/v1', apiRouter);
+
+// GET /api/v1/overall-report — HR Manager report data for admin
+app.get('/api/v1/overall-report', async (_req, res) => {
+  try {
+    // Return empty array for now — data can be populated via POST
+    res.json([]);
+  } catch {
+    res.json([]);
+  }
+});
+app.get('/api/overall-report', async (_req, res) => {
+  try {
+    res.json([]);
+  } catch {
+    res.json([]);
+  }
+});
 
 // 404 handler
 app.use((_req, res) => {

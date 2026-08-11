@@ -15,7 +15,7 @@ export default function HRManagerReportPage() {
   useEffect(() => {
     fetch('http://localhost:4000/api/v1/overall-report')
       .then(res => res.json())
-      .then((data) => { setReports(data); setLoading(false); })
+      .then((data) => { setReports(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 

@@ -522,6 +522,268 @@ model OrganizationSetting {
   updatedAt    DateTime @updatedAt
 }
 
+
+// ------------------------------------------------------
+// Specialist Models
+// ------------------------------------------------------
+
+model RetentionCase {
+  id               String   @id @default(uuid())
+  employeeId       String
+  name             String
+  department       String
+  manager          String
+  resignationDate  String
+  reason           String
+  employeeConcern  String
+  action           String
+  managerInvolved  String
+  retentionOutcome String
+  status           String
+  remarks          String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ResignationTracker {
+  id                  String   @id @default(uuid())
+  employeeId          String
+  name                String
+  department          String
+  designation         String
+  manager             String
+  dateOfResignation   String
+  reason              String
+  noticePeriod        String
+  managerConfirmation String
+  exitInterview       String
+  exitClearance       String
+  fnf                 String
+  overall             String
+  lwd                 String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model ExitClearance {
+  id               String   @id @default(uuid())
+  employeeId       String
+  name             String
+  department       String
+  manager          String
+  managerClearance String
+  itClearance      String
+  adminClearance   String
+  financeClearance String
+  hrClearance      String
+  assetReturn      String
+  overallClearance String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model FnFTracker {
+  id                  String   @id @default(uuid())
+  employeeId          String
+  name                String
+  department          String
+  fnfInitiateDate     String
+  financeConfirmation String
+  fnfAmount           String
+  paymentStatus       String
+  paymentDate         String
+  pending             String
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model EmployeeComplaint {
+  id               String   @id @default(uuid())
+  employeeId       String
+  name             String
+  department       String
+  dateReceived     String
+  manager          String
+  category         String
+  complaintSummary String
+  assignedTo       String
+  actionTaken      String
+  status           String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+}
+
+model ExitInterview {
+  id                String   @id @default(uuid())
+  employeeId        String
+  name              String
+  department        String
+  designation       String
+  reason            String
+  managerFeedback   String
+  employeeFeedback  String
+  interviewDate     String
+  rehireEligibility String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model AravindDailyReport {
+  id                         String   @id @default(uuid())
+  reportDate                 String
+  resignationReceived        Int      @default(0)
+  retentionCases             Int      @default(0)
+  employeeRetained           Int      @default(0)
+  exitClearanceCompleted     Int      @default(0)
+  fnfCompleted               Int      @default(0)
+  fnfPending                 Int      @default(0)
+  openComplaints             Int      @default(0)
+  closedComplaints           Int      @default(0)
+  managerConfirmationPending Int      @default(0)
+  keyActions                 String
+  createdAt                  DateTime @default(now())
+  updatedAt                  DateTime @updatedAt
+}
+
+model EmployeePerformance {
+  id                  String   @id @default(uuid())
+  employeeName        String
+  joiningDate         String
+  employeeId          String
+  department          String
+  designation         String
+  kpi                 String
+  dailyPerformance    String
+  weeklyPerformance   String
+  monthlyPerformance  String
+  monthlyRevenue      String
+  pipCase             String   @default("No")
+  reasonForPip        String?
+  performanceGap      String?
+  currentPerformance  String?
+  improvementAction   String?
+  managerRemark       String?
+  finalRemark         String?
+  furtherActions      String?
+  employeeIssue       String?
+  employeeExplanation String?
+  factFinding         String?
+  managerExplanation  String?
+  myExplanation       String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model DisciplineCase {
+  id          String   @id @default(uuid())
+  employeeId  String
+  name        String
+  department  String
+  caseType    String
+  description String
+  status      String
+  actionTaken String?
+  dateOpened  String
+  dateClosed  String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model EmployeeRelation {
+  id                 String   @id @default(uuid())
+  employeeName       String
+  employeeId         String
+  joiningDate        String
+  rnrCertification   String
+  employeeActivities String
+  employeeFeedback   String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model NitishaDailyReport {
+  id                 String   @id @default(uuid())
+  employeeName       String
+  employeeIssue      String
+  pipCase            String   @default("No")
+  pipReason          String?
+  employeeEngagement String
+  performanceLow     Int      @default(0)
+  performanceMedium  Int      @default(0)
+  performanceHigh    Int      @default(0)
+  disciplineCases    String
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}
+
+model DropoutRecord {
+  id              String   @id @default(uuid())
+  candidateName   String
+  employeeId      String?
+  role            String?
+  source          String?
+  dropoutDate     String?
+  dropoutStage    String?
+  dropoutReason   String?
+  recruiter       String?
+  remarks         String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model OnboardingTracker {
+  id              String   @id @default(uuid())
+  candidateName   String
+  phoneNumber     String?
+  email           String?
+  college         String?
+  location        String?
+  source          String
+  roleApplied     String
+  recruiter       String?
+  applicationDate String?
+  currentStage    String
+  status          String
+  interviews      String?
+  selection       String?
+  offers          String?
+  joining         String?
+  onboarding      String?
+  offerRemarks    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model VeenaDailyReport {
+  id                  String   @id @default(uuid())
+  date                String
+  role                String
+  candidateSourced    String?
+  screeningDone       String?
+  interviewsTaken     String?
+  selected            String?
+  offerLetterSent     String?
+  offerAccepted       String?
+  joiningConfirmed    String?
+  joined              String?
+  onboarded           String?
+  pendingFollowups    String?
+  keyUpdatesIssue     String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model WorkTask {
+  id        String   @id @default(uuid())
+  title     String
+  dueDate   String?
+  priority  String   @default("MEDIUM")
+  completed Boolean  @default(false)
+  userEmail String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model ManualPayrollRecord {
   id                 String   @id @default(uuid())
   employeeId         String?
@@ -580,34 +842,3 @@ model DailyReport {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 }
-
-model ManualPayrollRecord {
-  id                 String   @id @default(uuid())
-  employeeId         String?
-  employeeName       String?
-  department         String?
-  joinDate           String?
-  exitDate           String?
-  workingDays        String?
-  attendanceFreeze   String?
-  freezeReason       String?
-  leavesTaken        String?
-  lopDays            String?
-  salaryChangeDate   String?
-  oldSalary          String?
-  newSalary          String?
-  salaryChangeReason String?
-  performanceRating  String?
-  performanceComment String?
-  deductionType      String?
-  lopDeduction       String?
-  netPay             String?
-  verifiedBy         String?
-  verificationDate   String?
-  headApproval       String?
-  headApprovalDate   String?
-  headSignature      String?
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-}
-

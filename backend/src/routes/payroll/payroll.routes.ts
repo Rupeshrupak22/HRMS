@@ -164,7 +164,7 @@ router.post('/manual', async (req: AuthRequest, res: Response, next) => {
 router.put('/manual/:id', async (req: AuthRequest, res: Response, next) => {
   try {
     const record = await prisma.manualPayrollRecord.update({
-      where: { id: req.params.id },
+      where: { id: String(req.params.id) },
       data: req.body
     });
     res.json({ success: true, data: record });
@@ -177,7 +177,7 @@ router.put('/manual/:id', async (req: AuthRequest, res: Response, next) => {
 router.delete('/manual/:id', async (req: AuthRequest, res: Response, next) => {
   try {
     await prisma.manualPayrollRecord.delete({
-      where: { id: req.params.id }
+      where: { id: String(req.params.id) }
     });
     res.json({ success: true, message: 'Deleted successfully' });
   } catch (err) {
