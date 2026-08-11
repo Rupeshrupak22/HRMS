@@ -40,8 +40,12 @@ const createReviewSchema = z.object({
 router.get('/goals', async (req: AuthRequest, res: Response, next) => {
   try {
     const employeeId = (req.query.employeeId as string) || req.user!.employeeId;
+    if (!employeeId) {
+      res.json({ success: true, data: [] });
+      return;
+    }
     const goals = await prisma.goal.findMany({
-      where: { employeeId: employeeId! },
+      where: { employeeId },
       orderBy: { dueDate: 'asc' },
     });
     res.json({ success: true, data: goals });

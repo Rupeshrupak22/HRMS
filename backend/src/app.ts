@@ -1,4 +1,4 @@
-import express from 'express';
+import express, { Router } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
@@ -7,6 +7,7 @@ import { errorHandler } from './middleware/errorHandler';
 
 // Route imports
 import authRoutes from './routes/auth/auth.routes';
+import adminSeedRoutes from './routes/auth/admin-seed.routes';
 import employeeRoutes from './routes/employees/employee.routes';
 import departmentRoutes from './routes/departments/department.routes';
 import attendanceRoutes from './routes/attendance/attendance.routes';
@@ -40,23 +41,28 @@ app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString(), environment: env.NODE_ENV });
 });
 
-// API Routes
-app.use('/api/v1/auth', authRoutes);
-app.use('/api/v1/employees', employeeRoutes);
-app.use('/api/v1/departments', departmentRoutes);
-app.use('/api/v1/attendance', attendanceRoutes);
-app.use('/api/v1/leave', leaveRoutes);
-app.use('/api/v1/payroll', payrollRoutes);
-app.use('/api/v1/recruitment', recruitmentRoutes);
-app.use('/api/v1/performance', performanceRoutes);
-app.use('/api/v1/documents', documentRoutes);
-app.use('/api/v1/expenses', expenseRoutes);
-app.use('/api/v1/exit', exitRoutes);
-app.use('/api/v1/assets', assetRoutes);
-app.use('/api/v1/organization', organizationRoutes);
-app.use('/api/v1/training', trainingRoutes);
-app.use('/api/v1/reports', reportRoutes);
-app.use('/api/v1/notifications', notificationRoutes);
+// API Routes — mounted at both /api and /api/v1 for frontend compatibility
+const apiRouter = Router();
+apiRouter.use('/auth', authRoutes);
+apiRouter.use('/auth', adminSeedRoutes);
+apiRouter.use('/employees', employeeRoutes);
+apiRouter.use('/departments', departmentRoutes);
+apiRouter.use('/attendance', attendanceRoutes);
+apiRouter.use('/leave', leaveRoutes);
+apiRouter.use('/payroll', payrollRoutes);
+apiRouter.use('/recruitment', recruitmentRoutes);
+apiRouter.use('/performance', performanceRoutes);
+apiRouter.use('/documents', documentRoutes);
+apiRouter.use('/expenses', expenseRoutes);
+apiRouter.use('/exit', exitRoutes);
+apiRouter.use('/assets', assetRoutes);
+apiRouter.use('/organization', organizationRoutes);
+apiRouter.use('/training', trainingRoutes);
+apiRouter.use('/reports', reportRoutes);
+apiRouter.use('/notifications', notificationRoutes);
+
+app.use('/api', apiRouter);
+app.use('/api/v1', apiRouter);
 
 // 404 handler
 app.use((_req, res) => {
