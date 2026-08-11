@@ -59,24 +59,19 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
 
   const allNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
-    { label: 'Aravind Report', href: '/reports/aravind', icon: FileText, roles: ['SUPER_ADMIN'] },
-    { label: 'Nitisha Report', href: '/reports/nitisha', icon: FileText, roles: ['SUPER_ADMIN'] },
-    { label: 'Pavitra Report', href: '/reports/pavitra', icon: FileText, roles: ['SUPER_ADMIN'] },
-    { label: 'Charitha Report', href: '/reports/charitha', icon: FileText, roles: ['SUPER_ADMIN'] },
-    { label: 'Veena Report', href: '/reports/veena', icon: FileText, roles: ['SUPER_ADMIN'] },
-    { label: 'Daily Reports', href: '/reports/all-daily', icon: ClipboardList, roles: ['SUPER_ADMIN'] },
-    { label: 'HR Manager Report', href: '/reports/hr-manager', icon: BarChart3, roles: ['SUPER_ADMIN'] },
-    { label: 'Daily Work Report', href: '/daily-reports', icon: FileText, roles: ['HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
-    { label: 'Employees', href: '/employees', icon: Users, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER'] },
-    { label: 'Attendance', href: '/attendance', icon: Clock, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
-    { label: 'Leave Management', href: '/leaves', icon: CalendarDays, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
-    { label: 'Payroll & Payslips', href: '/payroll', icon: CreditCard, roles: ['HR_ADMIN', 'FINANCE', 'EMPLOYEE'] },
-    { label: 'Recruitment (ATS)', href: '/recruitment', icon: UserPlus, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD'] },
-    { label: 'Performance & Goals', href: '/performance', icon: Target, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
-    { label: 'Asset Management', href: '/assets', icon: Laptop, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE'] },
-    { label: 'Document Vault', href: '/documents', icon: FolderOpen, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'] },
-    { label: 'Expenses & Travel', href: '/expenses', icon: Receipt, roles: ['HR_ADMIN', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
-    { label: 'Settings', href: '/settings', icon: Settings, roles: ['HR_ADMIN'] },
+    { label: 'Daily Work Report', href: '/daily-reports', icon: FileText, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
+    { label: 'Employees', href: '/employees', icon: Users, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER'] },
+    { label: 'Attendance', href: '/attendance', icon: Clock, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
+    { label: 'Leave Management', href: '/leaves', icon: CalendarDays, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
+    { label: 'Payroll & Payslips', href: '/payroll', icon: CreditCard, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE', 'EMPLOYEE'] },
+    { label: 'Recruitment (ATS)', href: '/recruitment', icon: UserPlus, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD'] },
+    { label: 'Performance & Goals', href: '/performance', icon: Target, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
+    { label: 'Asset Management', href: '/assets', icon: Laptop, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE'] },
+    { label: 'Document Vault', href: '/documents', icon: FolderOpen, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'] },
+    { label: 'Expenses & Travel', href: '/expenses', icon: Receipt, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
+    { label: 'Exit & F&F', href: '/exit-management', icon: LogOut, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE', 'DEPARTMENT_HEAD'] },
+    { label: 'Reports & Analytics', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE', 'DEPARTMENT_HEAD'] },
+    { label: 'Settings', href: '/settings', icon: Settings, roles: ['SUPER_ADMIN', 'HR_ADMIN'] },
   ];
 
   // Veena-specific navigation (Onboarding & Hiring)
@@ -96,27 +91,33 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Charitha Report', href: '/reports/charitha', icon: FileText },
     { label: 'Veena Report', href: '/reports/veena', icon: FileText },
     { label: 'Daily Reports', href: '/reports/all-daily', icon: ClipboardList },
-    { label: 'Overall Report', href: '/reports/overall', icon: BarChart3 },
+  ];
+
+  // Charitha (Payroll) - specific sidebar
+  const charithaNavItems = [
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Payroll', href: '/payroll-management', icon: CreditCard },
+    { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
   ];
 
   // Use specialist-specific nav based on specialization
   const isAravind = user?.specialization === 'RESIGNATION_EXIT';
   const isNitisha = user?.specialization === 'DISCIPLINE_POSH';
   const isVeena = user?.specialization === 'ONBOARDING_HIRING';
+  const isCharitha = user?.specialization === 'SALARY_PAYROLL';
   const isNandini = user?.specialization === 'HR_MANAGER_ALL' || user?.email === 'nandini@adyapan.com' || user?.email === 'nandani@adyapan.com';
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.email === 'superadmin@adyapan.com';
 
   const navItems = isAravind
     ? aravindNavItems
     : isNitisha
-    ? nitishaNavItems
-    : isVeena
-    ? veenaNavItems
-    : isNandini
-    ? nandiniNavItems
-    : isSuperAdmin
-    ? allNavItems.filter((item) => item.roles.includes('SUPER_ADMIN'))
-    : allNavItems.filter((item) => item.roles.includes(user?.role || 'EMPLOYEE'));
+      ? nitishaNavItems
+      : isVeena
+        ? veenaNavItems
+        : isCharitha
+          ? charithaNavItems
+          : isNandini
+            ? nandiniNavItems
+            : allNavItems.filter((item) => item.roles.includes(user?.role || 'EMPLOYEE'));
 
   return (
     <>
@@ -129,9 +130,8 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
       )}
 
       <aside
-        className={`w-64 border-r border-slate-200 bg-white flex flex-col h-screen fixed md:sticky top-0 z-40 transition-transform duration-300 ${
-          isOpenMobile ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        }`}
+        className={`w-64 border-r border-slate-200 bg-white flex flex-col h-screen fixed md:sticky top-0 z-40 transition-transform duration-300 ${isOpenMobile ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          }`}
       >
         {/* Brand Header */}
         <div className="h-16 px-6 border-b border-slate-100 flex items-center justify-between">
@@ -143,9 +143,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
               <div className="font-extrabold text-sm tracking-tight text-slate-900 flex items-center gap-1.5">
                 <span>Adyapan HRMS</span>
               </div>
-              <div className="text-[10px] text-orange-600 font-bold tracking-wider uppercase">
-                Edutech Enterprise
-              </div>
+
             </div>
           </div>
 
@@ -169,11 +167,10 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
                 key={item.href}
                 href={item.href}
                 onClick={onCloseMobile}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                  isActive
+                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${isActive
                     ? 'saffron-gradient text-white shadow-md shadow-orange-500/25'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-orange-50/60'
-                }`}
+                  }`}
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
                 <span>{item.label}</span>

@@ -6,6 +6,7 @@ import { Users, Building2, DollarSign, FileText, Send } from 'lucide-react';
 import { aravindApi } from '@/lib/aravind-api';
 import { nitishaApi } from '@/lib/nitisha-api';
 import { veenaApi } from '@/lib/veena-api';
+import { apiRequest } from '@/lib/api';
 
 export function NandiniDashboard() {
   const [reportCounts, setReportCounts] = useState({ aravind: 0, nitisha: 0, veena: 0, pavitra: 0, charitha: 0 });
@@ -14,15 +15,21 @@ export function NandiniDashboard() {
   useEffect(() => {
     async function load() {
       try {
-        const [ar, ni, ve] = await Promise.all([
+        const [ar, ni, ve, charithaReports] = await Promise.all([
           aravindApi.getDailyReports(),
           nitishaApi.getDailyReports(),
           veenaApi.getDailyReports(),
+          apiRequest('/reports/daily').catch(() => []),
         ]);
         const todayAravind = ar.filter((r: any) => r.reportDate === todayDate || r.createdAt?.split('T')[0] === todayDate).length;
         const todayNitisha = ni.filter((r: any) => r.createdAt?.split('T')[0] === todayDate).length;
         const todayVeena = ve.filter((r: any) => r.date === todayDate || r.createdAt?.split('T')[0] === todayDate).length;
-        setReportCounts({ aravind: todayAravind, nitisha: todayNitisha, veena: todayVeena, pavitra: 0, charitha: 0 });
+        const todayCharitha = charithaReports.filter((r: any) => 
+          (r.date === todayDate || r.createdAt?.split('T')[0] === todayDate) && 
+          r.userEmail === 'charitha@adyapan.com'
+        ).length;
+        
+        setReportCounts({ aravind: todayAravind, nitisha: todayNitisha, veena: todayVeena, pavitra: 0, charitha: todayCharitha });
       } catch {}
     }
     load();
