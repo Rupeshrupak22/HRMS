@@ -4,7 +4,7 @@ import { PayrollService } from './payroll.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { RoleName, PayrollStatus } from '@prisma/client';
+import { RoleName, PayrollStatus } from '../prisma/enums';
 
 @ApiTags('Payroll')
 @ApiBearerAuth()

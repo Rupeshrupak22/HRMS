@@ -6,8 +6,9 @@ export class ReportsService {
   constructor(private prisma: PrismaService) {}
 
   async getDashboardMetrics() {
-    const totalEmployees = await this.prisma.employee.count();
-    const activeEmployees = await this.prisma.employee.count({ where: { status: 'ACTIVE' } });
+    try {
+      const totalEmployees = await this.prisma.employee.count();
+      const activeEmployees = await this.prisma.employee.count({ where: { status: 'ACTIVE' } });
     const probationEmployees = await this.prisma.employee.count({ where: { status: 'PROBATION' } });
 
     const today = new Date();
@@ -98,6 +99,10 @@ export class ReportsService {
       },
       dailyReports: recentDailyReports
     };
+    } catch (e: any) {
+      console.error('DASHBOARD METRICS ERROR:', e);
+      return { error: e.message || e.toString() };
+    }
   }
 
   async submitDailyReport(data: any, reqUser: any) {
@@ -190,15 +195,15 @@ export class ReportsService {
     });
 
     // Compute stats from actual data
-    const totalScreened = reports.reduce((sum, r) => sum + r.numScreened, 0);
-    const totalInterviews = reports.reduce((sum, r) => sum + r.numInterviews, 0);
-    const totalOffersSent = reports.reduce((sum, r) => sum + r.numOffersSent, 0);
-    const totalJoined = reports.reduce((sum, r) => sum + r.numJoined, 0);
-    const totalDropouts = reports.reduce((sum, r) => sum + r.numDropouts, 0);
+    const totalScreened = reports.reduce((sum: any, r: any) => sum + r.numScreened, 0);
+    const totalInterviews = reports.reduce((sum: any, r: any) => sum + r.numInterviews, 0);
+    const totalOffersSent = reports.reduce((sum: any, r: any) => sum + r.numOffersSent, 0);
+    const totalJoined = reports.reduce((sum: any, r: any) => sum + r.numJoined, 0);
+    const totalDropouts = reports.reduce((sum: any, r: any) => sum + r.numDropouts, 0);
 
     // Source breakdown from reports
     const sourceCounts: Record<string, number> = {};
-    reports.forEach((r) => {
+    reports.forEach((r: any) => {
       const src = r.candidateSource || 'Other';
       sourceCounts[src] = (sourceCounts[src] || 0) + 1;
     });
@@ -214,7 +219,7 @@ export class ReportsService {
     ];
 
     // Recent activity from last 10 reports
-    const recentActivities = reports.slice(0, 10).map((r) => ({
+    const recentActivities = reports.slice(0, 10).map((r: any) => ({
       time: r.date,
       text: `${r.role} — ${r.keyUpdates || r.selectionStatus}`,
       type: r.joinedOnboarded === 'YES' ? 'onboard' : r.offerLetterSent === 'YES' ? 'offer' : r.numDropouts > 0 ? 'dropout' : 'interview',
@@ -222,8 +227,8 @@ export class ReportsService {
 
     // Upcoming joiners (those confirmed but not yet onboarded)
     const upcomingJoiners = reports
-      .filter((r) => r.joiningConfirmation === 'CONFIRMED' && r.joinedOnboarded !== 'YES')
-      .map((r) => ({
+      .filter((r: any) => r.joiningConfirmation === 'CONFIRMED' && r.joinedOnboarded !== 'YES')
+      .map((r: any) => ({
         name: r.role,
         role: r.candidateSource,
         date: r.date,

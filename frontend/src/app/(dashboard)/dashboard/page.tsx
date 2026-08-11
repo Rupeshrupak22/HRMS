@@ -26,6 +26,9 @@ import {
   XCircle,
   FileSpreadsheet,
   Building2,
+  TrendingUp,
+  TrendingDown,
+  CreditCard,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -43,21 +46,23 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const [metrics, setMetrics] = useState<any>(null);
 
-  useEffect(() => {
-    async function loadData() {
-      try {
-        const data = await apiRequest('/reports/dashboard-metrics');
-        setMetrics(data);
-      } catch (err) {
-        setMetrics({
-          totalEmployees: 115,
-          todayPresent: 102,
-          todayLate: 4,
-          pendingLeaves: 3,
-          openJobs: 5,
-        });
-      }
+  const loadData = async () => {
+    try {
+      const data = await apiRequest(`/reports/dashboard-metrics?t=${Date.now()}`);
+      setMetrics(data);
+    } catch (err) {
+      console.error('Failed to load dashboard metrics:', err);
+      setMetrics({
+        totalEmployees: 115,
+        todayPresent: 102,
+        todayLate: 4,
+        pendingLeaves: 3,
+        openJobs: 5,
+      });
     }
+  };
+
+  useEffect(() => {
     loadData();
   }, []);
 
@@ -68,136 +73,149 @@ export default function DashboardPage() {
   // 1. CHARITHA — SALARY & PAYROLL SPECIALIST DASHBOARD
   // ====================================================
   if (userEmail === 'charitha@adyapan.com' || user?.specialization === 'SALARY_PAYROLL') {
-    const deptSalaryData = [
-      { name: 'Technology', grossCtc: 5400000 },
-      { name: 'Academic', grossCtc: 3200000 },
-      { name: 'Sales', grossCtc: 1800000 },
-      { name: 'Operations', grossCtc: 1200000 },
-      { name: 'HR & Admin', grossCtc: 900000 },
-    ];
-
     return (
-      <div className="space-y-6">
-        <div className="p-6 rounded-3xl saffron-gradient text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-black flex items-center gap-2">
-              <span>Charitha — HR Salary & Payroll Disbursement Center</span>
-              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-white/20 text-white">
-                PAYROLL SPECIALIST
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-700">
+        <div className="p-8 rounded-3xl bg-linear-to-r from-orange-600 via-orange-500 to-amber-500 text-white shadow-xl shadow-orange-500/20 flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3"></div>
+          <div className="relative z-10">
+            <h1 className="text-2xl font-black flex items-center gap-3">
+              <span>Charitha — Payroll & Reports Hub</span>
+              <span className="text-[10px] font-bold px-3 py-1 rounded-full bg-white/20 text-white backdrop-blur-sm border border-white/20 uppercase tracking-wider shadow-sm">
+                SALARY & PAYROLL
               </span>
             </h1>
-            <p className="text-xs text-orange-100 mt-1">
-              Monthly CTC breakdown, PF/ESI/TDS tax deductions, HDFC bank disbursal statements & payslips
+            <p className="text-sm text-orange-50 mt-2 max-w-xl leading-relaxed opacity-90">
+              Master control panel for monthly CTC breakdown, PF/ESI/TDS tax deductions, and monitoring daily work reports.
             </p>
           </div>
-          <div className="flex gap-2">
-            <a href="/payroll" className="px-4 py-2 rounded-xl bg-white text-orange-600 font-extrabold text-xs shadow-md flex items-center gap-1.5">
+          <div className="flex gap-3 relative z-10 flex-wrap">
+            <button onClick={loadData} className="px-5 py-2.5 rounded-xl bg-white/10 backdrop-blur-md text-white font-bold text-xs border border-white/20 shadow-lg hover:shadow-xl hover:bg-white/20 transition-all duration-300 flex items-center gap-2">
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+              <span>Refresh Data</span>
+            </button>
+            <a href="/payroll-management" className="px-5 py-2.5 rounded-xl bg-white text-orange-600 font-extrabold text-xs shadow-lg hover:shadow-xl hover:scale-105 transition-all duration-300 flex items-center gap-2">
               <FileSpreadsheet className="w-4 h-4" />
-              <span>Export HDFC Bank Register</span>
+              <span>Manage Payroll</span>
             </a>
-            <a href="/daily-reports" className="px-4 py-2 rounded-xl bg-black/20 text-white font-bold text-xs border border-white/20 flex items-center gap-1">
-              <Send className="w-3.5 h-3.5" /> Submit Daily Report
+            <a href="/daily-reports" className="px-5 py-2.5 rounded-xl bg-black/20 backdrop-blur-md text-white font-bold text-xs border border-white/30 flex items-center gap-2 hover:bg-black/30 transition-all duration-300">
+              <Send className="w-4 h-4" /> View Daily Reports
             </a>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-between">
-            <div>
-              <div className="text-xs text-slate-500 font-semibold">Gross Monthly Payroll</div>
-              <div className="text-2xl font-black text-slate-900 mt-1">₹{((metrics?.payroll?.totalGross ?? 0) / 100000).toFixed(2)} L</div>
-              <div className="text-[10px] text-emerald-600 mt-1 font-bold">{metrics?.payroll?.totalRecords ?? 0} Salaried Staff</div>
+        {/* KPI Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+              <Users className="w-12 h-12 text-slate-900" />
             </div>
-            <div className="w-11 h-11 rounded-2xl bg-orange-50 border border-orange-200 flex items-center justify-center text-orange-600">
-              <DollarSign className="w-5 h-5" />
-            </div>
-          </div>
-
-          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-between">
-            <div>
-              <div className="text-xs text-slate-500 font-semibold">Total Deductions</div>
-              <div className="text-2xl font-black text-amber-600 mt-1">₹{((metrics?.payroll?.totalDeductions ?? 0) / 100000).toFixed(2)} L</div>
-              <div className="text-[10px] text-slate-500 mt-1">PF, PT, TDS Withheld</div>
-            </div>
-            <div className="w-11 h-11 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
-              <FileText className="w-5 h-5" />
+            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Total Employees</div>
+            <div className="text-2xl font-black text-slate-900">{metrics?.payroll?.totalRecords ?? 0}</div>
+            <div className="text-[10px] text-emerald-600 mt-1 font-bold flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" /> Records Uploaded
             </div>
           </div>
 
-          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-between">
-            <div>
-              <div className="text-xs text-slate-500 font-semibold">Net Salary Disbursement</div>
-              <div className="text-2xl font-black text-emerald-600 mt-1">₹{((metrics?.payroll?.totalNet ?? 0) / 100000).toFixed(2)} L</div>
-              <div className="text-[10px] text-emerald-600 mt-1 font-bold">Total Net Pay</div>
+          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+              <TrendingDown className="w-12 h-12 text-red-600" />
             </div>
-            <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
-              <FileCheck className="w-5 h-5" />
+            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Total LOP Days</div>
+            <div className="text-2xl font-black text-red-600">{(metrics?.payroll?.totalLopDays ?? 0).toFixed(1)}</div>
+            <div className="text-[10px] text-slate-500 mt-1 font-medium">Loss of Pay Logs</div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+             <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+              <FileText className="w-12 h-12 text-amber-600" />
+            </div>
+            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Total LOP Deduction</div>
+            <div className="text-2xl font-black text-amber-600">₹{(metrics?.payroll?.totalDeductions ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div className="text-[10px] text-slate-500 mt-1 font-medium">Deducted from Gross</div>
+          </div>
+
+          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+             <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+              <DollarSign className="w-12 h-12 text-emerald-600" />
+            </div>
+            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Net Pay Disbursement</div>
+            <div className="text-2xl font-black text-emerald-600">₹{(metrics?.payroll?.totalNet ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+            <div className="text-[10px] text-emerald-600 mt-1 font-bold flex items-center gap-1">
+              <CheckCircle2 className="w-3 h-3" /> Ready for Credit
             </div>
           </div>
 
-          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-between">
-            <div>
-              <div className="text-xs text-slate-500 font-semibold">Total LOP Days</div>
-              <div className="text-2xl font-black text-blue-600 mt-1">{metrics?.payroll?.totalLopDays ?? 0} Days</div>
-              <div className="text-[10px] text-slate-500 mt-1">Total Loss of Pay Days</div>
+          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+             <div className="absolute top-0 right-0 p-3 opacity-5 group-hover:opacity-10 transition-opacity">
+              <FileCheck className="w-12 h-12 text-violet-600" />
             </div>
-            <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
+            <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider mb-1">Daily Work Reports</div>
+            <div className="text-2xl font-black text-violet-600">{metrics?.dailyReports?.length || 0}</div>
+            <div className="text-[10px] text-slate-500 mt-1 font-medium">Submitted recently</div>
           </div>
         </div>
 
-        {/* Charitha Unique Charts & Salary Register Table */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-5 p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3">
-            <h3 className="text-sm font-bold text-slate-900">Department Gross Salary Breakdown</h3>
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={deptSalaryData}>
-                  <XAxis dataKey="name" stroke="#94a3b8" fontSize={10} />
-                  <YAxis stroke="#94a3b8" fontSize={10} />
-                  <Tooltip formatter={(value: any) => `₹${(Number(value) / 100000).toFixed(1)} L`} />
-                  <Bar dataKey="grossCtc" fill="#f97316" radius={[4, 4, 0, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
+        {/* Tables Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <CreditCard className="w-4 h-4 text-orange-500" /> Recent Salary Credits
+              </h3>
             </div>
-          </div>
-
-          <div className="lg:col-span-7 p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3">
-            <h3 className="text-sm font-bold text-slate-900">Recent Salary Credit Processing</h3>
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
-                    <th className="py-2.5 px-3">Employee</th>
-                    <th className="py-2.5 px-3">Gross Salary</th>
-                    <th className="py-2.5 px-3">Deductions</th>
-                    <th className="py-2.5 px-3">Net Credit</th>
-                    <th className="py-2.5 px-3 text-right">Status</th>
+                  <tr className="bg-slate-50 text-slate-500 font-bold uppercase text-[10px] tracking-wider">
+                    <th className="py-3 px-4 rounded-l-lg">Employee</th>
+                    <th className="py-3 px-4">Gross</th>
+                    <th className="py-3 px-4">Net Credit</th>
+                    <th className="py-3 px-4 text-right rounded-r-lg">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-slate-100 font-medium">
+                <tbody className="divide-y divide-slate-50 font-medium">
                   {metrics?.payroll?.records?.length > 0 ? (
-                    metrics.payroll.records.map((record: any, idx: number) => (
-                      <tr key={idx}>
-                        <td className="py-2.5 px-3 font-bold text-slate-900">{record.employeeName || 'Unknown'}</td>
-                        <td className="py-2.5 px-3">₹{parseFloat(record.newSalary || record.oldSalary || '0').toLocaleString()}</td>
-                        <td className="py-2.5 px-3 text-amber-600">₹{parseFloat(record.lopDeduction || '0').toLocaleString()}</td>
-                        <td className="py-2.5 px-3 font-bold text-emerald-600">₹{parseFloat(record.netPay || '0').toLocaleString()}</td>
-                        <td className="py-2.5 px-3 text-right"><span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded">PROCESSED</span></td>
+                    metrics.payroll.records.slice(0,5).map((record: any, idx: number) => (
+                      <tr key={idx} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="py-3 px-4 font-bold text-slate-900">{record.employeeName || 'Unknown'}</td>
+                        <td className="py-3 px-4">₹{parseFloat(record.newSalary || record.oldSalary || '0').toLocaleString()}</td>
+                        <td className="py-3 px-4 font-bold text-emerald-600">₹{parseFloat(record.netPay || '0').toLocaleString()}</td>
+                        <td className="py-3 px-4 text-right"><span className="px-2 py-1 bg-emerald-50 text-emerald-700 text-[9px] font-bold rounded-full">PROCESSED</span></td>
                       </tr>
                     ))
                   ) : (
                     <tr>
-                      <td className="py-2.5 px-3 font-bold text-slate-900">Siddharth Verma (TECH)</td>
-                      <td className="py-2.5 px-3">₹1,33,333</td>
-                      <td className="py-2.5 px-3 text-amber-600">₹20,000</td>
-                      <td className="py-2.5 px-3 font-bold text-emerald-600">₹1,13,333</td>
-                      <td className="py-2.5 px-3 text-right"><span className="px-2 py-0.5 bg-emerald-50 text-emerald-700 text-[10px] font-bold rounded">DISBURSED</span></td>
+                      <td colSpan={4} className="py-8 text-center text-slate-400">No recent payroll records found.</td>
                     </tr>
                   )}
                 </tbody>
               </table>
+            </div>
+          </div>
+
+          <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
+            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+              <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                <FileText className="w-4 h-4 text-violet-500" /> Recent Daily Task Reports
+              </h3>
+            </div>
+            <div className="space-y-3">
+              {metrics?.dailyReports?.length > 0 ? (
+                metrics.dailyReports.slice(0, 5).map((report: any) => (
+                  <div key={report.id} className="p-3.5 rounded-xl bg-slate-50 border border-slate-100 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:border-slate-200 transition-colors">
+                    <div>
+                      <div className="font-bold text-slate-900">{report.employeeName}</div>
+                      <div className="text-[10px] text-slate-500 mt-1 line-clamp-1">{report.keyUpdates || 'No updates'}</div>
+                    </div>
+                    <div className="flex items-center gap-2 whitespace-nowrap">
+                      <span className="text-[10px] text-slate-400">{report.date}</span>
+                      <span className="px-2 py-1 bg-violet-50 text-violet-700 text-[9px] font-bold rounded-full uppercase tracking-wider">{report.status}</span>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="py-8 text-center text-slate-400 text-xs">No daily reports available.</div>
+              )}
             </div>
           </div>
         </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Download, Upload, Plus, FileSpreadsheet, X, Edit2, Trash2, AlertCircle, Loader2 } from 'lucide-react';
+import { Download, Upload, Plus, FileSpreadsheet, X, Edit2, Trash2, AlertCircle, Loader2, Users, FileText, DollarSign, TrendingDown, CheckCircle2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { apiRequest } from '@/lib/api';
 
@@ -124,9 +124,11 @@ export default function PayrollManagementPage() {
     reader.onload = async (evt) => {
       try {
         setLoading(true);
-        const bstr = evt.target?.result;
-        if (typeof bstr !== 'string') return;
-        const wb = XLSX.read(bstr, { type: 'binary' });
+        const dataBuffer = evt.target?.result;
+        if (!dataBuffer || typeof dataBuffer === 'string') return;
+        
+        const dataArr = new Uint8Array(dataBuffer as ArrayBuffer);
+        const wb = XLSX.read(dataArr, { type: 'array' });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
         const data = XLSX.utils.sheet_to_json(ws, { header: 1 });
@@ -155,7 +157,7 @@ export default function PayrollManagementPage() {
         if (fileInputRef.current) fileInputRef.current.value = '';
       }
     };
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const openAddModal = () => {
@@ -237,6 +239,20 @@ export default function PayrollManagementPage() {
     setConfirmModal({ ...confirmModal, isOpen: false });
   };
 
+  // KPI Calculation
+  const totalEmployees = entries.length;
+  let totalLopDays = 0;
+  let totalLopDeduction = 0;
+  let totalNetPay = 0;
+  let totalGross = 0;
+
+  entries.forEach(entry => {
+    totalLopDays += parseFloat(entry['LOP Days'] || '0') || 0;
+    totalLopDeduction += parseFloat(entry['LOP Deduction'] || '0') || 0;
+    totalNetPay += parseFloat(entry['NET Pay'] || '0') || 0;
+    totalGross += parseFloat(entry['New Salary'] || entry['Old Salary'] || '0') || 0;
+  });
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -282,6 +298,49 @@ export default function PayrollManagementPage() {
             <Plus className="w-4 h-4" />
             <span>Add Manually</span>
           </button>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+        <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+            <Users className="w-16 h-16 text-slate-900" />
+          </div>
+          <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Total Employees</div>
+          <div className="text-3xl font-black text-slate-900">{totalEmployees}</div>
+          <div className="text-[11px] text-emerald-600 mt-2 font-bold flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" /> Records Uploaded
+          </div>
+        </div>
+
+        <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+            <TrendingDown className="w-16 h-16 text-red-600" />
+          </div>
+          <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Total LOP Days</div>
+          <div className="text-3xl font-black text-red-600">{totalLopDays.toFixed(1)}</div>
+          <div className="text-[11px] text-slate-500 mt-2 font-medium">Loss of Pay Logs</div>
+        </div>
+
+        <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+            <FileText className="w-16 h-16 text-amber-600" />
+          </div>
+          <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Total LOP Deduction</div>
+          <div className="text-3xl font-black text-amber-600">₹{totalLopDeduction.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div className="text-[11px] text-slate-500 mt-2 font-medium">Deducted from Gross</div>
+        </div>
+
+        <div className="p-6 rounded-2xl bg-white border border-slate-200 shadow-sm hover:shadow-md transition-shadow group relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity">
+            <DollarSign className="w-16 h-16 text-emerald-600" />
+          </div>
+          <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Net Pay Disbursement</div>
+          <div className="text-3xl font-black text-emerald-600">₹{totalNetPay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div className="text-[11px] text-emerald-600 mt-2 font-bold flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" /> Ready for Credit
+          </div>
         </div>
       </div>
 

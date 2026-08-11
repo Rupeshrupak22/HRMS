@@ -1,7 +1,7 @@
 import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GoogleGenAI } from '@google/genai';
-import { RoleName } from '@prisma/client';
+import { RoleName } from '../prisma/enums';
 
 @Injectable()
 export class AiService {

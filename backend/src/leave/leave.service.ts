@@ -1,6 +1,6 @@
 import { Injectable, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { LeaveStatus } from '@prisma/client';
+import { LeaveStatus } from '../prisma/enums';
 
 @Injectable()
 export class LeaveService {

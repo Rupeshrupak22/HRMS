@@ -5,107 +5,32 @@ generator client {
 }
 
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
 }
 
 // ------------------------------------------------------
 // Enums
 // ------------------------------------------------------
 
-enum RoleName {
-  SUPER_ADMIN
-  HR_ADMIN
-  HR_EXECUTIVE
-  FINANCE
-  DEPARTMENT_HEAD
-  TEAM_LEADER
-  EMPLOYEE
-}
 
-enum EmploymentType {
-  FULL_TIME
-  PART_TIME
-  INTERN
-  CONTRACT
-  CONSULTANT
-}
 
-enum EmployeeStatus {
-  ACTIVE
-  PROBATION
-  NOTICE_PERIOD
-  RESIGNED
-  TERMINATED
-  INACTIVE
-}
 
-enum AttendanceStatus {
-  PRESENT
-  ABSENT
-  HALF_DAY
-  LATE
-  LEAVE
-  WEEK_OFF
-  HOLIDAY
-  WORK_FROM_HOME
-}
 
-enum LeaveStatus {
-  PENDING
-  APPROVED
-  REJECTED
-  CANCELLED
-}
 
-enum PayrollStatus {
-  DRAFT
-  ATTENDANCE_CALCULATED
-  SALARY_CALCULATED
-  HR_REVIEWED
-  FINANCE_REVIEWED
-  APPROVED
-  PROCESSED
-}
 
-enum CandidateStatus {
-  APPLIED
-  SCREENING
-  SHORTLISTED
-  INTERVIEW
-  TECHNICAL_ROUND
-  HR_ROUND
-  SELECTED
-  OFFERED
-  JOINED
-  REJECTED
-}
 
-enum AssetStatus {
-  AVAILABLE
-  ASSIGNED
-  IN_USE
-  RETURNED
-  MAINTENANCE
-  DISPOSED
-}
 
-enum ExpenseStatus {
-  PENDING
-  MANAGER_APPROVED
-  FINANCE_APPROVED
-  REIMBURSED
-  REJECTED
-}
 
-enum ExitStatus {
-  SUBMITTED
-  MANAGER_APPROVED
-  HR_APPROVED
-  CLEARANCE_IN_PROGRESS
-  SETTLED
-  COMPLETED
-  REJECTED
-}
+
+
+
+
+
+
+
+
+
+
 
 // ------------------------------------------------------
 // Models
@@ -115,7 +40,7 @@ model User {
   id              String         @id @default(uuid())
   email           String         @unique
   passwordHash    String
-  role            RoleName       @default(EMPLOYEE)
+  role String @default("EMPLOYEE")
   isEmailVerified Boolean        @default(false)
   isMfaEnabled    Boolean        @default(false)
   mfaSecret       String?
@@ -187,13 +112,13 @@ model Employee {
   designationId    String?
   reportingManagerId String?
   teamLeaderId     String?
-  employmentType   EmploymentType @default(FULL_TIME)
+  employmentType String @default("FULL_TIME")
   joiningDate      DateTime       @default(now())
   confirmationDate DateTime?
   probationDays    Int            @default(90)
   workLocation     String         @default("Headquarters")
   workMode         String         @default("In-Office")
-  status           EmployeeStatus @default(PROBATION)
+  status String @default("PROBATION")
 
   bankAccountNo    String?
   ifscCode         String?
@@ -253,7 +178,7 @@ model AttendanceRecord {
   workHours    Float            @default(0.0)
   lateMinutes  Int              @default(0)
   overtimeHours Float           @default(0.0)
-  status       AttendanceStatus @default(PRESENT)
+  status String @default("PRESENT")
   source       String           @default("WEB")
   notes        String?
   createdAt    DateTime         @default(now())
@@ -301,7 +226,7 @@ model LeaveRequest {
   endDate      DateTime
   totalDays    Float
   reason       String
-  status       LeaveStatus @default(PENDING)
+  status String @default("PENDING")
   approvedById String?
   rejectionReason String?
   createdAt    DateTime    @default(now())
@@ -343,7 +268,7 @@ model PayrollCycle {
   id            String        @id @default(uuid())
   month         Int
   year          Int
-  status        PayrollStatus @default(DRAFT)
+  status String @default("DRAFT")
   totalGross    Float         @default(0)
   totalDeductions Float       @default(0)
   totalNet      Float         @default(0)
@@ -409,7 +334,7 @@ model Candidate {
   noticePeriodDays Int         @default(30)
   matchScore   Float?
   aiAnalysis   String?
-  status       CandidateStatus @default(APPLIED)
+  status String @default("APPLIED")
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
 
@@ -486,7 +411,7 @@ model Asset {
   serialNumber String?
   purchaseDate DateTime?
   warrantyExpiry DateTime?
-  status       AssetStatus @default(AVAILABLE)
+  status String @default("AVAILABLE")
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
 
@@ -514,7 +439,7 @@ model ExpenseClaim {
   amount      Float
   expenseDate DateTime
   receiptUrl  String?
-  status      ExpenseStatus @default(PENDING)
+  status String @default("PENDING")
   approvedAt  DateTime?
   reimbursedAt DateTime?
   createdAt   DateTime      @default(now())
@@ -529,7 +454,7 @@ model Resignation {
   resignationDate DateTime   @default(now())
   lastWorkingDay  DateTime
   reason          String
-  status          ExitStatus @default(SUBMITTED)
+  status String @default("SUBMITTED")
   managerApproval Boolean    @default(false)
   hrApproval      Boolean    @default(false)
   createdAt       DateTime   @default(now())

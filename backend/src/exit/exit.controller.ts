@@ -4,7 +4,7 @@ import { ExitService } from './exit.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { RoleName, ExitStatus } from '@prisma/client';
+import { RoleName, ExitStatus } from '../prisma/enums';
 
 @ApiTags('Exit & F&F Settlement')
 @ApiBearerAuth()

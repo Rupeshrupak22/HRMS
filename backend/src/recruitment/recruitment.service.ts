@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { GoogleGenAI } from '@google/genai';
-import { CandidateStatus } from '@prisma/client';
+import { CandidateStatus } from '../prisma/enums';
 
 @Injectable()
 export class RecruitmentService {

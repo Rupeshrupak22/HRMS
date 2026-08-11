@@ -4,7 +4,7 @@ import { LeaveService } from './leave.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { RolesGuard } from '../auth/roles.guard';
 import { Roles } from '../auth/roles.decorator';
-import { RoleName } from '@prisma/client';
+import { RoleName } from '../prisma/enums';
 
 @ApiTags('Leaves')
 @ApiBearerAuth()

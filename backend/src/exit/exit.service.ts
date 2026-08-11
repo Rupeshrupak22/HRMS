@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { ExitStatus } from '@prisma/client';
+import { ExitStatus } from '../prisma/enums';
 
 @Injectable()
 export class ExitService {

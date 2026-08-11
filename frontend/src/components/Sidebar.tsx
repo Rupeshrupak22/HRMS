@@ -66,7 +66,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
       return ['/dashboard', '/my-work', '/recruitment-tracker', '/dropouts', '/recruitment', '/daily-reports', '/documents'].includes(item.href);
     }
     if (userEmail === 'charitha@adyapan.com' || user?.specialization === 'SALARY_PAYROLL') {
-      return ['/dashboard', '/my-work', '/daily-reports', '/payroll', '/payroll-management', '/reports', '/documents', '/attendance'].includes(item.href);
+      return ['/dashboard', '/daily-reports', '/payroll', '/payroll-management'].includes(item.href);
     }
     if (userEmail === 'aravind@adyapan.com' || user?.specialization === 'RESIGNATION_EXIT') {
       return ['/dashboard', '/my-work', '/daily-reports', '/exit-management', '/assets', '/documents'].includes(item.href);
