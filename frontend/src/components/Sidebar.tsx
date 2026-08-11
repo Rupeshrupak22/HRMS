@@ -19,6 +19,9 @@ import {
   Settings,
   GraduationCap,
   FileText,
+  UserCheck,
+  UserX,
+  CheckSquare,
   X,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -34,7 +37,10 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
 
   const allNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
+    { label: 'My Work & Tasks', href: '/my-work', icon: CheckSquare, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
     { label: 'Daily Work Report', href: '/daily-reports', icon: FileText, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
+    { label: 'Recruitment & Onboarding', href: '/recruitment-tracker', icon: UserCheck, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD'] },
+    { label: 'Dropout Tracker', href: '/dropouts', icon: UserX, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD'] },
     { label: 'Employees', href: '/employees', icon: Users, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER'] },
     { label: 'Attendance', href: '/attendance', icon: Clock, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
     { label: 'Leave Management', href: '/leaves', icon: CalendarDays, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
@@ -50,15 +56,30 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Settings', href: '/settings', icon: Settings, roles: ['SUPER_ADMIN', 'HR_ADMIN'] },
   ];
 
-  let navItems = allNavItems.filter((item) =>
-    item.roles.includes(user?.role || 'EMPLOYEE'),
-  );
+  const userEmail = (user?.email || '').toLowerCase();
 
-  if (user?.email === 'charitha@adyapan.com') {
-    navItems = allNavItems.filter((item) => 
-      ['/dashboard', '/daily-reports', '/attendance', '/payroll-management'].includes(item.href)
-    );
-  }
+  const navItems = allNavItems.filter((item) => {
+    if (!item.roles.includes(user?.role || 'EMPLOYEE')) return false;
+
+    // Specialized HR Team Member Sidebar Filtering
+    if (userEmail === 'veena@adyapan.com' || user?.specialization === 'ONBOARDING_HIRING') {
+      return ['/dashboard', '/my-work', '/recruitment-tracker', '/dropouts', '/recruitment', '/daily-reports', '/documents'].includes(item.href);
+    }
+    if (userEmail === 'charitha@adyapan.com' || user?.specialization === 'SALARY_PAYROLL') {
+      return ['/dashboard', '/my-work', '/daily-reports', '/payroll', '/payroll-management', '/reports', '/documents', '/attendance'].includes(item.href);
+    }
+    if (userEmail === 'aravind@adyapan.com' || user?.specialization === 'RESIGNATION_EXIT') {
+      return ['/dashboard', '/my-work', '/daily-reports', '/exit-management', '/assets', '/documents'].includes(item.href);
+    }
+    if (userEmail === 'nitisha@adyapan.com' || user?.specialization === 'DISCIPLINE_POSH') {
+      return ['/dashboard', '/my-work', '/daily-reports', '/employees', '/performance', '/documents'].includes(item.href);
+    }
+    if (userEmail === 'pavitra@adyapan.com' || user?.specialization === 'ATTENDANCE_LEAVE') {
+      return ['/dashboard', '/my-work', '/daily-reports', '/attendance', '/leaves', '/employees'].includes(item.href);
+    }
+
+    return true;
+  });
 
   return (
     <>
@@ -76,62 +97,64 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
         }`}
       >
         {/* Brand Header */}
-        <div className="h-16 px-6 border-b border-slate-100 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl saffron-gradient flex items-center justify-center font-black text-lg text-white shadow-md shadow-orange-500/20">
-              A
+        <div className="p-4 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl saffron-gradient flex items-center justify-center text-white font-bold shadow-md shadow-orange-500/20">
+              <GraduationCap className="w-5 h-5" />
             </div>
             <div>
-              <div className="font-extrabold text-sm tracking-tight text-slate-900 flex items-center gap-1.5">
-                <span>Adyapan HRMS</span>
+              <div className="font-extrabold text-sm text-slate-900 tracking-wider uppercase">
+                ADYAPAN
               </div>
-              <div className="text-[10px] text-orange-600 font-bold tracking-wider uppercase">
-                Edutech Enterprise
+              <div className="text-[10px] text-orange-600 font-bold tracking-widest uppercase">
+                
               </div>
             </div>
           </div>
-
-          {/* Close Mobile Sidebar */}
-          <button
-            onClick={onCloseMobile}
-            className="md:hidden p-1.5 rounded-lg text-slate-400 hover:text-slate-700"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          {onCloseMobile && (
+            <button
+              onClick={onCloseMobile}
+              className="p-1 rounded-lg text-slate-400 hover:text-slate-700 md:hidden cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          )}
         </div>
 
-        {/* Nav Menu */}
-        <nav className="flex-1 overflow-y-auto p-4 space-y-1">
+        {/* Navigation Items */}
+        <div className="flex-1 py-4 px-3 space-y-1 overflow-y-auto">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href || pathname.startsWith(item.href + '/');
+            const isActive = pathname === item.href;
 
             return (
               <Link
                 key={item.href}
                 href={item.href}
                 onClick={onCloseMobile}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                   isActive
-                    ? 'saffron-gradient text-white shadow-md shadow-orange-500/25'
-                    : 'text-slate-600 hover:text-slate-900 hover:bg-orange-50/60'
+                    ? 'saffron-gradient text-white shadow-md shadow-orange-500/20 font-bold'
+                    : 'text-slate-600 hover:bg-orange-50 hover:text-orange-600'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
+                <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                 <span>{item.label}</span>
               </Link>
             );
           })}
-        </nav>
+        </div>
 
-        {/* Footprint */}
-        <div className="p-4 border-t border-slate-100 bg-amber-50/40">
-          <div className="flex items-center gap-2 text-xs text-slate-800 font-bold">
-            <GraduationCap className="w-4 h-4 text-orange-600" />
-            <span>Adyapan Edutech</span>
+        {/* User Info / Role Footer Badge */}
+        <div className="p-3 border-t border-slate-200 bg-slate-50/50">
+          <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            Active Role
           </div>
-          <div className="text-[10px] text-slate-500 mt-0.5">
-            Role: <span className="text-orange-600 font-bold">{user?.role}</span>
+          <div className="text-xs font-extrabold text-slate-800 truncate mt-0.5">
+            {user?.role?.replace('_', ' ') || 'EMPLOYEE'}
+          </div>
+          <div className="text-[10px] text-orange-600 font-medium truncate">
+            {user?.email || 'guest@adyapan.com'}
           </div>
         </div>
       </aside>

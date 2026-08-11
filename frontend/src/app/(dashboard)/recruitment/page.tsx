@@ -3,7 +3,8 @@
 import React, { useState, useEffect } from 'react';
 import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { UserPlus, Sparkles, Briefcase, Award } from 'lucide-react';
+import { UserPlus, Sparkles, Briefcase, Award, RefreshCw, Upload, Download, Plus } from 'lucide-react';
+import { ActionBar } from '@/components/ActionBar';
 import jsPDF from 'jspdf';
 
 export default function RecruitmentPage() {
@@ -15,23 +16,13 @@ export default function RecruitmentPage() {
   const loadData = async () => {
     try {
       const jData = await apiRequest('/recruitment/jobs');
-      setJobs(jData.length > 0 ? jData : [
-        { id: 'job-1', code: 'JOB-2026-01', title: 'Senior Full Stack Developer', vacancies: 3, status: 'OPEN', location: 'Hybrid' },
-        { id: 'job-2', code: 'JOB-2026-02', title: 'Academic Course Counselor', vacancies: 5, status: 'OPEN', location: 'Office' },
-      ]);
+      setJobs(Array.isArray(jData) ? jData : []);
 
       const cData = await apiRequest('/recruitment/candidates');
-      setCandidates(cData.length > 0 ? cData : [
-        { id: 'cand-1', name: 'Rohan Deshmukh', email: 'rohan.d@gmail.com', skills: 'React, Node.js, TypeScript', matchScore: 88.5, status: 'SHORTLISTED', experienceYrs: 5, aiAnalysis: 'Strong match in React & Node.js ecosystem with 5 years experience in edtech.' },
-        { id: 'cand-2', name: 'Sneha Kulkarni', email: 'sneha.k@gmail.com', skills: 'Python, Django, AWS', matchScore: 76.0, status: 'INTERVIEW', experienceYrs: 3, aiAnalysis: 'Good backend skills with python background.' },
-      ]);
+      setCandidates(Array.isArray(cData) ? cData : []);
     } catch (err) {
-      setJobs([
-        { id: 'job-1', code: 'JOB-2026-01', title: 'Senior Full Stack Developer', vacancies: 3, status: 'OPEN', location: 'Hybrid' },
-      ]);
-      setCandidates([
-        { id: 'cand-1', name: 'Rohan Deshmukh', email: 'rohan.d@gmail.com', skills: 'React, Node.js, TypeScript', matchScore: 88.5, status: 'SHORTLISTED', experienceYrs: 5, aiAnalysis: 'Strong match in React & Node.js ecosystem with 5 years experience in edtech.' },
-      ]);
+      setJobs([]);
+      setCandidates([]);
     }
   };
 
@@ -75,19 +66,36 @@ export default function RecruitmentPage() {
     doc.save(`Offer_Letter_${cand.name.replace(' ', '_')}.pdf`);
   };
 
+  const exportCandidates = () => {
+    const headers = ['Name', 'Email', 'Skills', 'Experience', 'Match Score', 'Status'];
+    const rows = candidates.map((c) => [c.name, c.email, c.skills, c.experienceYrs, c.matchScore, c.status]);
+    const csv = [headers, ...rows].map((r) => r.map((v) => `"${v}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `ats-candidates-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+  };
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <UserPlus className="w-5 h-5 text-orange-600" />
-            <span>Recruitment & ATS Pipeline</span>
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Applicant Tracking System with AI Resume Screening & Match Scoring
-          </p>
-        </div>
+    <div className="space-y-5">
+      <div className="p-5 rounded-2xl saffron-gradient text-white shadow-md">
+        <h1 className="text-lg font-black tracking-tight flex items-center gap-2">
+          <UserPlus className="w-5 h-5" />
+          Recruitment &amp; ATS Pipeline
+        </h1>
+        <p className="text-[11px] text-orange-100 mt-0.5">
+          Applicant Tracking System with AI Resume Screening &amp; Match Scoring
+        </p>
       </div>
+
+      {/* Action Bar */}
+      <ActionBar
+        onRefresh={loadData}
+        onExport={exportCandidates}
+        onAdd={loadData}
+        addLabel="Add Candidate"
+      />
 
       {/* Active Jobs Board */}
       <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-4">

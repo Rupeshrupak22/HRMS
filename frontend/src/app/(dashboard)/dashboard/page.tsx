@@ -322,115 +322,7 @@ export default function DashboardPage() {
   // 3. ABBU VEENA — ONBOARDING & HIRING SPECIALIST DASHBOARD
   // ====================================================
   if (userEmail === 'veena@adyapan.com' || user?.specialization === 'ONBOARDING_HIRING') {
-    const funnelData = [
-      { stage: 'Applied', candidates: 45 },
-      { stage: 'AI Screened', candidates: 18 },
-      { stage: 'Interview', candidates: 8 },
-      { stage: 'Offered', candidates: 3 },
-      { stage: 'Joined', candidates: 2 },
-    ];
-
-    return (
-      <div className="space-y-6">
-        <div className="p-6 rounded-3xl saffron-gradient text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <div>
-            <h1 className="text-xl font-black flex items-center gap-2">
-              <span>Abbu Veena — Onboarding, ATS Hiring & Candidate Pipeline</span>
-              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-white/20 text-white">
-                ONBOARDING SPECIALIST
-              </span>
-            </h1>
-            <p className="text-xs text-orange-100 mt-1">
-              Candidate ATS screening, AI resume matching, offer letter PDFs & day-1 joining document checklists
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <a href="/recruitment" className="px-4 py-2 rounded-xl bg-white text-orange-600 font-extrabold text-xs shadow-md">
-              Open ATS Jobs Board
-            </a>
-            <a href="/daily-reports" className="px-4 py-2 rounded-xl bg-black/20 text-white font-bold text-xs border border-white/20 flex items-center gap-1">
-              <Send className="w-3.5 h-3.5" /> Submit Daily Report
-            </a>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-between">
-            <div>
-              <div className="text-xs text-slate-500 font-semibold">Active Job Vacancies</div>
-              <div className="text-2xl font-black text-violet-600 mt-1">5 Open Jobs</div>
-              <div className="text-[10px] text-slate-500 mt-1">45 Applications Received</div>
-            </div>
-            <div className="w-11 h-11 rounded-2xl bg-violet-50 border border-violet-200 flex items-center justify-center text-violet-600">
-              <UserPlus className="w-5 h-5" />
-            </div>
-          </div>
-
-          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-between">
-            <div>
-              <div className="text-xs text-slate-500 font-semibold">AI Candidate Match Score</div>
-              <div className="text-2xl font-black text-orange-600 mt-1">88.5% Avg</div>
-              <div className="text-[10px] text-slate-500 mt-1">Rohan Deshmukh (Shortlisted)</div>
-            </div>
-            <div className="w-11 h-11 rounded-2xl bg-orange-50 border border-orange-200 flex items-center justify-center text-orange-600">
-              <Sparkles className="w-5 h-5" />
-            </div>
-          </div>
-
-          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-between">
-            <div>
-              <div className="text-xs text-slate-500 font-semibold">Offer Letters Issued</div>
-              <div className="text-2xl font-black text-emerald-600 mt-1">3 Offers</div>
-              <div className="text-[10px] text-slate-500 mt-1">Joining 1st Sept 2026</div>
-            </div>
-            <div className="w-11 h-11 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
-              <FileCheck className="w-5 h-5" />
-            </div>
-          </div>
-
-          <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-between">
-            <div>
-              <div className="text-xs text-slate-500 font-semibold">Joining Document Verification</div>
-              <div className="text-2xl font-black text-blue-600 mt-1">100% Checked</div>
-              <div className="text-[10px] text-slate-500 mt-1">PAN, Aadhaar & Marksheets</div>
-            </div>
-            <div className="w-11 h-11 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
-              <CheckCircle2 className="w-5 h-5" />
-            </div>
-          </div>
-        </div>
-
-        {/* Veena Unique Funnel & Candidate Table */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-          <div className="lg:col-span-5 p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3">
-            <h3 className="text-sm font-bold text-slate-900">Recruitment Funnel Progress</h3>
-            <div className="h-56">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={funnelData} layout="vertical">
-                  <XAxis type="number" stroke="#94a3b8" fontSize={10} />
-                  <YAxis dataKey="stage" type="category" stroke="#94a3b8" fontSize={10} />
-                  <Tooltip />
-                  <Bar dataKey="candidates" fill="#f97316" radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          <div className="lg:col-span-7 p-5 rounded-2xl bg-white border border-slate-200 shadow-xs space-y-3">
-            <h3 className="text-sm font-bold text-slate-900">Candidate Onboarding Queue</h3>
-            <div className="space-y-3 text-xs">
-              <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-slate-900">Rohan Deshmukh (Full Stack Dev)</div>
-                  <div className="text-[10px] text-slate-500">Skills: React, Node.js, TS | Match: 88.5%</div>
-                </div>
-                <button className="px-3 py-1 bg-orange-600 text-white rounded font-bold text-[11px]">Generate Offer PDF</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
+    return <VeenaDashboard />;
   }
 
   // ====================================================
@@ -786,6 +678,222 @@ export default function DashboardPage() {
             </tbody>
           </table>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+function VeenaDashboard() {
+  const [data, setData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await apiRequest('/reports/veena-dashboard');
+        setData(res);
+      } catch (err) {
+        setData({ stats: { openJobs: 0, totalScreened: 0, totalInterviews: 0, totalOffersSent: 0, totalJoined: 0, totalDropouts: 0, totalReports: 0 }, funnelData: [], sourceData: [], recentActivities: [], upcomingJoiners: [] });
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  const COLORS = ['#f97316', '#d97706', '#0284c7', '#059669', '#8b5cf6', '#dc2626'];
+
+  if (loading) return <div className="p-10 text-center text-slate-400 text-sm">Loading dashboard...</div>;
+
+  const stats = data?.stats || {};
+  const funnelData = data?.funnelData || [];
+  const sourceData = data?.sourceData || [];
+  const recentActivities = data?.recentActivities || [];
+  const upcomingJoiners = data?.upcomingJoiners || [];
+
+  return (
+    <div className="space-y-5">
+      {/* Header */}
+      <div className="p-5 rounded-2xl saffron-gradient text-white shadow-md">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-full bg-white/20 flex items-center justify-center text-white font-black text-sm">AV</div>
+            <div>
+              <h1 className="text-lg font-black tracking-tight">Abbu Veena — Onboarding &amp; Hiring</h1>
+              <p className="text-[10px] text-orange-100">HR Executive • Onboarding Specialist • ATS Pipeline Manager</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <a href="/recruitment" className="px-3 py-2 rounded-lg bg-white text-orange-600 font-bold text-[11px] shadow flex items-center gap-1.5">
+              <Briefcase className="w-3.5 h-3.5" /> ATS Jobs Board
+            </a>
+            <a href="/recruitment-tracker" className="px-3 py-2 rounded-lg bg-white/20 text-white font-bold text-[11px] border border-white/30 flex items-center gap-1.5">
+              <UserCheck className="w-3.5 h-3.5" /> Onboarding Tracker
+            </a>
+            <a href="/daily-reports" className="px-3 py-2 rounded-lg bg-white/20 text-white font-bold text-[11px] border border-white/30 flex items-center gap-1.5">
+              <Send className="w-3.5 h-3.5" /> Daily Report
+            </a>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="p-4 rounded-xl bg-white border border-slate-100 shadow-xs">
+          <div className="text-[10px] text-slate-500 font-bold uppercase">Open Jobs</div>
+          <div className="text-2xl font-black text-violet-600 mt-1">{stats.openJobs}</div>
+        </div>
+        <div className="p-4 rounded-xl bg-white border border-slate-100 shadow-xs">
+          <div className="text-[10px] text-slate-500 font-bold uppercase">Screened</div>
+          <div className="text-2xl font-black text-orange-600 mt-1">{stats.totalScreened}</div>
+        </div>
+        <div className="p-4 rounded-xl bg-white border border-slate-100 shadow-xs">
+          <div className="text-[10px] text-slate-500 font-bold uppercase">Offers Sent</div>
+          <div className="text-2xl font-black text-emerald-600 mt-1">{stats.totalOffersSent}</div>
+        </div>
+        <div className="p-4 rounded-xl bg-white border border-slate-100 shadow-xs">
+          <div className="text-[10px] text-slate-500 font-bold uppercase">Dropouts</div>
+          <div className="text-2xl font-black text-red-500 mt-1">{stats.totalDropouts}</div>
+        </div>
+        <div className="p-4 rounded-xl bg-white border border-slate-100 shadow-xs">
+          <div className="text-[10px] text-slate-500 font-bold uppercase">Joined</div>
+          <div className="text-2xl font-black text-blue-600 mt-1">{stats.totalJoined}</div>
+        </div>
+      </div>
+
+      {/* Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div className="lg:col-span-5 p-4 rounded-xl bg-white border border-slate-100 shadow-xs">
+          <h3 className="text-xs font-bold text-slate-900 mb-3">Recruitment Funnel</h3>
+          {funnelData.length > 0 ? (
+            <div className="h-48">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={funnelData} layout="vertical" margin={{ left: 0, right: 10 }}>
+                  <XAxis type="number" stroke="#cbd5e1" fontSize={9} />
+                  <YAxis dataKey="stage" type="category" stroke="#cbd5e1" fontSize={9} width={60} />
+                  <Tooltip contentStyle={{ fontSize: 11 }} />
+                  <Bar dataKey="candidates" fill="#f97316" radius={[0, 6, 6, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <div className="h-48 flex items-center justify-center text-slate-400 text-xs">No data yet. Submit daily reports to see funnel.</div>
+          )}
+        </div>
+
+        <div className="lg:col-span-3 p-4 rounded-xl bg-white border border-slate-100 shadow-xs">
+          <h3 className="text-xs font-bold text-slate-900 mb-3">Source Breakdown</h3>
+          {sourceData.length > 0 ? (
+            <>
+              <div className="h-48">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={sourceData} dataKey="value" nameKey="name" cx="50%" cy="50%" innerRadius={35} outerRadius={60} paddingAngle={3}>
+                      {sourceData.map((_: any, idx: number) => (
+                        <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={{ fontSize: 11 }} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+              <div className="flex flex-wrap gap-2 mt-1">
+                {sourceData.map((s: any, i: number) => (
+                  <span key={s.name} className="text-[9px] font-bold text-slate-600 flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full" style={{ background: COLORS[i % COLORS.length] }} />
+                    {s.name}
+                  </span>
+                ))}
+              </div>
+            </>
+          ) : (
+            <div className="h-48 flex items-center justify-center text-slate-400 text-xs">No source data yet.</div>
+          )}
+        </div>
+
+        <div className="lg:col-span-4 p-4 rounded-xl bg-white border border-slate-100 shadow-xs">
+          <h3 className="text-xs font-bold text-slate-900 mb-3">Recent Activity</h3>
+          {recentActivities.length > 0 ? (
+            <div className="space-y-2.5 max-h-56 overflow-y-auto">
+              {recentActivities.map((a: any, i: number) => (
+                <div key={i} className="flex gap-2 text-[11px]">
+                  <span className={`w-1.5 h-1.5 rounded-full mt-1.5 flex-shrink-0 ${
+                    a.type === 'offer' ? 'bg-emerald-500' : a.type === 'onboard' ? 'bg-blue-500' : a.type === 'dropout' ? 'bg-red-500' : 'bg-orange-500'
+                  }`} />
+                  <div className="flex-1">
+                    <div className="text-slate-700 font-medium leading-tight">{a.text}</div>
+                    <div className="text-[9px] text-slate-400 mt-0.5">{a.time}</div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="h-48 flex items-center justify-center text-slate-400 text-xs">No activity yet.</div>
+          )}
+        </div>
+      </div>
+
+      {/* Upcoming Joiners */}
+      {upcomingJoiners.length > 0 && (
+        <div className="rounded-xl bg-white border border-slate-100 shadow-xs overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+            <h3 className="text-xs font-bold text-slate-900">Upcoming Joiners — Onboarding Queue</h3>
+            <a href="/recruitment-tracker" className="text-[10px] text-orange-600 font-bold hover:underline">View All →</a>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="bg-slate-50 text-[10px] text-slate-500 font-bold uppercase">
+                  <th className="py-2.5 px-4 text-left">Candidate</th>
+                  <th className="py-2.5 px-4 text-left">Source</th>
+                  <th className="py-2.5 px-4 text-left">Date</th>
+                  <th className="py-2.5 px-4 text-left">Documents</th>
+                  <th className="py-2.5 px-4 text-left">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-50">
+                {upcomingJoiners.map((j: any, i: number) => (
+                  <tr key={i} className="hover:bg-orange-50/30">
+                    <td className="py-2.5 px-4 font-bold text-slate-900">{j.name}</td>
+                    <td className="py-2.5 px-4 text-slate-600">{j.role}</td>
+                    <td className="py-2.5 px-4 font-medium text-slate-700">{j.date}</td>
+                    <td className="py-2.5 px-4">
+                      <span className={`px-2 py-0.5 text-[9px] font-bold rounded ${j.docStatus === 'Verified' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>{j.docStatus}</span>
+                    </td>
+                    <td className="py-2.5 px-4">
+                      <span className={`px-2 py-0.5 text-[9px] font-bold rounded ${j.assetStatus === 'Pending' ? 'bg-slate-100 text-slate-600' : 'bg-blue-50 text-blue-700'}`}>{j.assetStatus}</span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Links */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <a href="/dropouts" className="p-4 rounded-xl bg-white border border-slate-100 shadow-xs hover:border-orange-200 transition-colors group">
+          <XCircle className="w-5 h-5 text-red-500 mb-2" />
+          <div className="text-xs font-bold text-slate-900 group-hover:text-orange-600">Dropout Tracker</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">{stats.totalDropouts} dropouts recorded</div>
+        </a>
+        <a href="/documents" className="p-4 rounded-xl bg-white border border-slate-100 shadow-xs hover:border-orange-200 transition-colors group">
+          <FileText className="w-5 h-5 text-blue-500 mb-2" />
+          <div className="text-xs font-bold text-slate-900 group-hover:text-orange-600">Document Vault</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">Upload &amp; verify docs</div>
+        </a>
+        <a href="/my-work" className="p-4 rounded-xl bg-white border border-slate-100 shadow-xs hover:border-orange-200 transition-colors group">
+          <CheckCircle2 className="w-5 h-5 text-emerald-500 mb-2" />
+          <div className="text-xs font-bold text-slate-900 group-hover:text-orange-600">My Tasks</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">Pending tasks</div>
+        </a>
+        <a href="/daily-reports" className="p-4 rounded-xl bg-white border border-slate-100 shadow-xs hover:border-orange-200 transition-colors group">
+          <FileSpreadsheet className="w-5 h-5 text-orange-500 mb-2" />
+          <div className="text-xs font-bold text-slate-900 group-hover:text-orange-600">Daily Reports</div>
+          <div className="text-[10px] text-slate-400 mt-0.5">{stats.totalReports} reports submitted</div>
+        </a>
       </div>
     </div>
   );

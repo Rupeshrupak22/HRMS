@@ -5,7 +5,7 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
+  provider = "postgresql"
 }
 
 // ------------------------------------------------------
@@ -647,4 +647,33 @@ model ManualPayrollRecord {
   headSignature      String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+model DailyReport {
+  id                  String   @id @default(uuid())
+  employeeName        String
+  userEmail           String
+  date                String
+  role                String
+  candidateSource     String   @default("Naukri.com")
+  screeningCompleted  String   @default("NO")
+  interviewTakenBy    String?
+  selectionStatus     String   @default("HOLD")
+  offerLetterSent     String   @default("NO")
+  offerLetterAccepted String   @default("NO")
+  joiningConfirmation String   @default("TENTATIVE")
+  joinedOnboarded     String   @default("NO")
+  pendingFollowups    String?
+  keyUpdates          String?
+  issue               String?
+  comment             String?
+  numScreened         Int      @default(0)
+  numInterviews       Int      @default(0)
+  numOffersSent       Int      @default(0)
+  numJoined           Int      @default(0)
+  numDropouts         Int      @default(0)
+  status              String   @default("SUBMITTED")
+  sendStatus          String   @default("NOT_SENT")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
 }
