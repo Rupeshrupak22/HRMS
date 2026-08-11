@@ -48,7 +48,7 @@ export default function LoginPage() {
         <div className="text-center mb-2">
           <h1 className="text-2xl font-black text-slate-900 tracking-wide">ADYAPAN</h1>
           <p className="text-xs font-bold text-orange-600 tracking-widest uppercase mt-1">
-            Edutech HR Management System
+            HR Management System
           </p>
         </div>
 
@@ -66,7 +66,7 @@ export default function LoginPage() {
 
         {/* Login Form */}
         <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Employee ID or Email Field */}
+          {/* HR ID or Email Field */}
           <div>
             <div className="relative">
               <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
@@ -75,11 +75,11 @@ export default function LoginPage() {
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 required
-                className="w-full pl-12 pr-4 py-4 rounded-xl border-2 border-orange-300 focus:border-orange-500 focus:outline-none text-sm text-slate-800 placeholder-slate-400 bg-white font-medium transition-colors"
-                placeholder="EMPLOYEE ID OR EMAIL"
+                className="w-full pl-12 pr-4 py-4 rounded-xl border-2 border-orange-300 focus:border-orange-500 focus:outline-none text-xs text-slate-800 placeholder-slate-400 bg-white font-medium transition-colors"
+                placeholder="HR ID OR EMAIL"
               />
               <label className="absolute -top-2.5 left-3 px-1 bg-white text-[10px] font-bold text-orange-600 uppercase tracking-wider">
-                Employee ID or Email
+                HR ID or Email
               </label>
             </div>
           </div>
@@ -93,7 +93,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                className="w-full pl-12 pr-12 py-4 rounded-xl border-2 border-slate-200 focus:border-orange-400 focus:outline-none text-sm text-slate-800 placeholder-slate-400 bg-white font-medium transition-colors"
+                className="w-full pl-12 pr-12 py-4 rounded-xl border-2 border-slate-200 focus:border-orange-400 focus:outline-none text-xs text-slate-800 placeholder-slate-400 bg-white font-medium transition-colors"
                 placeholder="PASSWORD"
               />
               <label className="absolute -top-2.5 left-3 px-1 bg-white text-[10px] font-bold text-slate-500 uppercase tracking-wider">
