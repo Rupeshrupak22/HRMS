@@ -63,7 +63,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
 
     // Specialized HR Team Member Sidebar Filtering
     if (userEmail === 'veena@adyapan.com' || user?.specialization === 'ONBOARDING_HIRING') {
-      return ['/dashboard', '/my-work', '/recruitment-tracker', '/dropouts', '/recruitment', '/daily-reports', '/documents'].includes(item.href);
+      return ['/dashboard', '/my-work', '/recruitment-tracker', '/dropouts', '/daily-reports'].includes(item.href);
     }
     if (userEmail === 'charitha@adyapan.com' || user?.specialization === 'SALARY_PAYROLL') {
       return ['/dashboard', '/my-work', '/daily-reports', '/payroll', '/payroll-management', '/reports', '/documents', '/attendance'].includes(item.href);

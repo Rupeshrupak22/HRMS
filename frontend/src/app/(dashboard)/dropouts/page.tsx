@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   UserX,
   Search,
@@ -16,6 +16,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { ActionBar } from '@/components/ActionBar';
+import { apiRequest } from '@/lib/api';
 
 interface DropoutEntry {
   id: string;
@@ -45,6 +46,15 @@ export default function DropoutTrackerPage() {
 
   const [dropouts, setDropouts] = useState<DropoutEntry[]>([]);
 
+  const loadDropouts = async () => {
+    try {
+      const data = await apiRequest('/veena/dropouts');
+      setDropouts(Array.isArray(data) ? data : []);
+    } catch { setDropouts([]); }
+  };
+
+  useEffect(() => { loadDropouts(); }, []);
+
   const [formData, setFormData] = useState({
     candidateName: '', employeeId: '', role: '', source: '',
     dropoutDate: '', dropoutStage: '', dropoutReason: '', recruiter: '', remarks: '',
@@ -63,16 +73,26 @@ export default function DropoutTrackerPage() {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingId) {
-      setDropouts((prev) => prev.map((d) => d.id === editingId ? { ...d, ...formData } : d));
-      setEditingId(null);
-    } else {
-      setDropouts((prev) => [{ id: `DROP-${String(prev.length + 1).padStart(3, '0')}`, ...formData }, ...prev]);
+    try {
+      if (editingId) {
+        await apiRequest(`/veena/dropouts/${editingId}`, { method: 'PUT', body: JSON.stringify(formData) });
+      } else {
+        await apiRequest('/veena/dropouts', { method: 'POST', body: JSON.stringify(formData) });
+      }
+    } catch {
+      // Fallback: save locally
+      if (editingId) {
+        setDropouts((prev) => prev.map((d) => d.id === editingId ? { ...d, ...formData } : d));
+      } else {
+        setDropouts((prev) => [{ id: `DROP-${Date.now()}`, ...formData }, ...prev]);
+      }
     }
+    setEditingId(null);
     setFormData({ candidateName: '', employeeId: '', role: '', source: '', dropoutDate: '', dropoutStage: '', dropoutReason: '', recruiter: '', remarks: '' });
     setShowForm(false);
+    loadDropouts();
   };
 
   const handleEdit = (drop: DropoutEntry) => {
@@ -81,8 +101,9 @@ export default function DropoutTrackerPage() {
     setShowForm(true);
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (window.confirm('Are you sure you want to delete this dropout record?')) {
+      try { await apiRequest(`/veena/dropouts/${id}`, { method: 'DELETE' }); } catch {}
       setDropouts((prev) => prev.filter((d) => d.id !== id));
     }
   };
@@ -137,7 +158,7 @@ export default function DropoutTrackerPage() {
 
       {/* Action Bar */}
       <ActionBar
-        onRefresh={() => setDropouts([...dropouts])}
+        onRefresh={loadDropouts}
         onImportCSV={handleImportCSV}
         onExport={exportCSV}
         onAdd={openNewForm}
