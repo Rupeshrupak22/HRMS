@@ -110,14 +110,14 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   const navItems = isAravind
     ? aravindNavItems
     : isNitisha
-    ? nitishaNavItems
-    : isVeena
-    ? veenaNavItems
-    : isCharitha
-    ? charithaNavItems
-    : isNandini
-    ? nandiniNavItems
-    : allNavItems.filter((item) => item.roles.includes(user?.role || 'EMPLOYEE'));
+      ? nitishaNavItems
+      : isVeena
+        ? veenaNavItems
+        : isCharitha
+          ? charithaNavItems
+          : isNandini
+            ? nandiniNavItems
+            : allNavItems.filter((item) => item.roles.includes(user?.role || 'EMPLOYEE'));
 
   return (
     <>
@@ -130,9 +130,8 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
       )}
 
       <aside
-        className={`w-64 border-r border-slate-200 bg-white flex flex-col h-screen fixed md:sticky top-0 z-40 transition-transform duration-300 ${
-          isOpenMobile ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        }`}
+        className={`w-64 border-r border-slate-200 bg-white flex flex-col h-screen fixed md:sticky top-0 z-40 transition-transform duration-300 ${isOpenMobile ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
+          }`}
       >
         {/* Brand Header */}
         <div className="h-16 px-6 border-b border-slate-100 flex items-center justify-between">
@@ -144,9 +143,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
               <div className="font-extrabold text-sm tracking-tight text-slate-900 flex items-center gap-1.5">
                 <span>Adyapan HRMS</span>
               </div>
-              <div className="text-[10px] text-orange-600 font-bold tracking-wider uppercase">
-                Edutech Enterprise
-              </div>
+
             </div>
           </div>
 
@@ -170,11 +167,10 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
                 key={item.href}
                 href={item.href}
                 onClick={onCloseMobile}
-                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
-                  isActive
+                className={`flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${isActive
                     ? 'saffron-gradient text-white shadow-md shadow-orange-500/25'
                     : 'text-slate-600 hover:text-slate-900 hover:bg-orange-50/60'
-                }`}
+                  }`}
               >
                 <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-500'}`} />
                 <span>{item.label}</span>

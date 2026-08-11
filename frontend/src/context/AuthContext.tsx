@@ -27,7 +27,7 @@ export interface UserProfile {
 interface AuthContextType {
   user: UserProfile | null;
   loading: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  login: (identifier: string, password: string) => Promise<void>;
   logout: () => void;
   switchRole: (role: RoleName) => void;
 }
@@ -158,8 +158,8 @@ const DEMO_USERS: Record<RoleName, UserProfile> = {
 };
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<UserProfile | null>(DEMO_USERS.SUPER_ADMIN);
-  const [loading, setLoading] = useState(false);
+  const [user, setUser] = useState<UserProfile | null>(null);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const storedUser = localStorage.getItem('adyapan_user');
@@ -167,17 +167,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       try {
         setUser(JSON.parse(storedUser));
       } catch (e) {
-        setUser(DEMO_USERS.SUPER_ADMIN);
+        setUser(null);
       }
     }
+    setLoading(false);
   }, []);
 
-  const login = async (email: string, password: string) => {
+  const login = async (identifier: string, password: string) => {
     setLoading(true);
     try {
       const data = await apiRequest('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ identifier, password }),
       });
 
       const userProfile: UserProfile = {
@@ -189,7 +190,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         employeeCode: data.user.employee?.employeeCode,
         employeeId: data.user.employee?.id,
         departmentId: data.user.employee?.departmentId,
-        specialization: HR_SPECIALIST_ACCOUNTS[email]?.specialization,
+        specialization: HR_SPECIALIST_ACCOUNTS[identifier]?.specialization,
       };
 
       setUser(userProfile);
@@ -197,20 +198,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('adyapan_refresh_token', data.refreshToken);
       localStorage.setItem('adyapan_user', JSON.stringify(userProfile));
     } catch (err) {
-      const matchedHR = HR_SPECIALIST_ACCOUNTS[email];
-      if (matchedHR) {
-        setUser(matchedHR);
-        localStorage.setItem('adyapan_user', JSON.stringify(matchedHR));
-        return;
-      }
-
-      const matchedKey = Object.keys(DEMO_USERS).find(
-        (key) => DEMO_USERS[key as RoleName].email === email,
-      ) as RoleName | undefined;
-
-      const fallbackUser = matchedKey ? DEMO_USERS[matchedKey] : DEMO_USERS.SUPER_ADMIN;
-      setUser(fallbackUser);
-      localStorage.setItem('adyapan_user', JSON.stringify(fallbackUser));
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -221,6 +209,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('adyapan_refresh_token');
     localStorage.removeItem('adyapan_user');
     setUser(null);
+    window.location.href = '/login';
   };
 
   const switchRole = (role: RoleName) => {

@@ -1,0 +1,139 @@
+import { Router, Response } from 'express';
+import { authenticate, authorize } from '../../middleware/auth';
+import { validate } from '../../middleware/validate';
+import { z } from 'zod';
+import prisma from '../../lib/prisma';
+import { NotFoundError } from '../../lib/errors';
+import { AuthRequest } from '../../types';
+
+const router = Router();
+router.use(authenticate);
+
+const createCycleSchema = z.object({
+  month: z.number().min(1).max(12),
+  year: z.number().min(2020),
+});
+
+const processCycleSchema = z.object({
+  cycleId: z.string().uuid(),
+});
+
+// GET /api/payroll/cycles
+router.get('/cycles', authorize('HR_ADMIN', 'HR_MANAGER'), async (_req, res: Response, next) => {
+  try {
+    const cycles = await prisma.payrollCycle.findMany({
+      include: { _count: { select: { records: true } } },
+      orderBy: [{ year: 'desc' }, { month: 'desc' }],
+    });
+    res.json({ success: true, data: cycles });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/payroll/cycles
+router.post('/cycles', authorize('HR_ADMIN'), validate(createCycleSchema), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const cycle = await prisma.payrollCycle.create({ data: req.body });
+    res.status(201).json({ success: true, data: cycle });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/payroll/process
+router.post('/process', authorize('HR_ADMIN'), validate(processCycleSchema), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const cycle = await prisma.payrollCycle.findUnique({ where: { id: req.body.cycleId } });
+    if (!cycle) throw new NotFoundError('Payroll cycle not found');
+
+    // Get all active employees with salary structures
+    const employees = await prisma.employee.findMany({
+      where: { status: { not: 'TERMINATED' }, salaryStructure: { isNot: null } },
+      include: { salaryStructure: true },
+    });
+
+    let totalGross = 0;
+    let totalDeductions = 0;
+    let totalNet = 0;
+
+    for (const emp of employees) {
+      if (!emp.salaryStructure) continue;
+
+      const ss = emp.salaryStructure;
+      const monthlyGross = ss.ctc / 12;
+      const monthlyDeductions = (ss.pfDeduction + ss.esiDeduction + ss.ptDeduction + ss.tdsDeduction) / 12;
+      const netSalary = monthlyGross - monthlyDeductions;
+
+      await prisma.payrollRecord.upsert({
+        where: { payrollCycleId_employeeId: { payrollCycleId: cycle.id, employeeId: emp.id } },
+        update: { grossSalary: monthlyGross, totalDeductions: monthlyDeductions, netSalary },
+        create: {
+          payrollCycleId: cycle.id,
+          employeeId: emp.id,
+          grossSalary: monthlyGross,
+          totalDeductions: monthlyDeductions,
+          netSalary,
+        },
+      });
+
+      totalGross += monthlyGross;
+      totalDeductions += monthlyDeductions;
+      totalNet += netSalary;
+    }
+
+    const updated = await prisma.payrollCycle.update({
+      where: { id: cycle.id },
+      data: { status: 'PROCESSED', totalGross, totalDeductions, totalNet, processedAt: new Date() },
+    });
+
+    res.json({ success: true, data: updated });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/payroll/records/:cycleId
+router.get('/records/:cycleId', authorize('HR_ADMIN', 'HR_MANAGER'), async (req, res: Response, next) => {
+  try {
+    const records = await prisma.payrollRecord.findMany({
+      where: { payrollCycleId: String(req.params.cycleId) },
+      include: { employee: { select: { firstName: true, lastName: true, employeeCode: true } } },
+      orderBy: { employee: { employeeCode: 'asc' } },
+    });
+    res.json({ success: true, data: records });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/payroll/my-payslips
+router.get('/my-payslips', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const records = await prisma.payrollRecord.findMany({
+      where: { employeeId: req.user!.employeeId! },
+      include: { payrollCycle: true },
+      orderBy: { payrollCycle: { year: 'desc' } },
+    });
+    res.json({ success: true, data: records });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/payroll/salary-structure/:employeeId
+router.get('/salary-structure/:employeeId', async (req: AuthRequest, res: Response, next) => {
+  try {
+    // Employees can only view their own
+    if (req.user!.role === 'EMPLOYEE' && req.user!.employeeId !== String(req.params.employeeId)) {
+      res.status(403).json({ success: false, message: 'Forbidden' });
+      return;
+    }
+    const structure = await prisma.salaryStructure.findUnique({ where: { employeeId: String(req.params.employeeId) } });
+    res.json({ success: true, data: structure });
+  } catch (err) {
+    next(err);
+  }
+});
+
+export default router;
