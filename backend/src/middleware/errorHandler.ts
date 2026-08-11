@@ -6,7 +6,6 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
   // Zod validation errors
   if (err instanceof ZodError) {
     res.status(400).json({
-      success: false,
       message: 'Validation error',
       errors: err.errors.map((e) => ({
         field: e.path.join('.'),
@@ -20,6 +19,15 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
       message: err.message,
+    });
+    return;
+  }
+
+  // Prisma / Database connection errors
+  if (err.message?.includes("Can't reach database") || err.message?.includes('PrismaClient')) {
+    console.error('Database connection error:', err.message);
+    res.status(503).json({
+      message: 'Database temporarily unavailable. Please try again in a moment.',
     });
     return;
   }
