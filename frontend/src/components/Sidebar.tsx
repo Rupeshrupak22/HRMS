@@ -59,19 +59,24 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
 
   const allNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
-    { label: 'Daily Work Report', href: '/daily-reports', icon: FileText, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
-    { label: 'Employees', href: '/employees', icon: Users, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER'] },
-    { label: 'Attendance', href: '/attendance', icon: Clock, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
-    { label: 'Leave Management', href: '/leaves', icon: CalendarDays, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
-    { label: 'Payroll & Payslips', href: '/payroll', icon: CreditCard, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE', 'EMPLOYEE'] },
-    { label: 'Recruitment (ATS)', href: '/recruitment', icon: UserPlus, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD'] },
-    { label: 'Performance & Goals', href: '/performance', icon: Target, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
-    { label: 'Asset Management', href: '/assets', icon: Laptop, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE'] },
-    { label: 'Document Vault', href: '/documents', icon: FolderOpen, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'] },
-    { label: 'Expenses & Travel', href: '/expenses', icon: Receipt, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
-    { label: 'Exit & F&F', href: '/exit-management', icon: LogOut, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE', 'DEPARTMENT_HEAD'] },
-    { label: 'Reports & Analytics', href: '/reports', icon: BarChart3, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE', 'DEPARTMENT_HEAD'] },
-    { label: 'Settings', href: '/settings', icon: Settings, roles: ['SUPER_ADMIN', 'HR_ADMIN'] },
+    { label: 'Aravind Report', href: '/reports/aravind', icon: FileText, roles: ['SUPER_ADMIN'] },
+    { label: 'Nitisha Report', href: '/reports/nitisha', icon: FileText, roles: ['SUPER_ADMIN'] },
+    { label: 'Pavitra Report', href: '/reports/pavitra', icon: FileText, roles: ['SUPER_ADMIN'] },
+    { label: 'Charitha Report', href: '/reports/charitha', icon: FileText, roles: ['SUPER_ADMIN'] },
+    { label: 'Veena Report', href: '/reports/veena', icon: FileText, roles: ['SUPER_ADMIN'] },
+    { label: 'Daily Reports', href: '/reports/all-daily', icon: ClipboardList, roles: ['SUPER_ADMIN'] },
+    { label: 'HR Manager Report', href: '/reports/hr-manager', icon: BarChart3, roles: ['SUPER_ADMIN'] },
+    { label: 'Daily Work Report', href: '/daily-reports', icon: FileText, roles: ['HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
+    { label: 'Employees', href: '/employees', icon: Users, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER'] },
+    { label: 'Attendance', href: '/attendance', icon: Clock, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
+    { label: 'Leave Management', href: '/leaves', icon: CalendarDays, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
+    { label: 'Payroll & Payslips', href: '/payroll', icon: CreditCard, roles: ['HR_ADMIN', 'FINANCE', 'EMPLOYEE'] },
+    { label: 'Recruitment (ATS)', href: '/recruitment', icon: UserPlus, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD'] },
+    { label: 'Performance & Goals', href: '/performance', icon: Target, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
+    { label: 'Asset Management', href: '/assets', icon: Laptop, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE'] },
+    { label: 'Document Vault', href: '/documents', icon: FolderOpen, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'] },
+    { label: 'Expenses & Travel', href: '/expenses', icon: Receipt, roles: ['HR_ADMIN', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
+    { label: 'Settings', href: '/settings', icon: Settings, roles: ['HR_ADMIN'] },
   ];
 
   // Veena-specific navigation (Onboarding & Hiring)
@@ -91,6 +96,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Charitha Report', href: '/reports/charitha', icon: FileText },
     { label: 'Veena Report', href: '/reports/veena', icon: FileText },
     { label: 'Daily Reports', href: '/reports/all-daily', icon: ClipboardList },
+    { label: 'Overall Report', href: '/reports/overall', icon: BarChart3 },
   ];
 
   // Use specialist-specific nav based on specialization
@@ -98,6 +104,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   const isNitisha = user?.specialization === 'DISCIPLINE_POSH';
   const isVeena = user?.specialization === 'ONBOARDING_HIRING';
   const isNandini = user?.specialization === 'HR_MANAGER_ALL' || user?.email === 'nandini@adyapan.com' || user?.email === 'nandani@adyapan.com';
+  const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.email === 'superadmin@adyapan.com';
 
   const navItems = isAravind
     ? aravindNavItems
@@ -107,6 +114,8 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     ? veenaNavItems
     : isNandini
     ? nandiniNavItems
+    : isSuperAdmin
+    ? allNavItems.filter((item) => item.roles.includes('SUPER_ADMIN'))
     : allNavItems.filter((item) => item.roles.includes(user?.role || 'EMPLOYEE'));
 
   return (

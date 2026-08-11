@@ -898,3 +898,24 @@ model VeenaDailyReport {
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
+
+// ------------------------------------------------------
+// Nandini Overall Report for Admin
+// ------------------------------------------------------
+
+model OverallReport {
+  id                String   @id @default(uuid())
+  submittedBy       String
+  reportDate        String
+  totalRecords      Int      @default(0)
+  totalDailyReports Int      @default(0)
+  aravindSummary    String?
+  nitishaSummary    String?
+  veenaSummary      String?
+  charithaSummary   String?
+  pavitraSummary    String?
+  remarks           String?
+  status            String   @default("SUBMITTED")
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
