@@ -41,22 +41,22 @@ app.get('/api/health', (_req, res) => {
 });
 
 // API Routes
-app.use('/api/auth', authRoutes);
-app.use('/api/employees', employeeRoutes);
-app.use('/api/departments', departmentRoutes);
-app.use('/api/attendance', attendanceRoutes);
-app.use('/api/leave', leaveRoutes);
-app.use('/api/payroll', payrollRoutes);
-app.use('/api/recruitment', recruitmentRoutes);
-app.use('/api/performance', performanceRoutes);
-app.use('/api/documents', documentRoutes);
-app.use('/api/expenses', expenseRoutes);
-app.use('/api/exit', exitRoutes);
-app.use('/api/assets', assetRoutes);
-app.use('/api/organization', organizationRoutes);
-app.use('/api/training', trainingRoutes);
-app.use('/api/reports', reportRoutes);
-app.use('/api/notifications', notificationRoutes);
+app.use('/api/v1/auth', authRoutes);
+app.use('/api/v1/employees', employeeRoutes);
+app.use('/api/v1/departments', departmentRoutes);
+app.use('/api/v1/attendance', attendanceRoutes);
+app.use('/api/v1/leave', leaveRoutes);
+app.use('/api/v1/payroll', payrollRoutes);
+app.use('/api/v1/recruitment', recruitmentRoutes);
+app.use('/api/v1/performance', performanceRoutes);
+app.use('/api/v1/documents', documentRoutes);
+app.use('/api/v1/expenses', expenseRoutes);
+app.use('/api/v1/exit', exitRoutes);
+app.use('/api/v1/assets', assetRoutes);
+app.use('/api/v1/organization', organizationRoutes);
+app.use('/api/v1/training', trainingRoutes);
+app.use('/api/v1/reports', reportRoutes);
+app.use('/api/v1/notifications', notificationRoutes);
 
 // 404 handler
 app.use((_req, res) => {
