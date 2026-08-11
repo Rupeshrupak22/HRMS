@@ -56,7 +56,7 @@ export default function DailyReportsPage() {
     setLoading(true);
     try {
       const data = await apiRequest('/reports/daily');
-      setReports(data);
+      setReports(Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []);
     } catch (err) {
       setReports([
         {

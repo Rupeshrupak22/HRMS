@@ -19,7 +19,6 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
   // Known operational errors
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
-      success: false,
       message: err.message,
     });
     return;
@@ -28,7 +27,6 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
   // Unknown errors
   console.error('Unhandled error:', err);
   res.status(500).json({
-    success: false,
     message: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
   });
 }

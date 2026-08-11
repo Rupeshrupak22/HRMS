@@ -11,7 +11,7 @@ const router = Router();
 router.post('/login', validate(loginSchema), async (req, res: Response, next) => {
   try {
     const result = await authService.login(req.body);
-    res.json({ success: true, data: result });
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -21,7 +21,7 @@ router.post('/login', validate(loginSchema), async (req, res: Response, next) =>
 router.post('/refresh', validate(refreshTokenSchema), async (req, res: Response, next) => {
   try {
     const result = await authService.refreshToken(req.body);
-    res.json({ success: true, data: result });
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -31,7 +31,7 @@ router.post('/refresh', validate(refreshTokenSchema), async (req, res: Response,
 router.post('/logout', authenticate, async (req: AuthRequest, res: Response, next) => {
   try {
     const result = await authService.logout(req.user!.id);
-    res.json({ success: true, data: result });
+    res.json(result);
   } catch (err) {
     next(err);
   }
@@ -39,7 +39,7 @@ router.post('/logout', authenticate, async (req: AuthRequest, res: Response, nex
 
 // GET /api/auth/me
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
-  res.json({ success: true, data: req.user });
+  res.json(req.user);
 });
 
 export default router;

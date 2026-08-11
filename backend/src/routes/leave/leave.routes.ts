@@ -35,10 +35,14 @@ router.get('/types', async (_req, res: Response, next) => {
 router.get('/balances', async (req: AuthRequest, res: Response, next) => {
   try {
     const employeeId = (req.query.employeeId as string) || req.user!.employeeId;
+    if (!employeeId) {
+      res.json({ success: true, data: [] });
+      return;
+    }
     const year = parseInt((req.query.year as string) || String(new Date().getFullYear()));
 
     const balances = await prisma.leaveBalance.findMany({
-      where: { employeeId: employeeId!, year },
+      where: { employeeId, year },
       include: { leaveType: true },
     });
     res.json({ success: true, data: balances });
