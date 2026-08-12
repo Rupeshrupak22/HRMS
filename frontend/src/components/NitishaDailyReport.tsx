@@ -112,15 +112,15 @@ export function NitishaDailyReport() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">Performance Low *</label>
-              <input type="number" required value={form.performanceLow} onChange={(e) => setForm({ ...form, performanceLow: e.target.value === '' ? '' : Number(e.target.value) })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+              <input type="number" required value={form.performanceLow} onChange={(e) => setForm({ ...form, performanceLow: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">Performance Medium *</label>
-              <input type="number" required value={form.performanceMedium} onChange={(e) => setForm({ ...form, performanceMedium: e.target.value === '' ? '' : Number(e.target.value) })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+              <input type="number" required value={form.performanceMedium} onChange={(e) => setForm({ ...form, performanceMedium: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">Performance High *</label>
-              <input type="number" required value={form.performanceHigh} onChange={(e) => setForm({ ...form, performanceHigh: e.target.value === '' ? '' : Number(e.target.value) })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+              <input type="number" required value={form.performanceHigh} onChange={(e) => setForm({ ...form, performanceHigh: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">Discipline Cases *</label>

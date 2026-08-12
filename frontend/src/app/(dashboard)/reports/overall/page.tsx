@@ -50,10 +50,10 @@ export default function OverallReportPage() {
   }, []);
 
   useEffect(() => {
-    fetch('http://localhost:4000/api/v1/overall-report')
-      .then(res => res.json())
-      .then(setSubmittedReports)
-      .catch(() => {});
+    apiRequest('/overall-report')
+      .catch(() => fetch('http://localhost:4000/api/v1/overall-report').then(res => res.json()))
+      .then(data => setSubmittedReports(Array.isArray(data) ? data : []))
+      .catch(() => setSubmittedReports([]));
   }, []);
 
   if (!canView) {
@@ -77,14 +77,55 @@ export default function OverallReportPage() {
 
   const rd = rawData || { ret: [], res: [], ex: [], fnf: [], comp: [], intv: [], aDr: [], perf: [], disc: [], rel: [], nDr: [], onb: [], drop: [], vDr: [], payroll: [] };
   const data = {
-    aravind: { retention: fd(rd.ret).length, resignation: fd(rd.res).length, exit: fd(rd.ex).length, fnf: fd(rd.fnf).length, complaints: fd(rd.comp).length, interviews: fd(rd.intv).length, dailyReports: fd(rd.aDr).length },
-    nitisha: { performance: fd(rd.perf).length, pipCases: fd(rd.perf).filter((r: any) => r.pipCase === 'Yes').length, discipline: fd(rd.disc).length, relations: fd(rd.rel).length, dailyReports: fd(rd.nDr).length },
-    veena: { onboarding: fd(rd.onb).length, dropouts: fd(rd.drop).length, active: fd(rd.onb).filter((r: any) => r.status === 'Active').length, joined: fd(rd.onb).filter((r: any) => r.status === 'Joined').length, dailyReports: fd(rd.vDr).length },
-    charitha: { totalRecords: fd(rd.payroll).length, totalNetPay: fd(rd.payroll).reduce((s: number, r: any) => s + (parseFloat(r.netPay) || 0), 0), verified: fd(rd.payroll).filter((r: any) => r.verifiedBy).length, pending: fd(rd.payroll).filter((r: any) => !r.headApproval).length },
+    aravind: {
+      retention: fd(rd.ret).length,
+      resignation: fd(rd.res).length,
+      exit: fd(rd.ex).length,
+      fnf: fd(rd.fnf).length,
+      complaints: fd(rd.comp).length,
+      interviews: fd(rd.intv).length,
+      dailyReports: fd(rd.aDr).length,
+      totalRecords: fd(rd.ret).length + fd(rd.res).length + fd(rd.ex).length + fd(rd.fnf).length + fd(rd.comp).length + fd(rd.intv).length,
+    },
+    nitisha: {
+      performance: fd(rd.perf).length,
+      pipCases: fd(rd.perf).filter((r: any) => r.pipCase === 'Yes').length,
+      discipline: fd(rd.disc).length,
+      relations: fd(rd.rel).length,
+      dailyReports: fd(rd.nDr).length,
+      totalRecords: fd(rd.perf).length + fd(rd.disc).length + fd(rd.rel).length,
+    },
+    veena: {
+      onboarding: fd(rd.onb).length,
+      dropouts: fd(rd.drop).length,
+      active: fd(rd.onb).filter((r: any) => r.status === 'Active').length,
+      joined: fd(rd.onb).filter((r: any) => r.status === 'Joined').length,
+      dailyReports: fd(rd.vDr).length,
+      totalRecords: fd(rd.onb).length + fd(rd.drop).length,
+    },
+    charitha: {
+      totalRecords: fd(rd.payroll).length,
+      totalNetPay: fd(rd.payroll).reduce((s: number, r: any) => s + (parseFloat(r.netPay) || 0), 0),
+      verified: fd(rd.payroll).filter((r: any) => r.verifiedBy).length,
+      pending: fd(rd.payroll).filter((r: any) => !r.headApproval).length,
+      dailyReports: fd(rd.payroll).length,
+    },
+    pavitra: {
+      dailyReports: 0,
+      totalRecords: 0,
+    },
   };
 
-  const totalReports = data.aravind.dailyReports + data.nitisha.dailyReports + data.veena.dailyReports;
-  const totalRecords = data.aravind.retention + data.aravind.resignation + data.aravind.exit + data.aravind.fnf + data.aravind.complaints + data.aravind.interviews + data.nitisha.performance + data.nitisha.discipline + data.nitisha.relations + data.veena.onboarding + data.veena.dropouts;
+  const totalReports = data.aravind.dailyReports + data.nitisha.dailyReports + data.veena.dailyReports + data.charitha.dailyReports;
+  const totalRecords = data.aravind.totalRecords + data.nitisha.totalRecords + data.veena.totalRecords + data.charitha.totalRecords;
+
+  const getStatusBadge = (recordsCount: number, dailyReportsCount: number) => {
+    const totalActivity = recordsCount + dailyReportsCount;
+    if (totalActivity > 0) {
+      return <span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold rounded">ACTIVE</span>;
+    }
+    return <span className="px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold rounded">PENDING</span>;
+  };
 
   const handleSubmitToAdmin = async () => {
     if (!filterDate) { alert('Please select a report date'); return; }
@@ -103,11 +144,16 @@ export default function OverallReportPage() {
         remarks: remarks || 'No additional remarks',
         status: 'SUBMITTED',
       };
-      const res = await fetch('http://localhost:4000/api/v1/overall-report', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(report),
-      });
-      const saved = await res.json();
-      setSubmittedReports([saved, ...submittedReports]);
+      let saved: any;
+      try {
+        saved = await apiRequest('/overall-report', { method: 'POST', body: JSON.stringify(report) });
+      } catch {
+        const res = await fetch('http://localhost:4000/api/v1/overall-report', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(report),
+        });
+        saved = await res.json();
+      }
+      setSubmittedReports(prev => [saved, ...prev.filter((r: any) => r.id !== saved.id)]);
       setRemarks('');
       alert('Report submitted to Admin successfully!');
     } catch { alert('Failed to submit report'); }
@@ -176,7 +222,7 @@ export default function OverallReportPage() {
                   Retention: {data.aravind.retention} | Resignation: {data.aravind.resignation} | Exit: {data.aravind.exit} | F&F: {data.aravind.fnf} | Complaints: {data.aravind.complaints}
                 </td>
                 <td className="px-4 py-3 font-bold text-slate-800">{data.aravind.dailyReports}</td>
-                <td className="px-4 py-3"><span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold rounded">ACTIVE</span></td>
+                <td className="px-4 py-3">{getStatusBadge(data.aravind.totalRecords, data.aravind.dailyReports)}</td>
               </tr>
               <tr className="border-b border-slate-100 hover:bg-orange-50/30">
                 <td className="px-4 py-3 font-bold text-slate-800">Nitisha</td>
@@ -185,7 +231,7 @@ export default function OverallReportPage() {
                   Performance: {data.nitisha.performance} | PIP: {data.nitisha.pipCases} | Discipline: {data.nitisha.discipline} | Relations: {data.nitisha.relations}
                 </td>
                 <td className="px-4 py-3 font-bold text-slate-800">{data.nitisha.dailyReports}</td>
-                <td className="px-4 py-3"><span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold rounded">ACTIVE</span></td>
+                <td className="px-4 py-3">{getStatusBadge(data.nitisha.totalRecords, data.nitisha.dailyReports)}</td>
               </tr>
               <tr className="border-b border-slate-100 hover:bg-orange-50/30">
                 <td className="px-4 py-3 font-bold text-slate-800">Abbu Veena</td>
@@ -194,7 +240,7 @@ export default function OverallReportPage() {
                   Onboarding: {data.veena.onboarding} | Active: {data.veena.active} | Joined: {data.veena.joined} | Dropouts: {data.veena.dropouts}
                 </td>
                 <td className="px-4 py-3 font-bold text-slate-800">{data.veena.dailyReports}</td>
-                <td className="px-4 py-3"><span className="px-2.5 py-0.5 bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold rounded">ACTIVE</span></td>
+                <td className="px-4 py-3">{getStatusBadge(data.veena.totalRecords, data.veena.dailyReports)}</td>
               </tr>
               <tr className="border-b border-slate-100 hover:bg-orange-50/30">
                 <td className="px-4 py-3 font-bold text-slate-800">Charitha</td>
@@ -203,14 +249,14 @@ export default function OverallReportPage() {
                   Records: {data.charitha.totalRecords} | Net Pay: ₹{data.charitha.totalNetPay.toLocaleString('en-IN')} | Verified: {data.charitha.verified} | Pending: {data.charitha.pending}
                 </td>
                 <td className="px-4 py-3 font-bold text-slate-800">{data.charitha.totalRecords}</td>
-                <td className="px-4 py-3"><span className={`px-2.5 py-0.5 ${data.charitha.totalRecords > 0 ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-amber-50 text-amber-700 border-amber-200'} border text-[10px] font-bold rounded`}>{data.charitha.totalRecords > 0 ? 'ACTIVE' : 'PENDING'}</span></td>
+                <td className="px-4 py-3">{getStatusBadge(data.charitha.totalRecords, data.charitha.dailyReports)}</td>
               </tr>
               <tr className="border-b border-slate-100 hover:bg-orange-50/30">
                 <td className="px-4 py-3 font-bold text-slate-800">Pavitra</td>
                 <td className="px-4 py-3 text-orange-600 font-semibold">Attendance & Leave</td>
                 <td className="px-4 py-3 text-slate-500">Portal pending setup</td>
                 <td className="px-4 py-3 font-bold text-slate-800">—</td>
-                <td className="px-4 py-3"><span className="px-2.5 py-0.5 bg-amber-50 text-amber-700 border border-amber-200 text-[10px] font-bold rounded">PENDING</span></td>
+                <td className="px-4 py-3">{getStatusBadge(data.pavitra.totalRecords, data.pavitra.dailyReports)}</td>
               </tr>
             </tbody>
           </table>

@@ -65,7 +65,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Charitha Report', href: '/reports/charitha', icon: FileText, roles: ['SUPER_ADMIN'] },
     { label: 'Veena Report', href: '/reports/veena', icon: FileText, roles: ['SUPER_ADMIN'] },
     { label: 'Daily Reports', href: '/reports/all-daily', icon: ClipboardList, roles: ['SUPER_ADMIN'] },
-    { label: 'HR Manager Report', href: '/reports/hr-manager', icon: BarChart3, roles: ['SUPER_ADMIN'] },
+    { label: 'HR Manager Report', href: '/reports/hr-manager', icon: BarChart3, roles: ['SUPER_ADMIN', 'HR_ADMIN'] },
     { label: 'Daily Work Report', href: '/daily-reports', icon: FileText, roles: ['HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
     { label: 'Employees', href: '/employees', icon: Users, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER'] },
     { label: 'Attendance', href: '/attendance', icon: Clock, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },

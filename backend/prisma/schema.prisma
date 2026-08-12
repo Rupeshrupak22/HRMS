@@ -842,3 +842,20 @@ model DailyReport {
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 }
+
+model OverallReport {
+  id                 String   @id @default(uuid())
+  submittedBy        String
+  reportDate         String
+  totalRecords       Int
+  totalDailyReports  Int
+  aravindSummary     String?
+  nitishaSummary     String?
+  veenaSummary       String?
+  charithaSummary    String?
+  pavitraSummary     String?
+  remarks            String?
+  status             String   @default("SUBMITTED")
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+}

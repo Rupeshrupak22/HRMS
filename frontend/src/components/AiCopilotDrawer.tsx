@@ -59,10 +59,12 @@ export function AiCopilotDrawer({ isOpen, onClose }: { isOpen: boolean; onClose:
         body: JSON.stringify({ query: currentQuery }),
       });
 
+      const answerText = typeof res === 'string' ? res : (res?.answer || res?.message || res?.data?.answer || 'Global HRMS data analysis complete.');
+
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'ai',
-        text: res.answer || res.message,
+        text: answerText,
       };
       setMessages((prev) => [...prev, aiMsg]);
     } catch (err: any) {

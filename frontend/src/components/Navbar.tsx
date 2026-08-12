@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import {
-  Bell,
   Search,
   Sparkles,
   LogOut,
@@ -62,13 +61,6 @@ export function Navbar({ onToggleMobileSidebar }: NavbarProps) {
           >
             <Sparkles className="w-4 h-4 animate-pulse" />
             <span className="hidden xs:inline">HR AI Copilot</span>
-          </button>
-
-          {/* Notification Bell */}
-          <button className="relative p-2 rounded-xl bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors">
-            <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-orange-500 animate-ping" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-orange-500" />
           </button>
 
           {/* User Menu Avatar Dropdown */}

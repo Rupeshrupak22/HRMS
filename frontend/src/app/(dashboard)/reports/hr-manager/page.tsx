@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { FileText, Calendar, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
+import { apiRequest } from '@/lib/api';
 
 export default function HRManagerReportPage() {
   const { user } = useAuth();
@@ -13,8 +14,8 @@ export default function HRManagerReportPage() {
   const canView = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN' || user?.specialization === 'HR_MANAGER_ALL' || user?.email === 'superadmin@adyapan.com' || user?.email === 'nandini@adyapan.com' || user?.email === 'nandani@adyapan.com';
 
   useEffect(() => {
-    fetch('http://localhost:4000/api/v1/overall-report')
-      .then(res => res.json())
+    apiRequest('/overall-report')
+      .catch(() => fetch('http://localhost:4000/api/v1/overall-report').then(res => res.json()))
       .then((data) => { setReports(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
