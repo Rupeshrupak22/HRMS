@@ -119,7 +119,7 @@ export async function create(dto: CreateEmployeeDto, createdByEmail?: string) {
       emergencyPhone: (dto as any).emergencyPhone || undefined,
       address: (dto as any).address || undefined,
       createdByEmail: createdByEmail || undefined,
-    },
+    } as any,
   });
 
   // Create default leave balances

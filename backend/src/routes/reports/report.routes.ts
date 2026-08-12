@@ -126,7 +126,7 @@ router.put('/daily/:id/approve', authorize('HR_ADMIN', 'SUPER_ADMIN'), async (re
   try {
     const report = await prisma.dailyReport.update({
       where: { id: String(req.params.id) },
-      data: { status: 'APPROVED', reviewedByEmail: req.user!.email },
+      data: { status: 'APPROVED', reviewedByEmail: req.user!.email } as any,
     });
     res.json({ success: true, data: report });
   } catch (err) {
@@ -139,7 +139,7 @@ router.put('/daily/:id/reject', authorize('HR_ADMIN', 'SUPER_ADMIN'), async (req
   try {
     const report = await prisma.dailyReport.update({
       where: { id: String(req.params.id) },
-      data: { status: 'REJECTED', reviewedByEmail: req.user!.email },
+      data: { status: 'REJECTED', reviewedByEmail: req.user!.email } as any,
     });
     res.json({ success: true, data: report });
   } catch (err) {
@@ -173,7 +173,7 @@ router.get('/specialist-summary', authorize('HR_ADMIN', 'SUPER_ADMIN'), async (r
         });
 
         const employeesManaged = await prisma.employee.count({
-          where: { createdByEmail: spec.email },
+          where: { createdByEmail: spec.email } as any,
         });
 
         return {
@@ -206,7 +206,7 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
     // For HR_EXECUTIVE, show only their managed employees count
     let myEmployees = 0;
     if (userRole === 'HR_EXECUTIVE') {
-      myEmployees = await prisma.employee.count({ where: { createdByEmail: userEmail } });
+      myEmployees = await prisma.employee.count({ where: { createdByEmail: userEmail } as any });
     }
 
     const today = new Date();
