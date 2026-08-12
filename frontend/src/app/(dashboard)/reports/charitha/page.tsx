@@ -15,32 +15,34 @@ export default function CharithaReportPage() {
   const [filterDate, setFilterDate] = useState('');
 
   useEffect(() => {
-    // Fetch generic daily reports and filter for Charitha
-    apiRequest('/reports/daily').then((reports: any[]) => {
-      const charithaReports = reports.filter((r) => r.userEmail === 'charitha@adyapan.com' || r.specialization === 'SALARY_PAYROLL');
-      setDailyReports(charithaReports);
+    // Fetch payroll records directly (no auth needed for report view)
+    fetch('http://localhost:4000/api/v1/payroll-public').then(r => r.json()).then((data) => {
+      setPayrollRecords(Array.isArray(data) ? data : []);
     }).catch(() => {});
 
-    // Fetch payroll records from metrics endpoint
-    apiRequest(`/reports/dashboard-metrics?t=${Date.now()}`).then((data: any) => {
-      setMetrics(data);
-      if (data?.payroll?.records) {
-        setPayrollRecords(data.payroll.records);
-      }
+    // Fetch daily reports (no auth needed for report view)
+    fetch('http://localhost:4000/api/v1/reports/daily').then(r => r.json()).then((reports: any) => {
+      const arr = Array.isArray(reports) ? reports : [];
+      const charithaReports = arr.filter((r: any) => r.userEmail === 'charitha@adyapan.com' || r.specialization === 'SALARY_PAYROLL');
+      setDailyReports(charithaReports);
     }).catch(() => {});
   }, []);
 
   const filterByDate = (records: any[]) => {
     if (!filterDate) return records;
     return records.filter((r) => {
-      const dateField = r.date || (r.createdAt ? r.createdAt.split('T')[0] : '');
+      const dateField = r.date || (r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-CA') : '');
       return dateField === filterDate;
     });
   };
 
   const filteredDailyReports = filterByDate(dailyReports);
-  // Optional: you can filter payroll records by date if they have a date, else just show all.
-  const filteredPayrollRecords = filterDate ? payrollRecords : payrollRecords;
+  const filteredPayrollRecords = filterDate
+    ? payrollRecords.filter((r) => {
+        const created = r.createdAt ? new Date(r.createdAt).toLocaleDateString('en-CA') : '';
+        return created === filterDate;
+      })
+    : payrollRecords;
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">

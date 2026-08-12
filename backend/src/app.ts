@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { env } from './lib/env';
+import prisma from './lib/prisma';
 import { errorHandler } from './middleware/errorHandler';
 
 // Route imports
@@ -73,15 +74,50 @@ app.use('/api/v1', apiRouter);
 // GET /api/v1/overall-report — HR Manager report data for admin
 app.get('/api/v1/overall-report', async (_req, res) => {
   try {
-    // Return empty array for now — data can be populated via POST
-    res.json([]);
+    const reports = await prisma.overallReport.findMany({ orderBy: { createdAt: 'desc' } });
+    res.json(reports);
   } catch {
     res.json([]);
   }
 });
 app.get('/api/overall-report', async (_req, res) => {
   try {
+    const reports = await prisma.overallReport.findMany({ orderBy: { createdAt: 'desc' } });
+    res.json(reports);
+  } catch {
     res.json([]);
+  }
+});
+app.post('/api/v1/overall-report', async (req, res) => {
+  try {
+    const report = await prisma.overallReport.create({ data: req.body });
+    res.status(201).json(report);
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+app.post('/api/overall-report', async (req, res) => {
+  try {
+    const report = await prisma.overallReport.create({ data: req.body });
+    res.status(201).json(report);
+  } catch (err: any) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// Public payroll read endpoint (no auth required - for manager reports)
+app.get('/api/v1/payroll-public', async (_req, res) => {
+  try {
+    const records = await prisma.manualPayrollRecord.findMany({ orderBy: { createdAt: 'desc' } });
+    res.json(records);
+  } catch {
+    res.json([]);
+  }
+});
+app.get('/api/payroll-public', async (_req, res) => {
+  try {
+    const records = await prisma.manualPayrollRecord.findMany({ orderBy: { createdAt: 'desc' } });
+    res.json(records);
   } catch {
     res.json([]);
   }
