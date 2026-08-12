@@ -43,6 +43,7 @@ import { NitishaDashboard } from '@/components/NitishaDashboard';
 import { VeenaDashboard } from '@/components/VeenaDashboard';
 import { NandiniDashboard } from '@/components/NandiniDashboard';
 import { CharithaDashboard } from '@/components/CharithaDashboard';
+import { PavitraDashboard } from '@/components/PavitraDashboard';
 
 export default function DashboardPage() {
   const { user } = useAuth();
@@ -74,6 +75,13 @@ export default function DashboardPage() {
   // ====================================================
   if (userEmail === 'charitha@adyapan.com' || user?.specialization === 'SALARY_PAYROLL') {
     return <CharithaDashboard />;
+  }
+
+  // ====================================================
+  // 2. PAVITRA — ATTENDANCE & LEAVE SPECIALIST DASHBOARD
+  // ====================================================
+  if (userEmail === 'pavitra@adyapan.com' || user?.specialization === 'ATTENDANCE_LEAVE') {
+    return <PavitraDashboard />;
   }
 
 

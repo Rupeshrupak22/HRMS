@@ -3,7 +3,7 @@ import prisma from '../../lib/prisma';
 import { BadRequestError, NotFoundError } from '../../lib/errors';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './employee.schema';
 
-export async function findAll(params: { search?: string; departmentId?: string; status?: string }) {
+export async function findAll(params: { search?: string; departmentId?: string; status?: string; userEmail?: string; userRole?: string }) {
   const where: any = {};
 
   if (params.search) {
@@ -17,6 +17,12 @@ export async function findAll(params: { search?: string; departmentId?: string; 
   if (params.departmentId) where.departmentId = params.departmentId;
   if (params.status) where.status = params.status;
 
+  // Data isolation: HR_EXECUTIVE sees only employees they created
+  // HR_ADMIN (Nandini/HR Manager) and SUPER_ADMIN see all
+  if (params.userRole === 'HR_EXECUTIVE' && params.userEmail) {
+    where.createdByEmail = params.userEmail;
+  }
+
   return prisma.employee.findMany({
     where,
     include: {
@@ -26,7 +32,7 @@ export async function findAll(params: { search?: string; departmentId?: string; 
       team: true,
       manager: { select: { firstName: true, lastName: true, employeeCode: true } },
     },
-    orderBy: { employeeCode: 'asc' },
+    orderBy: { createdAt: 'desc' },
   });
 }
 
@@ -59,35 +65,60 @@ export async function findOne(id: string) {
   return emp;
 }
 
-export async function create(dto: CreateEmployeeDto) {
+export async function create(dto: CreateEmployeeDto, createdByEmail?: string) {
   const existing = await prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } });
   if (existing) throw new BadRequestError('Email already exists');
 
-  const defaultPassword = await bcrypt.hash('Password123!', 10);
+  // Handle password - use provided or default
+  const password = (dto as any).password || 'Password123!';
+  const hashedPassword = await bcrypt.hash(password, 10);
+
+  // Handle fullName split into firstName/lastName
+  let firstName = dto.firstName || '';
+  let lastName = dto.lastName || '';
+  if ((dto as any).fullName && !firstName) {
+    const parts = (dto as any).fullName.trim().split(' ');
+    firstName = parts[0] || '';
+    lastName = parts.slice(1).join(' ') || '';
+  }
+
+  const employeeCode = dto.employeeCode || `ADP${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}`;
 
   const user = await prisma.user.create({
     data: {
       email: dto.email.toLowerCase(),
-      passwordHash: defaultPassword,
+      passwordHash: hashedPassword,
       role: dto.role || 'EMPLOYEE',
       isEmailVerified: true,
     },
   });
 
+  const mobileNumber = dto.mobileNumber || (dto as any).mobile || null;
+  const bankAccountNo = dto.bankAccountNo || (dto as any).accountNumber || null;
+  const ifscCode = dto.ifscCode || (dto as any).ifsc || null;
+  const baseSalary = (dto as any).baseSalary || dto.ctc || 0;
+
   const emp = await prisma.employee.create({
     data: {
       userId: user.id,
-      employeeCode: dto.employeeCode,
-      firstName: dto.firstName,
-      lastName: dto.lastName,
-      departmentId: dto.departmentId,
-      designationId: dto.designationId,
+      employeeCode,
+      firstName,
+      lastName,
+      departmentId: dto.departmentId || undefined,
+      designationId: dto.designationId || undefined,
+      teamId: (dto as any).teamId || undefined,
       employmentType: dto.employmentType || 'FULL_TIME',
       joiningDate: dto.joiningDate ? new Date(dto.joiningDate) : new Date(),
-      mobileNumber: dto.mobileNumber,
-      bankAccountNo: dto.bankAccountNo,
-      ifscCode: dto.ifscCode,
-      bankName: dto.bankName,
+      mobileNumber,
+      bankAccountNo,
+      ifscCode,
+      bankName: dto.bankName || null,
+      dateOfBirth: (dto as any).dateOfBirth ? new Date((dto as any).dateOfBirth) : undefined,
+      gender: (dto as any).gender || undefined,
+      emergencyContactName: (dto as any).emergencyContact || undefined,
+      emergencyPhone: (dto as any).emergencyPhone || undefined,
+      address: (dto as any).address || undefined,
+      createdByEmail: createdByEmail || undefined,
     },
   });
 
@@ -105,22 +136,23 @@ export async function create(dto: CreateEmployeeDto) {
     });
   }
 
-  // Create salary structure if CTC provided
-  if (dto.ctc) {
-    const basic = dto.ctc * 0.5;
+  // Create salary structure if salary/CTC provided
+  if (baseSalary > 0) {
+    const ctc = baseSalary * 12;
+    const basic = ctc * 0.5;
     const hra = basic * 0.4;
-    const special = Math.max(0, dto.ctc - basic - hra - 24000);
+    const special = Math.max(0, ctc - basic - hra - 24000);
     await prisma.salaryStructure.create({
       data: {
         employeeId: emp.id,
-        ctc: dto.ctc,
+        ctc,
         basicSalary: basic,
         hra,
         conveyance: 24000,
         specialAllowance: special,
         pfDeduction: 21600,
         ptDeduction: 2400,
-        tdsDeduction: dto.ctc * 0.1,
+        tdsDeduction: ctc * 0.1,
       },
     });
   }
