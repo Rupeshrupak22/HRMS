@@ -51,7 +51,7 @@ export default function LoginPage() {
         </div>
 
         {/* Subtitle */}
-        <p className="text-center text-sm text-slate-500 mb-8">
+        <p className="text-center text-sm text-slate-500 mb-6">
           Sign in to access your workspace
         </p>
 

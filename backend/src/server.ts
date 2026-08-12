@@ -25,6 +25,13 @@ async function main() {
     console.log(`🚀 Server running on http://localhost:${env.PORT}`);
     console.log(`📋 Environment: ${env.NODE_ENV}`);
   });
+
+  // Keep database warm - ping every 4 minutes to prevent cold starts
+  setInterval(async () => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+    } catch {}
+  }, 4 * 60 * 1000);
 }
 
 // Graceful shutdown
