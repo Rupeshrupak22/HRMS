@@ -115,7 +115,7 @@ router.post('/apply', validate(applyLeaveSchema), async (req: AuthRequest, res: 
 });
 
 // PATCH /api/leave/requests/:id/status
-router.patch('/requests/:id/status', authorize('HR_ADMIN', 'HR_MANAGER', 'MANAGER'), validate(updateStatusSchema), async (req: AuthRequest, res: Response, next) => {
+router.patch('/requests/:id/status', authorize('HR_ADMIN', 'HR_MANAGER', 'HR_EXECUTIVE', 'MANAGER'), validate(updateStatusSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const leaveReq = await prisma.leaveRequest.findUnique({ where: { id: String(req.params.id) } });
     if (!leaveReq) throw new NotFoundError('Leave request not found');
@@ -150,6 +150,88 @@ router.get('/holidays', async (_req, res: Response, next) => {
   try {
     const holidays = await prisma.holiday.findMany({ orderBy: { date: 'asc' } });
     res.json({ success: true, data: holidays });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/leave/bulk-import — import leave records from XLSX/CSV
+router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const { records } = req.body;
+    if (!records || !Array.isArray(records) || records.length === 0) {
+      res.status(400).json({ success: false, message: 'No records provided' });
+      return;
+    }
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const record of records) {
+      try {
+        // Find employee by code
+        const employee = await prisma.employee.findUnique({
+          where: { employeeCode: record.employeeCode },
+        });
+
+        if (!employee) {
+          skipped++;
+          continue;
+        }
+
+        // Find leave type by name
+        const leaveType = await prisma.leaveType.findFirst({
+          where: { name: { contains: record.leaveType, mode: 'insensitive' } },
+        });
+
+        if (!leaveType) {
+          skipped++;
+          continue;
+        }
+
+        const startDate = new Date(record.startDate);
+        const endDate = new Date(record.endDate);
+        const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+
+        if (totalDays <= 0) {
+          skipped++;
+          continue;
+        }
+
+        const status = ['PENDING', 'APPROVED', 'REJECTED'].includes(record.status) ? record.status : 'PENDING';
+
+        await prisma.leaveRequest.create({
+          data: {
+            employeeId: employee.id,
+            leaveTypeId: leaveType.id,
+            startDate,
+            endDate,
+            totalDays,
+            reason: record.reason || 'Imported via XLSX',
+            status,
+            approvedById: status !== 'PENDING' ? req.user!.id : null,
+          },
+        });
+
+        // Update balance if approved
+        if (status === 'APPROVED') {
+          await prisma.leaveBalance.updateMany({
+            where: {
+              employeeId: employee.id,
+              leaveTypeId: leaveType.id,
+              year: new Date().getFullYear(),
+            },
+            data: { usedDays: { increment: totalDays } },
+          });
+        }
+
+        imported++;
+      } catch {
+        skipped++;
+      }
+    }
+
+    res.json({ success: true, data: { imported, skipped, total: records.length } });
   } catch (err) {
     next(err);
   }

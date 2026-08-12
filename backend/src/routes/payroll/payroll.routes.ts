@@ -139,7 +139,13 @@ router.get('/salary-structure/:employeeId', async (req: AuthRequest, res: Respon
 // GET /api/payroll/manual
 router.get('/manual', async (req: AuthRequest, res: Response, next) => {
   try {
+    const where: any = {};
+    // Data isolation: HR_EXECUTIVE sees only their own payroll records
+    if (req.user!.role === 'HR_EXECUTIVE') {
+      where.createdByEmail = req.user!.email;
+    }
     const records = await prisma.manualPayrollRecord.findMany({
+      where,
       orderBy: { createdAt: 'desc' }
     });
     res.json({ success: true, data: records });
@@ -152,7 +158,7 @@ router.get('/manual', async (req: AuthRequest, res: Response, next) => {
 router.post('/manual', async (req: AuthRequest, res: Response, next) => {
   try {
     const record = await prisma.manualPayrollRecord.create({
-      data: req.body
+      data: { ...req.body, createdByEmail: req.user!.email }
     });
     res.status(201).json({ success: true, data: record });
   } catch (err) {
@@ -194,7 +200,7 @@ router.post('/manual/bulk', async (req: AuthRequest, res: Response, next) => {
        return;
     }
     const created = await prisma.$transaction(
-      records.map((r: any) => prisma.manualPayrollRecord.create({ data: r }))
+      records.map((r: any) => prisma.manualPayrollRecord.create({ data: { ...r, createdByEmail: req.user!.email } }))
     );
     res.status(201).json({ success: true, data: created });
   } catch (err) {

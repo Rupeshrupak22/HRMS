@@ -17,6 +17,7 @@ import {
 import { AravindDailyReport } from '@/components/AravindDailyReport';
 import { NitishaDailyReport } from '@/components/NitishaDailyReport';
 import { VeenaDailyReport } from '@/components/VeenaDailyReport';
+import { PavitraDailyReport } from '@/components/PavitraDailyReport';
 
 export default function DailyReportsPage() {
   const { user } = useAuth();
@@ -34,6 +35,11 @@ export default function DailyReportsPage() {
   // Show Veena-specific daily report
   if (user?.specialization === 'ONBOARDING_HIRING') {
     return <VeenaDailyReport />;
+  }
+
+  // Show Pavitra-specific daily report
+  if (user?.specialization === 'ATTENDANCE_LEAVE' || user?.email === 'pavitra@adyapan.com') {
+    return <PavitraDailyReport />;
   }
 
   const [reports, setReports] = useState<any[]>([]);

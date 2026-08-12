@@ -21,4 +21,4 @@ export interface AuthRequest extends Request {
   user?: AuthenticatedUser;
 }
 
-export type Role = 'SUPER_ADMIN' | 'HR_ADMIN' | 'HR_MANAGER' | 'MANAGER' | 'EMPLOYEE';
+export type Role = 'SUPER_ADMIN' | 'HR_ADMIN' | 'HR_EXECUTIVE' | 'HR_MANAGER' | 'MANAGER' | 'EMPLOYEE';

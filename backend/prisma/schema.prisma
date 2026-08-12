@@ -107,6 +107,8 @@ model Employee {
   emergencyRelation    String?
   emergencyPhone       String?
 
+  createdByEmail       String?
+
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
@@ -541,6 +543,7 @@ model RetentionCase {
   retentionOutcome String
   status           String
   remarks          String
+  createdByEmail   String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
@@ -561,6 +564,7 @@ model ResignationTracker {
   fnf                 String
   overall             String
   lwd                 String
+  createdByEmail      String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
@@ -578,6 +582,7 @@ model ExitClearance {
   hrClearance      String
   assetReturn      String
   overallClearance String
+  createdByEmail   String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
@@ -593,6 +598,7 @@ model FnFTracker {
   paymentStatus       String
   paymentDate         String
   pending             String
+  createdByEmail      String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
@@ -609,6 +615,7 @@ model EmployeeComplaint {
   assignedTo       String
   actionTaken      String
   status           String
+  createdByEmail   String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 }
@@ -624,6 +631,7 @@ model ExitInterview {
   employeeFeedback  String
   interviewDate     String
   rehireEligibility String
+  createdByEmail    String?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 }
@@ -641,6 +649,7 @@ model AravindDailyReport {
   closedComplaints           Int      @default(0)
   managerConfirmationPending Int      @default(0)
   keyActions                 String
+  createdByEmail             String?
   createdAt                  DateTime @default(now())
   updatedAt                  DateTime @updatedAt
 }
@@ -670,6 +679,7 @@ model EmployeePerformance {
   factFinding         String?
   managerExplanation  String?
   myExplanation       String?
+  createdByEmail      String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
@@ -685,6 +695,7 @@ model DisciplineCase {
   actionTaken String?
   dateOpened  String
   dateClosed  String?
+  createdByEmail String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
@@ -697,6 +708,7 @@ model EmployeeRelation {
   rnrCertification   String
   employeeActivities String
   employeeFeedback   String
+  createdByEmail     String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
@@ -712,6 +724,7 @@ model NitishaDailyReport {
   performanceMedium  Int      @default(0)
   performanceHigh    Int      @default(0)
   disciplineCases    String
+  createdByEmail     String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
@@ -727,6 +740,7 @@ model DropoutRecord {
   dropoutReason   String?
   recruiter       String?
   remarks         String?
+  createdByEmail  String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
@@ -750,6 +764,7 @@ model OnboardingTracker {
   joining         String?
   onboarding      String?
   offerRemarks    String?
+  createdByEmail  String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 }
@@ -769,6 +784,7 @@ model VeenaDailyReport {
   onboarded           String?
   pendingFollowups    String?
   keyUpdatesIssue     String?
+  createdByEmail      String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
 }
@@ -810,6 +826,7 @@ model ManualPayrollRecord {
   headApproval       String?
   headApprovalDate   String?
   headSignature      String?
+  createdByEmail     String?
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 }
@@ -839,6 +856,9 @@ model DailyReport {
   numDropouts          Int      @default(0)
   status               String   @default("SUBMITTED")
   sendStatus           String   @default("NOT_SENT")
+  sentToEmail          String?
+  reviewedByEmail      String?
+  createdByEmail       String?
   createdAt            DateTime @default(now())
   updatedAt            DateTime @updatedAt
 }
