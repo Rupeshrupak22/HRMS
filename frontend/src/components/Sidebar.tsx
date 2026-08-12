@@ -87,6 +87,13 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
   ];
 
+  // Charitha-specific navigation (Salary & Payroll)
+  const charithaNavItems = [
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Payroll Management', href: '/payroll-management', icon: CreditCard },
+    { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
+  ];
+
   // Nandini (HR Manager) - custom sidebar with team reports
   const nandiniNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -103,6 +110,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   const isAravind = user?.specialization === 'RESIGNATION_EXIT';
   const isNitisha = user?.specialization === 'DISCIPLINE_POSH';
   const isVeena = user?.specialization === 'ONBOARDING_HIRING';
+  const isCharitha = user?.specialization === 'SALARY_PAYROLL' || user?.email === 'charitha@adyapan.com';
   const isNandini = user?.specialization === 'HR_MANAGER_ALL' || user?.email === 'nandini@adyapan.com' || user?.email === 'nandani@adyapan.com';
   const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.email === 'superadmin@adyapan.com';
 
@@ -112,6 +120,8 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     ? nitishaNavItems
     : isVeena
     ? veenaNavItems
+    : isCharitha
+    ? charithaNavItems
     : isNandini
     ? nandiniNavItems
     : isSuperAdmin
@@ -136,15 +146,10 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
         {/* Brand Header */}
         <div className="h-16 px-6 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl saffron-gradient flex items-center justify-center font-black text-lg text-white shadow-md shadow-orange-500/20">
-              A
-            </div>
+            <img src="/icon-192x192.png" alt="Adyapan" className="w-9 h-9 rounded-xl shadow-md" />
             <div>
-              <div className="font-extrabold text-sm tracking-tight text-slate-900 flex items-center gap-1.5">
-                <span>Adyapan HRMS</span>
-              </div>
-              <div className="text-[10px] text-orange-600 font-bold tracking-wider uppercase">
-                Edutech Enterprise
+              <div className="font-extrabold text-sm tracking-tight text-slate-900">
+                Adyapan HRMS
               </div>
             </div>
           </div>
@@ -185,11 +190,11 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
         {/* Footprint */}
         <div className="p-4 border-t border-slate-100 bg-amber-50/40">
           <div className="flex items-center gap-2 text-xs text-slate-800 font-bold">
-            <GraduationCap className="w-4 h-4 text-orange-600" />
-            <span>Adyapan Edutech</span>
+            <img src="/icon-192x192.png" alt="Adyapan" className="w-4 h-4 rounded" />
+            <span>Adyapan HRMS</span>
           </div>
           <div className="text-[10px] text-slate-500 mt-0.5">
-            Role: <span className="text-orange-600 font-bold">{isAravind ? 'EXIT SPECIALIST' : isNitisha ? 'DISCIPLINE & POSH' : isVeena ? 'ONBOARDING & HIRING' : isNandini ? 'HR MANAGER' : user?.role}</span>
+            Role: <span className="text-orange-600 font-bold">{isAravind ? 'EXIT SPECIALIST' : isNitisha ? 'DISCIPLINE & POSH' : isVeena ? 'ONBOARDING & HIRING' : isCharitha ? 'PAYROLL SPECIALIST' : isNandini ? 'HR MANAGER' : user?.role}</span>
           </div>
         </div>
       </aside>

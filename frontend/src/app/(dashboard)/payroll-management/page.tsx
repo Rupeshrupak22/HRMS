@@ -145,7 +145,7 @@ export default function PayrollManagementPage() {
           const dbRecords = rows.map(mapToDB);
           await apiRequest('/payroll/manual/bulk', {
             method: 'POST',
-            body: JSON.stringify({ records: dbRecords }),
+            body: JSON.stringify(dbRecords),
           });
           await fetchRecords();
         }

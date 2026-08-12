@@ -39,9 +39,7 @@ export default function LoginPage() {
       <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl shadow-orange-500/10 p-8 sm:p-10 border border-orange-100/50">
         {/* Logo */}
         <div className="flex justify-center mb-4">
-          <div className="w-16 h-16 saffron-gradient rounded-2xl flex items-center justify-center shadow-lg shadow-orange-500/25">
-            <GraduationCap className="w-9 h-9 text-white" />
-          </div>
+          <img src="/icon-192x192.png" alt="Adyapan" className="w-16 h-16 rounded-2xl shadow-lg shadow-orange-500/25" />
         </div>
 
         {/* Brand Name */}
@@ -122,7 +120,7 @@ export default function LoginPage() {
 
         {/* Footer */}
         <p className="text-center text-[10px] text-slate-400 mt-6 font-medium">
-          © 2026 Adyapan Edutech Pvt. Ltd. All rights reserved.
+          © 2026 Adyapan Pvt. Ltd. All rights reserved.
         </p>
       </div>
     </div>
