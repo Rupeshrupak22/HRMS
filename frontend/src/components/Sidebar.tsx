@@ -79,6 +79,16 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Settings', href: '/settings', icon: Settings, roles: ['HR_ADMIN'] },
   ];
 
+  // Pavitra-specific navigation (Attendance & Leave)
+  const pavitraNavItems = [
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Employees', href: '/employees', icon: Users },
+    { label: 'Attendance', href: '/attendance', icon: CalendarDays },
+    { label: 'Leaves', href: '/leaves', icon: Clock },
+    { label: 'Team Leaders', href: '/team-leaders', icon: Users },
+    { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
+  ];
+
   // Veena-specific navigation (Onboarding & Hiring)
   const veenaNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -110,6 +120,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   const isAravind = user?.specialization === 'RESIGNATION_EXIT';
   const isNitisha = user?.specialization === 'DISCIPLINE_POSH';
   const isVeena = user?.specialization === 'ONBOARDING_HIRING';
+  const isPavitra = user?.specialization === 'ATTENDANCE_LEAVE' || user?.email === 'pavitra@adyapan.com';
   const isCharitha = user?.specialization === 'SALARY_PAYROLL' || user?.email === 'charitha@adyapan.com';
   const isNandini = user?.specialization === 'HR_MANAGER_ALL' || user?.email === 'nandini@adyapan.com' || user?.email === 'nandani@adyapan.com';
   const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.email === 'superadmin@adyapan.com';
@@ -120,6 +131,8 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     ? nitishaNavItems
     : isVeena
     ? veenaNavItems
+    : isPavitra
+    ? pavitraNavItems
     : isCharitha
     ? charithaNavItems
     : isNandini
@@ -194,7 +207,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
             <span>Adyapan HRMS</span>
           </div>
           <div className="text-[10px] text-slate-500 mt-0.5">
-            Role: <span className="text-orange-600 font-bold">{isAravind ? 'EXIT SPECIALIST' : isNitisha ? 'DISCIPLINE & POSH' : isVeena ? 'ONBOARDING & HIRING' : isCharitha ? 'PAYROLL SPECIALIST' : isNandini ? 'HR MANAGER' : user?.role}</span>
+            Role: <span className="text-orange-600 font-bold">{isAravind ? 'EXIT SPECIALIST' : isNitisha ? 'DISCIPLINE & POSH' : isVeena ? 'ONBOARDING & HIRING' : isPavitra ? 'ATTENDANCE & LEAVE' : isCharitha ? 'PAYROLL SPECIALIST' : isNandini ? 'HR MANAGER' : user?.role}</span>
           </div>
         </div>
       </aside>

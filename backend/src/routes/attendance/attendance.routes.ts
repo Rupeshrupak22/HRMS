@@ -114,8 +114,8 @@ router.post('/check-out', async (req: AuthRequest, res: Response, next) => {
   }
 });
 
-// POST /api/attendance/mark — admin mark attendance
-router.post('/mark', authorize('HR_ADMIN', 'HR_MANAGER'), validate(markAttendanceSchema), async (req: AuthRequest, res: Response, next) => {
+// POST /api/attendance/mark — admin/HR mark attendance
+router.post('/mark', authorize('HR_ADMIN', 'HR_MANAGER', 'HR_EXECUTIVE'), validate(markAttendanceSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, date, status, checkInTime, checkOutTime, notes } = req.body;
     const dateObj = new Date(date);
@@ -145,6 +145,30 @@ router.post('/mark', authorize('HR_ADMIN', 'HR_MANAGER'), validate(markAttendanc
   }
 });
 
+// GET /api/attendance/today-stats — attendance stats for today
+router.get('/today-stats', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const totalEmployees = await prisma.employee.count({ where: { status: { in: ['ACTIVE', 'PROBATION'] } } });
+    const todayRecords = await prisma.attendanceRecord.findMany({ where: { date: today } });
+
+    const present = todayRecords.filter((r) => r.status === 'PRESENT').length;
+    const late = todayRecords.filter((r) => r.status === 'LATE').length;
+    const halfDay = todayRecords.filter((r) => r.status === 'HALF_DAY').length;
+    const onLeave = todayRecords.filter((r) => r.status === 'ON_LEAVE').length;
+    const absent = Math.max(0, totalEmployees - present - late - halfDay - onLeave);
+
+    res.json({
+      success: true,
+      data: { totalEmployees, present: present + late, absent, late, onLeave, halfDay },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/attendance/policy
 router.get('/policy', async (_req, res: Response, next) => {
   try {
@@ -154,5 +178,176 @@ router.get('/policy', async (_req, res: Response, next) => {
     next(err);
   }
 });
+
+// GET /api/attendance/my-logs — employee's own logs
+router.get('/my-logs', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const employeeId = req.user!.employeeId;
+    if (!employeeId) {
+      res.json({ success: true, data: [] });
+      return;
+    }
+    const records = await prisma.attendanceRecord.findMany({
+      where: { employeeId },
+      orderBy: { date: 'desc' },
+      take: 30,
+    });
+
+    const formatted = records.map((r) => ({
+      empId: req.user!.employeeCode || '',
+      empName: `${req.user!.firstName} ${req.user!.lastName}`,
+      date: r.date.toISOString().split('T')[0],
+      checkInTime: r.checkInTime ? r.checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
+      checkOutTime: r.checkOutTime ? r.checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
+      workHours: r.workHours,
+      status: r.status,
+      lateMinutes: r.lateMinutes,
+    }));
+
+    res.json({ success: true, data: formatted });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// GET /api/attendance/all-logs — admin view all employee attendance
+router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const { startDate, endDate, status } = req.query as any;
+    const where: any = {};
+
+    if (startDate) where.date = { ...where.date, gte: new Date(startDate) };
+    if (endDate) where.date = { ...where.date, lte: new Date(endDate) };
+    if (status) where.status = status;
+
+    const records = await prisma.attendanceRecord.findMany({
+      where,
+      include: { employee: { select: { firstName: true, lastName: true, employeeCode: true } } },
+      orderBy: { date: 'desc' },
+      take: 200,
+    });
+
+    const formatted = records.map((r) => ({
+      id: r.id,
+      empId: r.employee.employeeCode,
+      empName: `${r.employee.firstName} ${r.employee.lastName}`,
+      date: r.date.toISOString().split('T')[0],
+      checkInTime: r.checkInTime ? r.checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
+      checkOutTime: r.checkOutTime ? r.checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
+      workHours: r.workHours,
+      status: r.status,
+      lateMinutes: r.lateMinutes,
+      source: r.source,
+    }));
+
+    res.json({ success: true, data: formatted });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/attendance/bulk-import — import attendance from XLSX/CSV
+router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const { records } = req.body;
+    if (!records || !Array.isArray(records) || records.length === 0) {
+      res.status(400).json({ success: false, message: 'No records provided' });
+      return;
+    }
+
+    let imported = 0;
+    let skipped = 0;
+
+    for (const record of records) {
+      try {
+        // Find employee by code
+        const employee = await prisma.employee.findUnique({
+          where: { employeeCode: record.employeeCode },
+        });
+
+        if (!employee) {
+          skipped++;
+          continue;
+        }
+
+        const dateObj = new Date(record.date);
+        dateObj.setHours(0, 0, 0, 0);
+
+        // Parse check-in/out times
+        let checkInTime: Date | null = null;
+        let checkOutTime: Date | null = null;
+
+        if (record.checkInTime) {
+          checkInTime = parseTimeString(record.checkInTime, dateObj);
+        }
+        if (record.checkOutTime) {
+          checkOutTime = parseTimeString(record.checkOutTime, dateObj);
+        }
+
+        const workHours = checkInTime && checkOutTime
+          ? Math.round(((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)) * 100) / 100
+          : 0;
+
+        await prisma.attendanceRecord.upsert({
+          where: { employeeId_date: { employeeId: employee.id, date: dateObj } },
+          update: {
+            status: record.status || 'PRESENT',
+            checkInTime,
+            checkOutTime,
+            workHours,
+            notes: record.remarks || null,
+            source: 'IMPORT',
+          },
+          create: {
+            employeeId: employee.id,
+            date: dateObj,
+            status: record.status || 'PRESENT',
+            checkInTime,
+            checkOutTime,
+            workHours,
+            notes: record.remarks || null,
+            source: 'IMPORT',
+          },
+        });
+        imported++;
+      } catch {
+        skipped++;
+      }
+    }
+
+    res.json({ success: true, data: { imported, skipped, total: records.length } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// Helper: parse time strings like "09:30 AM" or "09:30" into a Date on a given day
+function parseTimeString(timeStr: string, baseDate: Date): Date | null {
+  if (!timeStr || timeStr === '-' || timeStr === '') return null;
+
+  const date = new Date(baseDate);
+  const cleaned = timeStr.trim().toUpperCase();
+
+  // Try "HH:MM AM/PM" format
+  const ampmMatch = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+  if (ampmMatch) {
+    let hours = parseInt(ampmMatch[1]);
+    const minutes = parseInt(ampmMatch[2]);
+    const period = ampmMatch[3];
+    if (period === 'PM' && hours !== 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    date.setHours(hours, minutes, 0, 0);
+    return date;
+  }
+
+  // Try "HH:MM" 24-hour format
+  const h24Match = cleaned.match(/^(\d{1,2}):(\d{2})$/);
+  if (h24Match) {
+    date.setHours(parseInt(h24Match[1]), parseInt(h24Match[2]), 0, 0);
+    return date;
+  }
+
+  return null;
+}
 
 export default router;

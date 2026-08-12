@@ -14,7 +14,13 @@ router.use(authenticate);
 router.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
     const { search, departmentId, status } = req.query as any;
-    const employees = await employeeService.findAll({ search, departmentId, status });
+    const employees = await employeeService.findAll({
+      search,
+      departmentId,
+      status,
+      userEmail: req.user!.email,
+      userRole: req.user!.role,
+    });
     res.json({ success: true, data: employees, count: employees.length });
   } catch (err) {
     next(err);
@@ -32,9 +38,9 @@ router.get('/:id', async (req: AuthRequest, res: Response, next) => {
 });
 
 // POST /api/employees
-router.post('/', authorize('HR_ADMIN', 'HR_MANAGER'), validate(createEmployeeSchema), async (req: AuthRequest, res: Response, next) => {
+router.post('/', authorize('HR_ADMIN', 'HR_MANAGER', 'HR_EXECUTIVE'), validate(createEmployeeSchema), async (req: AuthRequest, res: Response, next) => {
   try {
-    const employee = await employeeService.create(req.body);
+    const employee = await employeeService.create(req.body, req.user!.email);
     res.status(201).json({ success: true, data: employee });
   } catch (err) {
     next(err);
