@@ -50,24 +50,19 @@ router.get('/daily', async (req: AuthRequest, res: Response, next) => {
     const userRole = req.user!.role;
     const userEmail = req.user!.email;
 
-    if (userRole === 'SUPER_ADMIN') {
-      // Super Admin sees everything
+    const isManagerOrAdmin = 
+      userRole === 'SUPER_ADMIN' || 
+      userRole === 'HR_ADMIN' || 
+      req.user!.specialization === 'HR_MANAGER_ALL' || 
+      userEmail === 'nandini@adyapan.com' || 
+      userEmail === 'nandani@adyapan.com' || 
+      userEmail === 'admin@adyapan.com';
+
+    if (isManagerOrAdmin) {
+      // HR Manager & Admin see ALL daily reports across all specialists
       if (req.query.userEmail) where.userEmail = req.query.userEmail;
-    } else if (userRole === 'HR_ADMIN') {
-      // HR Manager sees reports sent to her OR her own reports
-      if (req.query.userEmail) {
-        where.userEmail = req.query.userEmail;
-      } else {
-        where.OR = [
-          { sentToEmail: userEmail },
-          { userEmail: userEmail },
-        ];
-      }
-    } else if (userRole === 'HR_EXECUTIVE') {
-      // HR Specialists see only their own reports
-      where.userEmail = userEmail;
     } else {
-      // Regular employees see only their own
+      // Specialists see their own reports
       where.userEmail = userEmail;
     }
 

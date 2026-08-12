@@ -15,6 +15,7 @@ export interface AuthenticatedUser {
   firstName: string;
   lastName: string;
   departmentId: string | null;
+  specialization?: string | null;
 }
 
 export interface AuthRequest extends Request {

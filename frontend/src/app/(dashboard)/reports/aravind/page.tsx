@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { FileText, ShieldAlert, UserX, LogOut, CreditCard, MessageSquareWarning, ClipboardList, Calendar } from 'lucide-react';
+import { FileText, ShieldAlert, UserX, LogOut, CreditCard, MessageSquareWarning, ClipboardList, Calendar, Eye, X } from 'lucide-react';
 import { aravindApi } from '@/lib/aravind-api';
+import { apiRequest } from '@/lib/api';
 
 export default function AravindReportPage() {
   const [retention, setRetention] = useState<any[]>([]);
@@ -12,7 +13,8 @@ export default function AravindReportPage() {
   const [complaints, setComplaints] = useState<any[]>([]);
   const [interviews, setInterviews] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
-  const [filterDate, setFilterDate] = useState('');
+  const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
+  const [selectedReport, setSelectedReport] = useState<any | null>(null);
 
   useEffect(() => {
     aravindApi.getRetention().then(setRetention).catch(() => {});
@@ -21,7 +23,23 @@ export default function AravindReportPage() {
     aravindApi.getFnF().then(setFnf).catch(() => {});
     aravindApi.getComplaints().then(setComplaints).catch(() => {});
     aravindApi.getExitInterview().then(setInterviews).catch(() => {});
-    aravindApi.getDailyReports().then(setDailyReports).catch(() => {});
+    apiRequest('/reports/daily').then((res) => {
+      const arr = Array.isArray(res) ? res : [];
+      setDailyReports(arr.filter((r: any) => 
+        r.userEmail === 'aravind@adyapan.com' || 
+        r.specialization === 'RESIGNATION_EXIT' || 
+        (r.employeeName || '').toLowerCase().includes('aravind')
+      ));
+    }).catch(() => {
+      aravindApi.getDailyReports().then((res) => {
+        const arr = Array.isArray(res) ? res : [];
+        setDailyReports(arr.filter((r: any) => 
+          r.userEmail === 'aravind@adyapan.com' || 
+          r.specialization === 'RESIGNATION_EXIT' || 
+          (r.employeeName || '').toLowerCase().includes('aravind')
+        ));
+      }).catch(() => setDailyReports([]));
+    });
   }, []);
 
   const filterByDate = (records: any[]) => {
@@ -279,9 +297,10 @@ export default function AravindReportPage() {
                 <th className="px-3 py-2 text-left font-bold text-slate-600">F&F Done</th>
                 <th className="px-3 py-2 text-left font-bold text-slate-600">F&F Pending</th>
                 <th className="px-3 py-2 text-left font-bold text-slate-600">Key Actions</th>
+                <th className="px-3 py-2 text-left font-bold text-slate-600">Preview</th>
               </tr></thead>
               <tbody>{filteredDailyReports.map((r) => (
-                <tr key={r.id} className="border-b border-slate-100">
+                <tr key={r.id} className="border-b border-slate-100 hover:bg-orange-50/30">
                   <td className="px-3 py-2 font-semibold">{r.reportDate}</td>
                   <td className="px-3 py-2">{r.resignationReceived}</td>
                   <td className="px-3 py-2">{r.retentionCases}</td>
@@ -289,13 +308,55 @@ export default function AravindReportPage() {
                   <td className="px-3 py-2">{r.exitClearanceCompleted}</td>
                   <td className="px-3 py-2">{r.fnfCompleted}</td>
                   <td className="px-3 py-2">{r.fnfPending}</td>
-                  <td className="px-3 py-2 max-w-[200px] truncate">{r.keyActions}</td>
+                  <td className="px-3 py-2 max-w-[200px] truncate">{r.keyActions || 'View details'}</td>
+                  <td className="px-3 py-2 text-right">
+                    <button onClick={() => setSelectedReport(r)} className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center gap-1 cursor-pointer ml-auto">
+                      <Eye className="w-3 h-3 text-slate-600" /> Full Preview
+                    </button>
+                  </td>
                 </tr>
               ))}</tbody>
             </table>
           </div>
         )}
       </section>
+
+      {/* Full Report Preview Modal */}
+      {selectedReport && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-orange-600 text-white">
+              <div className="flex items-center gap-2">
+                <FileText className="w-5 h-5" />
+                <div>
+                  <h3 className="text-sm font-black">Aravind Daily Report Preview</h3>
+                  <p className="text-[10px] text-orange-100">Aravind Madhesh Kumar — {selectedReport.reportDate}</p>
+                </div>
+              </div>
+              <button onClick={() => setSelectedReport(null)} className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto text-xs">
+              <div>
+                <label className="block font-bold text-slate-900 mb-1">Key Actions & Performance Details</label>
+                <div className="p-4 rounded-2xl bg-orange-50/50 border border-orange-200 text-slate-800 font-medium whitespace-pre-wrap leading-relaxed">
+                  {selectedReport.keyActions || 'No key actions provided.'}
+                </div>
+              </div>
+              {selectedReport.issuesComments && (
+                <div>
+                  <label className="block font-bold text-slate-900 mb-1">Issues & Comments</label>
+                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium whitespace-pre-wrap">
+                    {selectedReport.issuesComments}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button onClick={() => setSelectedReport(null)} className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer">Close Preview</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

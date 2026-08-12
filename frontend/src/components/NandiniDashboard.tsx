@@ -26,10 +26,14 @@ export function NandiniDashboard() {
         const todayVeena = ve.filter((r: any) => r.date === todayDate || r.createdAt?.split('T')[0] === todayDate).length;
         const todayCharitha = charithaReports.filter((r: any) => 
           (r.date === todayDate || r.createdAt?.split('T')[0] === todayDate) && 
-          r.userEmail === 'charitha@adyapan.com'
+          (r.userEmail === 'charitha@adyapan.com' || r.specialization === 'SALARY_PAYROLL')
+        ).length;
+        const todayPavitra = charithaReports.filter((r: any) => 
+          (r.date === todayDate || r.createdAt?.split('T')[0] === todayDate) && 
+          (r.userEmail === 'pavitra@adyapan.com' || r.specialization === 'ATTENDANCE_LEAVE')
         ).length;
         
-        setReportCounts({ aravind: todayAravind, nitisha: todayNitisha, veena: todayVeena, pavitra: 0, charitha: todayCharitha });
+        setReportCounts({ aravind: todayAravind, nitisha: todayNitisha, veena: todayVeena, pavitra: todayPavitra, charitha: todayCharitha });
       } catch {}
     }
     load();

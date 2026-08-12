@@ -1,12 +1,25 @@
 const BASE = 'http://localhost:4000/api/v1/nitisha';
 
 async function request(endpoint: string, options: RequestInit = {}) {
+  const token = typeof window !== 'undefined' ? localStorage.getItem('adyapan_access_token') : null;
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(options.headers as Record<string, string>),
+  };
+
   const res = await fetch(`${BASE}${endpoint}`, {
-    headers: { 'Content-Type': 'application/json', ...options.headers as any },
+    cache: 'no-store',
     ...options,
+    headers,
   });
+
   if (!res.ok) throw new Error(`API error: ${res.statusText}`);
-  return res.json();
+  const result = await res.json();
+  if (result && typeof result === 'object' && result.success && result.data !== undefined) {
+    return result.data;
+  }
+  return result;
 }
 
 export const nitishaApi = {

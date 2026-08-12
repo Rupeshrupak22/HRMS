@@ -46,26 +46,22 @@ export function PavitraDailyReport() {
   const [reports, setReports] = useState<any[]>([]);
 
   const [stats, setStats] = useState<AttendanceStats>({
-    totalEmployees: 110,
-    present: 94,
-    absent: 5,
-    late: 4,
-    onLeave: 7,
-    halfDay: 2,
+    totalEmployees: 0,
+    present: 0,
+    absent: 0,
+    late: 0,
+    onLeave: 0,
+    halfDay: 0,
   });
 
-  const [pendingLeaves, setPendingLeaves] = useState<LeaveRequest[]>([
-    { id: 'lv-1', employeeName: 'Anurag Rana', leaveType: 'Sick Leave', from: '2026-08-12', to: '2026-08-13', days: 2, reason: 'Medical appointment', status: 'PENDING' },
-    { id: 'lv-2', employeeName: 'Arijit Paul', leaveType: 'Casual Leave', from: '2026-08-14', to: '2026-08-14', days: 1, reason: 'Personal work', status: 'PENDING' },
-    { id: 'lv-3', employeeName: 'Ashish Kumar', leaveType: 'Earned Leave', from: '2026-08-18', to: '2026-08-20', days: 3, reason: 'Family function', status: 'PENDING' },
-  ]);
+  const [pendingLeaves, setPendingLeaves] = useState<LeaveRequest[]>([]);
 
   const [formData, setFormData] = useState({
     date: todayDate,
-    presentCount: 94,
-    absentCount: 5,
-    lateCount: 4,
-    onLeaveCount: 7,
+    presentCount: 0,
+    absentCount: 0,
+    lateCount: 0,
+    onLeaveCount: 0,
     lopCount: 0,
     leavesApproved: 0,
     leavesRejected: 0,
@@ -82,25 +78,62 @@ export function PavitraDailyReport() {
     try {
       const [attendanceData, leaveData, reportsData] = await Promise.allSettled([
         apiRequest('/attendance/today-stats'),
-        apiRequest('/leave/requests?status=PENDING'),
+        apiRequest('/leave/requests'),
         apiRequest('/reports/daily'),
       ]);
 
       if (attendanceData.status === 'fulfilled' && attendanceData.value) {
         const d = attendanceData.value?.data || attendanceData.value;
-        if (d.totalEmployees) setStats(d);
+        if (d) {
+          const newStats = {
+            totalEmployees: d.totalEmployees || 0,
+            present: d.todayPresent || d.present || 0,
+            absent: d.todayAbsent || d.absent || 0,
+            late: d.todayLate || d.late || 0,
+            onLeave: d.onLeave || 0,
+            halfDay: d.halfDay || 0,
+          };
+          setStats(newStats);
+          setFormData((f) => ({
+            ...f,
+            presentCount: newStats.present,
+            absentCount: newStats.absent,
+            lateCount: newStats.late,
+            onLeaveCount: newStats.onLeave,
+          }));
+        }
       }
 
-      if (leaveData.status === 'fulfilled') {
-        const leaves = leaveData.value?.data || leaveData.value;
-        if (Array.isArray(leaves) && leaves.length > 0) setPendingLeaves(leaves);
+      if (leaveData.status === 'fulfilled' && leaveData.value) {
+        const leavesRaw = leaveData.value?.data || leaveData.value;
+        if (Array.isArray(leavesRaw)) {
+          const formatted = leavesRaw.map((l: any) => ({
+            id: l.id,
+            employeeName: l.employee ? `${l.employee.firstName} ${l.employee.lastName}` : (l.employeeName || 'Employee'),
+            leaveType: l.leaveType?.name || l.leaveType || 'Leave',
+            from: l.startDate || l.from || todayDate,
+            to: l.endDate || l.to || todayDate,
+            days: l.totalDays || l.days || 1,
+            reason: l.reason || 'No reason specified',
+            status: l.status || 'PENDING',
+          }));
+          setPendingLeaves(formatted);
+        } else {
+          setPendingLeaves([]);
+        }
+      } else {
+        setPendingLeaves([]);
       }
 
-      if (reportsData.status === 'fulfilled') {
+      if (reportsData.status === 'fulfilled' && reportsData.value) {
         const reps = reportsData.value?.data || reportsData.value;
-        if (Array.isArray(reps)) setReports(reps);
+        if (Array.isArray(reps)) {
+          setReports(reps.filter((r: any) => r.userEmail === 'pavitra@adyapan.com' || r.specialization === 'ATTENDANCE_LEAVE'));
+        }
       }
-    } catch {}
+    } catch {
+      setPendingLeaves([]);
+    }
   };
 
   const handleLeaveAction = async (id: string, action: 'approve' | 'reject') => {
