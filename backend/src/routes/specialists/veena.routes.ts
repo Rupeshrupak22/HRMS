@@ -33,6 +33,12 @@ function crud(model: any) {
 
 // Onboarding
 const onboarding = crud(prisma.onboardingTracker);
+router.delete('/onboarding/clear-all', async (req: AuthRequest, res: Response, next: any) => {
+  try {
+    await prisma.onboardingTracker.deleteMany({});
+    res.json({ success: true, message: 'All onboarding records cleared' });
+  } catch (e) { next(e); }
+});
 router.get('/onboarding', onboarding.getAll);
 router.post('/onboarding', onboarding.create);
 router.put('/onboarding/:id', onboarding.update);

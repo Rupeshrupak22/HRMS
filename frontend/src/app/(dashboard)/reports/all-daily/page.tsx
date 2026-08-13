@@ -23,8 +23,8 @@ export default function AllDailyReportsPage() {
 
     apiRequest('/reports/daily')
       .then((d) => {
-        const arr = Array.isArray(d) ? d : [];
-        setPavitraReports(arr.filter((r: any) => r.userEmail === 'pavitra@adyapan.com' || r.specialization === 'ATTENDANCE_LEAVE'));
+        const arr = Array.isArray(d) ? d : (d?.data && Array.isArray(d.data) ? d.data : []);
+        setPavitraReports(arr.filter((r: any) => r.userEmail === 'pavitra@adyapan.com' || r.specialization === 'ATTENDANCE_LEAVE' || (r.employeeName || '').toLowerCase().includes('pavitra')));
         setCharithaReports(arr.filter((r: any) => r.userEmail === 'charitha@adyapan.com' || r.specialization === 'SALARY_PAYROLL'));
       })
       .catch(() => {});

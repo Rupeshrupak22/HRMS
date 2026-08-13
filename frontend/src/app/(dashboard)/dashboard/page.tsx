@@ -70,24 +70,32 @@ export default function DashboardPage() {
   const SAFFRON_COLORS = ['#f97316', '#d97706', '#0284c7', '#059669', '#8b5cf6', '#dc2626'];
   const userEmail = (user?.email || '').toLowerCase();
 
-  // ====================================================
   // 1. CHARITHA — SALARY & PAYROLL SPECIALIST DASHBOARD
-  // ====================================================
   if (userEmail === 'charitha@adyapan.com' || user?.specialization === 'SALARY_PAYROLL') {
     return <CharithaDashboard />;
   }
 
-  // ====================================================
   // 2. PAVITRA — ATTENDANCE & LEAVE SPECIALIST DASHBOARD
-  // ====================================================
   if (userEmail === 'pavitra@adyapan.com' || user?.specialization === 'ATTENDANCE_LEAVE') {
     return <PavitraDashboard />;
   }
 
+  // 3. VEENA — ONBOARDING & HIRING SPECIALIST DASHBOARD
+  if (userEmail === 'veena@adyapan.com' || user?.specialization === 'ONBOARDING_HIRING') {
+    return <VeenaDashboard />;
+  }
 
-  // ====================================================
+  // 4. ARAVIND — RESIGNATION & EXIT SPECIALIST DASHBOARD
+  if (userEmail === 'aravind@adyapan.com' || user?.specialization === 'RESIGNATION_EXIT') {
+    return <AravindDashboard />;
+  }
+
+  // 5. NITISHA — DISCIPLINE & POSH SPECIALIST DASHBOARD
+  if (userEmail === 'nitisha@adyapan.com' || user?.specialization === 'DISCIPLINE_POSH') {
+    return <NitishaDashboard />;
+  }
+
   // 6. BIRADAR NANDINI — HR MANAGER MASTER OPERATIONS HUB
-  // ====================================================
   if (userEmail === 'nandini@adyapan.com' || userEmail === 'nandani@adyapan.com' || user?.specialization === 'HR_MANAGER_ALL') {
     return <NandiniDashboard />;
   }

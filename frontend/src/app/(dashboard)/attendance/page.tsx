@@ -42,6 +42,18 @@ export default function AttendancePage() {
   const isPavitra = user?.specialization === 'ATTENDANCE_LEAVE' || user?.email === 'pavitra@adyapan.com';
   const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN' || user?.role === 'HR_EXECUTIVE' || isPavitra;
 
+  // Add Manual Attendance Modal state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({
+    empId: '',
+    empName: '',
+    date: todayStr,
+    checkInTime: '09:30 AM',
+    checkOutTime: '06:30 PM',
+    status: 'PRESENT',
+    notes: 'Manual Entry',
+  });
+
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date().toLocaleTimeString('en-US', { hour12: true }));
@@ -469,6 +481,55 @@ export default function AttendancePage() {
     }
   };
 
+  const handleSaveManualAttendance = async () => {
+    if (!addForm.empId.trim()) {
+      alert('Please enter Employee ID');
+      return;
+    }
+    const newLog = {
+      id: `man-${Date.now()}`,
+      empId: addForm.empId.trim(),
+      empName: addForm.empName.trim() || `Emp (${addForm.empId.trim()})`,
+      date: addForm.date || todayStr,
+      checkInTime: addForm.checkInTime || '-',
+      checkOutTime: addForm.checkOutTime || '-',
+      workHours: addForm.checkInTime && addForm.checkOutTime ? 8 : 0,
+      status: addForm.status || 'PRESENT',
+      notes: addForm.notes || 'Manual Entry',
+      source: 'MANUAL',
+    };
+
+    const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_attendance_logs') : null;
+    let existingLocal: any[] = [];
+    try { existingLocal = savedLocal ? JSON.parse(savedLocal) : []; } catch { existingLocal = []; }
+    const updatedLocal = [newLog, ...existingLocal];
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('adyapan_imported_attendance_logs', JSON.stringify(updatedLocal));
+    }
+
+    try {
+      await apiRequest('/attendance/bulk-import', {
+        method: 'POST',
+        body: JSON.stringify({
+          records: [{
+            employeeCode: newLog.empId,
+            employeeName: newLog.empName,
+            date: newLog.date,
+            checkInTime: newLog.checkInTime === '-' ? null : newLog.checkInTime,
+            checkOutTime: newLog.checkOutTime === '-' ? null : newLog.checkOutTime,
+            status: newLog.status,
+            remarks: newLog.notes,
+          }]
+        }),
+      });
+    } catch {}
+
+    setShowAddModal(false);
+    setDateFilter(newLog.date);
+    await loadLogs();
+    alert('Attendance record added manually successfully!');
+  };
+
   // Stats from actual data
   const totalPresent = logs.filter((l) => l.status === 'PRESENT').length;
   const totalLate = logs.filter((l) => l.status === 'LATE').length;
@@ -489,7 +550,14 @@ export default function AttendancePage() {
         </div>
 
         {isAdmin && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer transition-all"
+            >
+              <Clock className="w-3.5 h-3.5" />
+              Add Record Manually
+            </button>
             <button
               onClick={handleDownloadTemplate}
               className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors"
@@ -932,6 +1000,128 @@ export default function AttendancePage() {
               >
                 {importing ? 'Importing...' : `Confirm Import (${importData.length} records)`}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Manual Attendance Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between saffron-gradient text-white">
+              <div className="flex items-center gap-2">
+                <Clock className="w-5 h-5" />
+                <h3 className="text-sm font-black">Add Attendance Record Manually</h3>
+              </div>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Employee ID / Code *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. EMP-1001"
+                    value={addForm.empId}
+                    onChange={(e) => setAddForm({ ...addForm, empId: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Employee Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. John Doe"
+                    value={addForm.empName}
+                    onChange={(e) => setAddForm({ ...addForm, empName: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Attendance Date *</label>
+                  <input
+                    type="date"
+                    value={addForm.date}
+                    onChange={(e) => setAddForm({ ...addForm, date: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Attendance Status *</label>
+                  <select
+                    value={addForm.status}
+                    onChange={(e) => setAddForm({ ...addForm, status: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-bold cursor-pointer"
+                  >
+                    <option value="PRESENT">PRESENT</option>
+                    <option value="LATE">LATE</option>
+                    <option value="ABSENT">ABSENT</option>
+                    <option value="HALF_DAY">HALF DAY</option>
+                    <option value="ON_LEAVE">ON LEAVE</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Check In Time</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 09:30 AM"
+                    value={addForm.checkInTime}
+                    onChange={(e) => setAddForm({ ...addForm, checkInTime: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Check Out Time</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 06:30 PM"
+                    value={addForm.checkOutTime}
+                    onChange={(e) => setAddForm({ ...addForm, checkOutTime: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Remarks / Notes</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Manual Punch Entry / Special Duty"
+                  value={addForm.notes}
+                  onChange={(e) => setAddForm({ ...addForm, notes: e.target.value })}
+                  className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveManualAttendance}
+                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold shadow-md shadow-emerald-500/20 transition-all cursor-pointer"
+                >
+                  Save Record
+                </button>
+              </div>
             </div>
           </div>
         </div>

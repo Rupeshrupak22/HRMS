@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import {
@@ -23,6 +23,21 @@ export function Navbar({ onToggleMobileSidebar }: NavbarProps) {
   const { user, logout } = useAuth();
   const [isCopilotOpen, setIsCopilotOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setIsUserMenuOpen(false);
+      }
+    };
+    if (isUserMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isUserMenuOpen]);
 
   const handleLogout = () => {
     logout();
@@ -64,7 +79,7 @@ export function Navbar({ onToggleMobileSidebar }: NavbarProps) {
           </button>
 
           {/* User Menu Avatar Dropdown */}
-          <div className="relative pl-2 border-l border-slate-200">
+          <div ref={userMenuRef} className="relative pl-2 border-l border-slate-200">
             <button
               onClick={() => setIsUserMenuOpen(!isUserMenuOpen)}
               className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-slate-100 transition-colors cursor-pointer"

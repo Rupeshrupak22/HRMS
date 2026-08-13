@@ -91,6 +91,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   const veenaNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Onboarding', href: '/onboarding', icon: UserPlus },
+    { label: 'Interviews', href: '/interviews', icon: Users },
     { label: 'Dropout', href: '/dropouts', icon: UserX },
     { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
   ];

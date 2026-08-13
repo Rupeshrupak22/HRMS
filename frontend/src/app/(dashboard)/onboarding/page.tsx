@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { UserPlus, Plus, X, Pencil, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { UserPlus, Plus, X, Pencil, Trash2, Upload, Download, FileSpreadsheet } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { veenaApi } from '@/lib/veena-api';
 
 interface OnboardingRecord {
@@ -29,6 +30,11 @@ export default function OnboardingPage() {
   const [records, setRecords] = useState<OnboardingRecord[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importData, setImportData] = useState<any[]>([]);
+  const [importing, setImporting] = useState(false);
+
   const [form, setForm] = useState<Omit<OnboardingRecord, 'id'>>({
     candidateName: '',
     phoneNumber: '',
@@ -53,6 +59,109 @@ export default function OnboardingPage() {
     veenaApi.getOnboarding().then(setRecords).catch(() => {});
   }, []);
 
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      {
+        'Candidate Name': 'Rahul Sharma',
+        'Phone Number': '9876543210',
+        'Email': 'rahul.sharma@example.com',
+        'College': 'IIT Delhi',
+        'Location': 'Bangalore',
+        'Source': 'LinkedIn',
+        'Role Applied': 'Sales',
+        'Recruiter': 'Abbu Veena',
+        'Application Date': '2026-08-12',
+        'Current Stage': 'Joining',
+        'Status': 'Active',
+        'Interviews': 'Cleared Round 2',
+        'Selection': 'Selected',
+        'Offers': 'Offer Released',
+        'Joining': '18-Aug-2026',
+        'Onboarding': 'Pending BGV',
+        'Offer Remarks': 'Accepted offer',
+      },
+    ];
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Onboarding Candidates');
+    XLSX.writeFile(wb, 'Onboarding_Candidates_Template.xlsx');
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: 'array', cellDates: true });
+        const wsName = wb.SheetNames[0];
+        const ws = wb.Sheets[wsName];
+        const jsonData: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (!jsonData || jsonData.length === 0) {
+          alert('File is empty or has no rows.');
+          return;
+        }
+
+        const formatted = jsonData.map((row) => ({
+          candidateName: String(row['Candidate Name'] || row['Name'] || row['candidate_name'] || '').trim(),
+          phoneNumber: String(row['Phone Number'] || row['Phone'] || row['phone'] || '').trim(),
+          email: String(row['Email'] || row['email'] || '').trim(),
+          college: String(row['College'] || row['college'] || '').trim(),
+          location: String(row['Location'] || row['location'] || '').trim(),
+          source: String(row['Source'] || row['source'] || 'LinkedIn').trim(),
+          roleApplied: String(row['Role Applied'] || row['Role'] || row['role'] || 'Sales').trim(),
+          recruiter: String(row['Recruiter'] || row['recruiter'] || 'Abbu Veena').trim(),
+          applicationDate: String(row['Application Date'] || row['Date'] || '').trim(),
+          currentStage: String(row['Current Stage'] || row['Stage'] || 'Screening').trim(),
+          status: String(row['Status'] || 'Active').trim(),
+          interviews: String(row['Interviews'] || '').trim(),
+          selection: String(row['Selection'] || '').trim(),
+          offers: String(row['Offers'] || '').trim(),
+          joining: String(row['Joining'] || '').trim(),
+          onboarding: String(row['Onboarding'] || '').trim(),
+          offerRemarks: String(row['Offer Remarks'] || row['Remarks'] || '').trim(),
+        })).filter(r => r.candidateName);
+
+        if (formatted.length === 0) {
+          alert('No valid candidate records found in file. Please check column headers (e.g. Candidate Name).');
+          return;
+        }
+
+        setImportData(formatted);
+        setShowImportModal(true);
+      } catch {
+        alert('Failed to parse file. Please upload a valid .xlsx or .csv file.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleConfirmImport = async () => {
+    setImporting(true);
+    try {
+      const createdRecords: OnboardingRecord[] = [];
+      for (const item of importData) {
+        try {
+          const res = await veenaApi.createOnboarding(item);
+          createdRecords.push(res);
+        } catch {
+          createdRecords.push({ ...item, id: `imp-onb-${Date.now()}-${Math.random()}` });
+        }
+      }
+      setRecords((prev) => [...createdRecords, ...prev]);
+      setShowImportModal(false);
+      setImportData([]);
+      alert(`Successfully imported ${createdRecords.length} candidates!`);
+    } catch {
+      alert('Import completed.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
   const resetForm = () => {
     setForm({ candidateName: '', phoneNumber: '', email: '', college: '', location: '', source: '', roleApplied: '', recruiter: '', applicationDate: '', currentStage: '', status: '', interviews: '', selection: '', offers: '', joining: '', onboarding: '', offerRemarks: '' });
     setEditingId(null);
@@ -67,8 +176,10 @@ export default function OnboardingPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this record?')) return;
-    await veenaApi.deleteOnboarding(id);
+    if (!confirm('Are you sure you want to delete this candidate record?')) return;
+    try {
+      await veenaApi.deleteOnboarding(id);
+    } catch {}
     setRecords(records.filter((r) => r.id !== id));
   };
 
@@ -96,13 +207,34 @@ export default function OnboardingPage() {
             Track candidates through the hiring pipeline from sourcing to onboarding
           </p>
         </div>
-        <button
-          onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition-colors shadow-md cursor-pointer"
-        >
-          {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {showForm ? 'Cancel' : 'Add Candidate'}
-        </button>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={handleDownloadTemplate}
+            className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Template
+          </button>
+          <label className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm">
+            <Upload className="w-3.5 h-3.5" />
+            Import XLSX
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+          </label>
+          <button
+            onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl saffron-gradient text-white text-xs font-bold transition-all shadow-md cursor-pointer"
+          >
+            {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {showForm ? 'Cancel' : 'Add Candidate'}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -269,12 +401,14 @@ export default function OnboardingPage() {
                   <td className="px-4 py-3 text-slate-700">{r.onboarding}</td>
                   <td className="px-4 py-3 text-slate-700">{r.offerRemarks}</td>
                   <td className="px-4 py-3">
-                    <button onClick={() => handleEdit(r)} className="p-1.5 rounded-lg hover:bg-orange-100 text-orange-600 transition-colors cursor-pointer" title="Edit">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500 transition-colors cursor-pointer" title="Delete">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => handleEdit(r)} className="p-1.5 rounded-lg hover:bg-orange-100 text-orange-600 transition-colors cursor-pointer" title="Edit Candidate">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500 transition-colors cursor-pointer" title="Delete Candidate">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -282,6 +416,71 @@ export default function OnboardingPage() {
           </table>
         </div>
       </div>
+
+      {/* XLSX Import Preview Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-4xl bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <FileSpreadsheet className="w-5 h-5 text-orange-500" />
+                  Onboarding Candidates Import Preview
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">{importData.length} candidate records ready to import</p>
+              </div>
+              <button onClick={() => { setShowImportModal(false); setImportData([]); }} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-x-auto flex-1 border border-slate-200 rounded-xl">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    <th className="py-2.5 px-3 font-bold text-slate-600">Candidate Name</th>
+                    <th className="py-2.5 px-3 font-bold text-slate-600">Phone</th>
+                    <th className="py-2.5 px-3 font-bold text-slate-600">Email</th>
+                    <th className="py-2.5 px-3 font-bold text-slate-600">Role</th>
+                    <th className="py-2.5 px-3 font-bold text-slate-600">Stage</th>
+                    <th className="py-2.5 px-3 font-bold text-slate-600">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {importData.map((row: any, i) => (
+                    <tr key={i} className="hover:bg-orange-50/30">
+                      <td className="py-2.5 px-3 font-semibold text-slate-800">{row.candidateName}</td>
+                      <td className="py-2.5 px-3 text-slate-700">{row.phoneNumber || '-'}</td>
+                      <td className="py-2.5 px-3 text-slate-700">{row.email || '-'}</td>
+                      <td className="py-2.5 px-3 text-slate-700">{row.roleApplied || 'Sales'}</td>
+                      <td className="py-2.5 px-3 text-slate-700">{row.currentStage || 'Screening'}</td>
+                      <td className="py-2.5 px-3">
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700">{row.status || 'Active'}</span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex gap-3 mt-4">
+              <button
+                onClick={() => { setShowImportModal(false); setImportData([]); }}
+                className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmImport}
+                disabled={importing}
+                className="flex-1 py-2.5 rounded-xl saffron-gradient text-white text-xs font-bold shadow-md shadow-orange-500/25 disabled:opacity-50 transition-all cursor-pointer"
+              >
+                {importing ? 'Importing...' : `Confirm Import (${importData.length} candidates)`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -37,6 +37,18 @@ export default function LeavesPage() {
   const isPavitra = user?.specialization === 'ATTENDANCE_LEAVE' || user?.email === 'pavitra@adyapan.com';
   const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN' || user?.role === 'HR_EXECUTIVE' || isPavitra;
 
+  // Add Manual Leave Modal state
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addForm, setAddForm] = useState({
+    employeeCode: '',
+    employeeName: '',
+    leaveType: 'Casual Leave',
+    startDate: new Date().toISOString().split('T')[0],
+    endDate: new Date().toISOString().split('T')[0],
+    reason: 'Personal Work',
+    status: 'APPROVED',
+  });
+
   // Helper: Find value from row by checking header aliases
   const findRowValue = (row: Record<string, any>, aliases: string[]) => {
     const keys = Object.keys(row);
@@ -354,6 +366,61 @@ export default function LeavesPage() {
     }
   };
 
+  const handleSaveManualLeave = async () => {
+    if (!addForm.employeeCode.trim()) {
+      alert('Please enter Employee Code');
+      return;
+    }
+    const newReq = {
+      id: `man-lve-${Date.now()}`,
+      employeeCode: addForm.employeeCode.trim(),
+      employeeName: addForm.employeeName.trim() || `Emp (${addForm.employeeCode.trim()})`,
+      employee: {
+        employeeCode: addForm.employeeCode.trim(),
+        firstName: addForm.employeeName.trim() || `Emp (${addForm.employeeCode.trim()})`,
+        lastName: '',
+      },
+      leaveType: typeof addForm.leaveType === 'object' ? addForm.leaveType : { name: addForm.leaveType },
+      startDate: addForm.startDate,
+      endDate: addForm.endDate,
+      totalDays: 1,
+      reason: addForm.reason,
+      status: addForm.status || 'APPROVED',
+      importedDate: addForm.startDate || new Date().toISOString().split('T')[0],
+      createdAt: new Date().toISOString(),
+    };
+
+    const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_leave_requests') : null;
+    let existingLocal: any[] = [];
+    try { existingLocal = savedLocal ? JSON.parse(savedLocal) : []; } catch { existingLocal = []; }
+    const updatedLocal = [newReq, ...existingLocal];
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('adyapan_imported_leave_requests', JSON.stringify(updatedLocal));
+    }
+
+    try {
+      await apiRequest('/leave/bulk-import', {
+        method: 'POST',
+        body: JSON.stringify({
+          records: [{
+            employeeCode: newReq.employeeCode,
+            employeeName: newReq.employeeName,
+            leaveType: typeof newReq.leaveType === 'object' ? newReq.leaveType.name : newReq.leaveType,
+            startDate: newReq.startDate,
+            endDate: newReq.endDate,
+            reason: newReq.reason,
+            status: newReq.status,
+          }]
+        }),
+      });
+    } catch {}
+
+    setShowAddModal(false);
+    setDateFilter(newReq.startDate);
+    await loadData();
+    alert('Leave record added manually successfully!');
+  };
+
   const handleClearAllData = async () => {
     if (!confirm('Are you sure you want to clear all leave requests from database & local storage?')) return;
     try {
@@ -390,6 +457,13 @@ export default function LeavesPage() {
         <div className="flex items-center gap-2 flex-wrap">
           {isAdmin && (
             <>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-3.5 py-2 rounded-xl bg-orange-600 hover:bg-orange-500 text-white text-xs font-bold shadow-md shadow-orange-500/20 flex items-center gap-1.5 cursor-pointer transition-all"
+              >
+                <CalendarDays className="w-3.5 h-3.5" />
+                Add Leave Manually
+              </button>
               <button
                 onClick={handleDownloadTemplate}
                 className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors"
@@ -752,6 +826,130 @@ export default function LeavesPage() {
               >
                 {importing ? 'Importing...' : `Confirm Import (${importData.length} records)`}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Add Manual Leave Modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between saffron-gradient text-white">
+              <div className="flex items-center gap-2">
+                <CalendarDays className="w-5 h-5" />
+                <h3 className="text-sm font-black">Add Leave Record Manually</h3>
+              </div>
+              <button
+                onClick={() => setShowAddModal(false)}
+                className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-colors cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Employee Code / ID *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. EMP-1001"
+                    value={addForm.employeeCode}
+                    onChange={(e) => setAddForm({ ...addForm, employeeCode: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Employee Name</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. John Doe"
+                    value={addForm.employeeName}
+                    onChange={(e) => setAddForm({ ...addForm, employeeName: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Leave Type *</label>
+                  <select
+                    value={addForm.leaveType}
+                    onChange={(e) => setAddForm({ ...addForm, leaveType: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-bold cursor-pointer"
+                  >
+                    <option value="Casual Leave">Casual Leave</option>
+                    <option value="Sick Leave">Sick Leave</option>
+                    <option value="Earned Leave">Earned Leave</option>
+                    <option value="Privilege Leave">Privilege Leave</option>
+                    <option value="Maternity Leave">Maternity Leave</option>
+                    <option value="Loss of Pay (LOP)">Loss of Pay (LOP)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Status *</label>
+                  <select
+                    value={addForm.status}
+                    onChange={(e) => setAddForm({ ...addForm, status: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-bold cursor-pointer"
+                  >
+                    <option value="APPROVED">APPROVED</option>
+                    <option value="PENDING">PENDING</option>
+                    <option value="REJECTED">REJECTED</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Start Date *</label>
+                  <input
+                    type="date"
+                    value={addForm.startDate}
+                    onChange={(e) => setAddForm({ ...addForm, startDate: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium cursor-pointer"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">End Date *</label>
+                  <input
+                    type="date"
+                    value={addForm.endDate}
+                    onChange={(e) => setAddForm({ ...addForm, endDate: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium cursor-pointer"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Reason for Leave</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Personal Work / Family Function / Medical"
+                  value={addForm.reason}
+                  onChange={(e) => setAddForm({ ...addForm, reason: e.target.value })}
+                  className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 font-bold hover:bg-slate-200 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveManualLeave}
+                  className="flex-1 py-2.5 rounded-xl bg-orange-600 hover:bg-orange-500 text-white font-bold shadow-md shadow-orange-500/20 transition-all cursor-pointer"
+                >
+                  Save Record
+                </button>
+              </div>
             </div>
           </div>
         </div>

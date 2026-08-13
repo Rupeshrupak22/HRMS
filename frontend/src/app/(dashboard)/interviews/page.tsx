@@ -1,15 +1,9 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import Link from 'next/link';
 import {
-  UserPlus,
   Users,
-  CheckCircle2,
-  TrendingUp,
-  Award,
   Search,
-  Filter,
   RotateCw,
   Upload,
   Download,
@@ -43,7 +37,7 @@ interface CandidateRecord {
   offerRemarks: string;
 }
 
-export function VeenaDashboard() {
+export default function InterviewsPage() {
   const [candidates, setCandidates] = useState<CandidateRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -89,7 +83,7 @@ export function VeenaDashboard() {
 
       const existingNames = new Set(list.map((c: any) => (c.candidateName || '').toLowerCase().trim()));
       const uniqueLocal = localList.filter((c: any) => !existingNames.has((c.candidateName || '').toLowerCase().trim()));
-
+      
       setCandidates([...list, ...uniqueLocal]);
     } catch {
       const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_onboarding_candidates') : null;
@@ -105,25 +99,9 @@ export function VeenaDashboard() {
     loadCandidates();
   }, []);
 
-  // Dynamic Metrics (Starts at 0 if no candidate exists - NO HARDCODED 8)
-  const totalCount = candidates.length;
-  const joinedCount = candidates.filter((c) => c.status === 'Joined' || c.currentStage === 'Joined').length;
-  const selectedCount = candidates.filter((c) => c.status === 'Selected' || c.currentStage === 'Selection').length;
-  const inProgressCount = candidates.filter((c) => c.status === 'Active' || (c.status !== 'Joined' && c.status !== 'Dropped' && c.status !== 'Rejected')).length;
+  const pipelineStages = ['Application', 'Screening', 'Interview', 'Selection', 'Offer', 'Joining', 'Onboarding', 'Completed'];
 
-  const pipelineStages = [
-    { name: 'Application', count: candidates.filter((c) => c.currentStage === 'Application').length },
-    { name: 'Screening', count: candidates.filter((c) => c.currentStage === 'Screening').length },
-    { name: 'Interview', count: candidates.filter((c) => c.currentStage === 'Interview').length },
-    { name: 'Selection', count: candidates.filter((c) => c.currentStage === 'Selection').length },
-    { name: 'Offer', count: candidates.filter((c) => c.currentStage === 'Offer').length },
-    { name: 'Joining', count: candidates.filter((c) => c.currentStage === 'Joining').length },
-    { name: 'Onboarding', count: candidates.filter((c) => c.currentStage === 'Onboarding').length },
-    { name: 'Completed', count: candidates.filter((c) => c.currentStage === 'Completed' || c.currentStage === 'Joined').length },
-  ];
-
-  const [activeCardFilter, setActiveCardFilter] = useState<string | null>(null);
-
+  // Filtering Logic
   const filteredCandidates = candidates.filter((c) => {
     const matchesSearch =
       !searchTerm ||
@@ -132,26 +110,12 @@ export function VeenaDashboard() {
       (c.phoneNumber || '').includes(searchTerm) ||
       (c.college || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
       (c.roleApplied || '').toLowerCase().includes(searchTerm.toLowerCase());
-
-    let matchesCard = true;
-    if (activeCardFilter) {
-      if (activeCardFilter.startsWith('stage:')) {
-        const targetStage = activeCardFilter.split(':')[1];
-        matchesCard = c.currentStage === targetStage;
-      } else if (activeCardFilter === 'status:Joined') {
-        matchesCard = c.status === 'Joined' || c.currentStage === 'Joined';
-      } else if (activeCardFilter === 'status:Selected') {
-        matchesCard = c.status === 'Selected' || c.currentStage === 'Selection';
-      } else if (activeCardFilter === 'status:InProgress') {
-        matchesCard = c.status === 'Active' || (c.status !== 'Joined' && c.status !== 'Dropped' && c.status !== 'Rejected');
-      }
-    }
-
     const matchesStage = !stageFilter || c.currentStage === stageFilter;
     const matchesStatus = !statusFilter || c.status === statusFilter;
-    return matchesSearch && matchesCard && matchesStage && matchesStatus;
+    return matchesSearch && matchesStage && matchesStatus;
   });
 
+  // Template Download
   const handleDownloadTemplate = () => {
     const templateData = [
       {
@@ -180,6 +144,7 @@ export function VeenaDashboard() {
     XLSX.writeFile(wb, 'Candidate_Register_Template.xlsx');
   };
 
+  // Upload Excel
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -232,12 +197,14 @@ export function VeenaDashboard() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  // Save to Local Storage & API
   const saveLocalCandidates = (updatedList: CandidateRecord[]) => {
     if (typeof window !== 'undefined') {
       localStorage.setItem('adyapan_imported_onboarding_candidates', JSON.stringify(updatedList));
     }
   };
 
+  // Confirm Bulk Import
   const handleConfirmImport = async () => {
     setImporting(true);
     try {
@@ -263,6 +230,7 @@ export function VeenaDashboard() {
     }
   };
 
+  // Save / Update Candidate
   const handleSubmitForm = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.candidateName.trim()) {
@@ -292,7 +260,7 @@ export function VeenaDashboard() {
       }
       resetForm();
     } catch {
-      alert('Action saved.');
+      alert('Action saved locally.');
       resetForm();
     }
   };
@@ -340,168 +308,38 @@ export function VeenaDashboard() {
 
   return (
     <div className="space-y-6 pb-12">
-      {/* Top Banner - Matches Image Design */}
-      <div className="p-6 rounded-3xl saffron-gradient text-white shadow-lg flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-white">
-            <UserPlus className="w-6 h-6" />
-          </div>
-          <div>
-            <h1 className="text-xl font-black tracking-tight">Recruitment & Onboarding</h1>
-            <p className="text-xs text-orange-100 mt-0.5">
-              End-to-end recruitment pipeline — from application to onboarding
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* HIRING PIPELINE Stages Row */}
-      <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-xs space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-xs font-black text-slate-400 tracking-wider uppercase">HIRING PIPELINE</h2>
-          {activeCardFilter && (
-            <button
-              onClick={() => setActiveCardFilter(null)}
-              className="text-[11px] font-bold text-orange-600 hover:underline flex items-center gap-1 cursor-pointer"
-            >
-              <span>Clear Card Filter</span>
-              <X className="w-3 h-3" />
-            </button>
-          )}
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
-          {pipelineStages.map((stg, i) => {
-            const isSelected = activeCardFilter === `stage:${stg.name}`;
-            return (
-              <button
-                key={i}
-                onClick={() => setActiveCardFilter(isSelected ? null : `stage:${stg.name}`)}
-                className={`p-3 rounded-2xl text-center space-y-1 transition-all cursor-pointer border ${
-                  isSelected
-                    ? 'bg-orange-50 border-orange-400 ring-2 ring-orange-200 shadow-sm'
-                    : 'bg-slate-50/80 border-slate-100 hover:border-orange-300'
-                }`}
-              >
-                <div className={`text-[10px] font-bold uppercase ${isSelected ? 'text-orange-600' : 'text-slate-500'}`}>
-                  {stg.name}
-                </div>
-                <div className={`text-xl font-black ${isSelected ? 'text-orange-600' : 'text-slate-900'}`}>
-                  {stg.count}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Stat Cards Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* TOTAL CANDIDATES */}
-        <button
-          onClick={() => setActiveCardFilter(activeCardFilter === 'all' ? null : 'all')}
-          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
-            activeCardFilter === 'all' ? 'bg-orange-50 border-orange-400 ring-2 ring-orange-200' : 'bg-white border-slate-200 hover:border-orange-300'
-          }`}
-        >
-          <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">TOTAL CANDIDATES</div>
-            <div className="text-3xl font-black text-slate-900 mt-1">{totalCount}</div>
-            <div className="text-[10px] font-bold text-emerald-600 mt-1 flex items-center gap-1">
-              <span>↗ Active pipeline</span>
-            </div>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-600">
-            <Users className="w-6 h-6" />
-          </div>
-        </button>
-
-        {/* JOINED */}
-        <button
-          onClick={() => setActiveCardFilter(activeCardFilter === 'status:Joined' ? null : 'status:Joined')}
-          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
-            activeCardFilter === 'status:Joined' ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-200' : 'bg-white border-emerald-200 hover:border-emerald-400'
-          }`}
-        >
-          <div>
-            <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">JOINED</div>
-            <div className="text-3xl font-black text-emerald-600 mt-1">{joinedCount}</div>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
-            <CheckCircle2 className="w-6 h-6" />
-          </div>
-        </button>
-
-        {/* IN PROGRESS */}
-        <button
-          onClick={() => setActiveCardFilter(activeCardFilter === 'status:InProgress' ? null : 'status:InProgress')}
-          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
-            activeCardFilter === 'status:InProgress' ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-200' : 'bg-white border-blue-200 hover:border-blue-400'
-          }`}
-        >
-          <div>
-            <div className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">IN PROGRESS</div>
-            <div className="text-3xl font-black text-blue-600 mt-1">{inProgressCount}</div>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
-            <TrendingUp className="w-6 h-6" />
-          </div>
-        </button>
-
-        {/* SELECTED */}
-        <button
-          onClick={() => setActiveCardFilter(activeCardFilter === 'status:Selected' ? null : 'status:Selected')}
-          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
-            activeCardFilter === 'status:Selected' ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200' : 'bg-white border-amber-200 hover:border-amber-400'
-          }`}
-        >
-          <div>
-            <div className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">SELECTED</div>
-            <div className="text-3xl font-black text-amber-600 mt-1">{selectedCount}</div>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
-            <Award className="w-6 h-6" />
-          </div>
-        </button>
-      </div>
-
-      {/* Control Bar: Search, Filters, Refresh, Import, Template, Add Candidate */}
-      <div className="p-4 rounded-3xl bg-white border border-slate-200 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
-        <div className="flex items-center gap-2 flex-1 max-w-md">
-          <div className="relative w-full">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search candidates..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full bg-slate-50 text-xs text-slate-900 placeholder-slate-400 pl-10 pr-4 py-2.5 rounded-2xl border border-slate-200 focus:outline-none focus:border-orange-500 transition-colors font-medium"
-            />
-          </div>
-          <div className="flex items-center gap-2">
-            <select
-              value={stageFilter}
-              onChange={(e) => setStageFilter(e.target.value)}
-              className="px-3 py-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:border-orange-500 cursor-pointer"
-            >
-              <option value="">All Stages</option>
-              {pipelineStages.map((s, i) => (
-                <option key={i} value={s.name}>{s.name}</option>
-              ))}
-            </select>
-          </div>
+      {/* Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+            <Users className="w-5 h-5 text-orange-600" />
+            <span>Interviews & Candidate Register</span>
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Manage candidate recruitment pipeline, import XLSX records and add candidates manually
+          </p>
         </div>
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={loadCandidates}
-            className="p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 transition-colors cursor-pointer"
+            className="p-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer"
             title="Refresh List"
           >
             <RotateCw className="w-4 h-4" />
           </button>
 
-          <label className="p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 transition-colors cursor-pointer flex items-center justify-center" title="Import XLSX/CSV">
-            <Upload className="w-4 h-4" />
+          <button
+            onClick={handleDownloadTemplate}
+            className="px-3.5 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Template
+          </button>
+
+          <label className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 cursor-pointer transition-all shadow-sm">
+            <Upload className="w-3.5 h-3.5" />
+            Import XLSX
             <input
               ref={fileInputRef}
               type="file"
@@ -512,16 +350,8 @@ export function VeenaDashboard() {
           </label>
 
           <button
-            onClick={handleDownloadTemplate}
-            className="p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 transition-colors cursor-pointer"
-            title="Download Template"
-          >
-            <Download className="w-4 h-4" />
-          </button>
-
-          <button
             onClick={() => { resetForm(); setShowAddModal(true); }}
-            className="px-5 py-2.5 rounded-2xl saffron-gradient text-white text-xs font-extrabold shadow-md shadow-orange-500/20 flex items-center gap-1.5 cursor-pointer transition-all hover:opacity-95"
+            className="px-4 py-2 rounded-xl saffron-gradient text-white text-xs font-extrabold shadow-md shadow-orange-500/20 flex items-center gap-1.5 cursor-pointer transition-all hover:opacity-95"
           >
             <Plus className="w-4 h-4" />
             <span>Add Candidate</span>
@@ -531,11 +361,36 @@ export function VeenaDashboard() {
 
       {/* Candidate Register Table */}
       <div className="p-6 rounded-3xl bg-white border border-slate-200 shadow-sm space-y-4">
-        <div>
-          <h3 className="text-sm font-black text-slate-900">Candidate Register</h3>
-          <p className="text-[11px] text-slate-400 mt-0.5">
-            Showing {filteredCandidates.length} of {candidates.length} candidates
-          </p>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div>
+            <h3 className="text-sm font-black text-slate-900">Candidate Register</h3>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Showing {filteredCandidates.length} of {candidates.length} candidates
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <div className="relative w-64">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search candidates..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full bg-slate-50 text-xs text-slate-900 placeholder-slate-400 pl-9 pr-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+              />
+            </div>
+            <select
+              value={stageFilter}
+              onChange={(e) => setStageFilter(e.target.value)}
+              className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
+            >
+              <option value="">All Stages</option>
+              {pipelineStages.map((s, i) => (
+                <option key={i} value={s}>{s}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         <div className="overflow-x-auto border border-slate-100 rounded-2xl">
@@ -644,7 +499,7 @@ export function VeenaDashboard() {
           <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
             <div className="p-5 border-b border-slate-100 flex items-center justify-between saffron-gradient text-white">
               <div className="flex items-center gap-2">
-                <UserPlus className="w-5 h-5" />
+                <Users className="w-5 h-5" />
                 <h3 className="text-sm font-black">{editingCandidate ? 'Edit Candidate Details' : 'Add Candidate Manually'}</h3>
               </div>
               <button
@@ -758,7 +613,7 @@ export function VeenaDashboard() {
                     className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-bold cursor-pointer"
                   >
                     {pipelineStages.map((s, i) => (
-                      <option key={i} value={s.name}>{s.name}</option>
+                      <option key={i} value={s}>{s}</option>
                     ))}
                   </select>
                 </div>
