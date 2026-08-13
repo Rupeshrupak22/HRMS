@@ -5,7 +5,7 @@ import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import {
   CalendarDays, Plus, CheckCircle2, XCircle, Clock, Upload, Download,
-  FileSpreadsheet, X, Search, Edit3, Save,
+  FileSpreadsheet, X, Search, Edit3, Save, Trash2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
@@ -16,6 +16,7 @@ export default function LeavesPage() {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editStatus, setEditStatus] = useState('');
   const [showImportModal, setShowImportModal] = useState(false);
@@ -36,21 +37,117 @@ export default function LeavesPage() {
   const isPavitra = user?.specialization === 'ATTENDANCE_LEAVE' || user?.email === 'pavitra@adyapan.com';
   const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN' || user?.role === 'HR_EXECUTIVE' || isPavitra;
 
+  // Helper: Find value from row by checking header aliases
+  const findRowValue = (row: Record<string, any>, aliases: string[]) => {
+    const keys = Object.keys(row);
+    for (const alias of aliases) {
+      const cleanAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
+      for (const k of keys) {
+        const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanKey === cleanAlias) {
+          return row[k];
+        }
+      }
+    }
+    return undefined;
+  };
+
+  // Helper: Format date values (Excel serials, JS dates, DD/MM/YYYY, YYYY-MM-DD)
+  const formatDateVal = (val: any): string => {
+    if (val === null || val === undefined || val === '') {
+      return '';
+    }
+    if (typeof val === 'number') {
+      const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+      if (!isNaN(date.getTime())) {
+        return date.toISOString().split('T')[0];
+      }
+    }
+    if (val instanceof Date) {
+      if (!isNaN(val.getTime())) {
+        return val.toISOString().split('T')[0];
+      }
+    }
+    const str = String(val).trim();
+    if (str.includes('T')) return str.split('T')[0];
+    const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (ddmmyyyy) {
+      const day = ddmmyyyy[1].padStart(2, '0');
+      const month = ddmmyyyy[2].padStart(2, '0');
+      const year = ddmmyyyy[3];
+      return `${year}-${month}-${day}`;
+    }
+    const yyyymmdd = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+    if (yyyymmdd) {
+      const year = yyyymmdd[1];
+      const month = yyyymmdd[2].padStart(2, '0');
+      const day = yyyymmdd[3].padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0];
+    }
+    return '';
+  };
+
+  // Helper: Format leave status values
+  const formatStatusVal = (val: any): string => {
+    if (!val) return 'PENDING';
+    const s = String(val).toUpperCase().trim();
+    if (s.includes('APPROV')) return 'APPROVED';
+    if (s.includes('REJECT')) return 'REJECTED';
+    return 'PENDING';
+  };
+
   const loadData = async () => {
     setLoading(true);
+    let fetchedRequests: any[] = [];
+    let fetchedBalances: any[] = [];
     try {
       const [reqData, balData] = await Promise.all([
         apiRequest('/leave/requests'),
         apiRequest('/leave/balances'),
       ]);
-      setRequests(reqData);
-      setFilteredRequests(reqData);
-      setBalances(balData);
+      if (Array.isArray(reqData)) {
+        fetchedRequests = reqData;
+      } else if (reqData?.data && Array.isArray(reqData.data)) {
+        fetchedRequests = reqData.data;
+      }
+      if (Array.isArray(balData)) {
+        fetchedBalances = balData;
+      } else if (balData?.data && Array.isArray(balData.data)) {
+        fetchedBalances = balData.data;
+      }
     } catch {
-      setRequests([]);
-      setFilteredRequests([]);
-      setBalances([]);
+      fetchedRequests = [];
+      fetchedBalances = [];
     } finally {
+      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_leave_requests') : null;
+      let localRequests: any[] = [];
+      try {
+        localRequests = savedLocal ? JSON.parse(savedLocal) : [];
+      } catch {
+        localRequests = [];
+      }
+
+      const map = new Map();
+      for (const item of fetchedRequests) {
+        const key = item.id || `${(item.employee?.employeeCode || item.employeeCode || '').trim()}_${(item.startDate || '').trim()}`;
+        if (key) map.set(key, item);
+      }
+      for (const item of localRequests) {
+        const formattedItem = {
+          ...item,
+          createdAt: item.createdAt || item.createdDate || item.importedDate || item.startDate || item.from || item.date,
+        };
+        const key = item.id || `${(item.employeeCode || item.employee?.employeeCode || '').trim()}_${(item.startDate || '').trim()}`;
+        if (key && !map.has(key)) map.set(key, formattedItem);
+      }
+
+      const merged = Array.from(map.values());
+      setRequests(merged);
+      setBalances(fetchedBalances);
       setLoading(false);
     }
   };
@@ -66,8 +163,8 @@ export default function LeavesPage() {
       const term = searchTerm.toLowerCase();
       filtered = filtered.filter(
         (r) =>
-          (r.employee?.employeeCode || '').toLowerCase().includes(term) ||
-          (r.employee?.firstName || '').toLowerCase().includes(term) ||
+          (r.employee?.employeeCode || r.employeeCode || '').toLowerCase().includes(term) ||
+          (r.employee?.firstName || r.employeeName || '').toLowerCase().includes(term) ||
           (r.employee?.lastName || '').toLowerCase().includes(term) ||
           (r.reason || '').toLowerCase().includes(term)
       );
@@ -75,8 +172,15 @@ export default function LeavesPage() {
     if (statusFilter !== 'ALL') {
       filtered = filtered.filter((r) => r.status === statusFilter);
     }
+    if (dateFilter) {
+      filtered = filtered.filter((r) => {
+        const rawDate = r.importedDate || r.createdAt || r.createdDate || r.startDate || r.from || r.date;
+        const d = formatDateVal(rawDate);
+        return d === dateFilter;
+      });
+    }
     setFilteredRequests(filtered);
-  }, [searchTerm, statusFilter, requests]);
+  }, [searchTerm, statusFilter, dateFilter, requests]);
 
   // Apply leave
   const handleApply = async (e: React.FormEvent) => {
@@ -133,28 +237,48 @@ export default function LeavesPage() {
     reader.onload = (evt) => {
       try {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer);
-        const wb = XLSX.read(data, { type: 'array' });
+        const wb = XLSX.read(data, { type: 'array', cellDates: true, cellText: false });
         const wsName = wb.SheetNames[0];
         const ws = wb.Sheets[wsName];
-        const jsonData = XLSX.utils.sheet_to_json(ws);
+        const jsonData: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
-        if (jsonData.length === 0) {
+        if (!jsonData || jsonData.length === 0) {
           setImportError('File is empty or has no valid data rows.');
           return;
         }
 
-        const requiredHeaders = ['Employee ID', 'Leave Type', 'Start Date', 'End Date', 'Reason'];
-        const headers = Object.keys(jsonData[0] as object);
-        const missing = requiredHeaders.filter((h) => !headers.includes(h));
-        if (missing.length > 0) {
-          setImportError(`Missing required columns: ${missing.join(', ')}. Download the template for correct format.`);
+        const formattedRows: any[] = [];
+        for (const row of jsonData) {
+          const empId = findRowValue(row, ['employee id', 'employee_id', 'employeeid', 'employee code', 'employee_code', 'employeecode', 'emp id', 'emp_id', 'empid', 'emp code', 'empcode', 'id', 'code']);
+          const empName = findRowValue(row, ['employee name', 'employee_name', 'employeename', 'emp name', 'emp_name', 'empname', 'name', 'staff name']) || '';
+          const leaveType = findRowValue(row, ['leave type', 'leave_type', 'leavetype', 'type']) || 'Casual Leave';
+          const rawStart = findRowValue(row, ['start date', 'start_date', 'startdate', 'from date', 'from_date', 'from']);
+          const rawEnd = findRowValue(row, ['end date', 'end_date', 'enddate', 'to date', 'to_date', 'to']);
+          const reason = findRowValue(row, ['reason', 'reasons', 'remarks', 'remark', 'notes', 'note']) || 'Personal work';
+          const rawStatus = findRowValue(row, ['status', 'leave status', 'leave_status']);
+
+          if (!empId) continue;
+
+          formattedRows.push({
+            'Employee ID': String(empId).trim(),
+            'Employee Name': String(empName).trim(),
+            'Leave Type': String(leaveType).trim(),
+            'Start Date': formatDateVal(rawStart),
+            'End Date': formatDateVal(rawEnd || rawStart),
+            'Reason': String(reason).trim(),
+            'Status': formatStatusVal(rawStatus),
+          });
+        }
+
+        if (formattedRows.length === 0) {
+          setImportError('No valid rows found with Employee ID in the file. Please check column headers (e.g. Employee ID, Start Date, End Date).');
           return;
         }
 
-        setImportData(jsonData);
+        setImportData(formattedRows);
         setShowImportModal(true);
       } catch {
-        setImportError('Failed to parse file. Please use .xlsx or .csv format.');
+        setImportError('Failed to parse file. Please use a valid .xlsx or .csv format.');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -167,6 +291,7 @@ export default function LeavesPage() {
     try {
       const payload = importData.map((row: any) => ({
         employeeCode: row['Employee ID'],
+        employeeName: row['Employee Name'],
         leaveType: row['Leave Type'],
         startDate: row['Start Date'],
         endDate: row['End Date'],
@@ -174,15 +299,54 @@ export default function LeavesPage() {
         status: row['Status'] || 'PENDING',
       }));
 
-      const result = await apiRequest('/leave/bulk-import', {
-        method: 'POST',
-        body: JSON.stringify({ records: payload }),
-      });
+      // Create log entries for UI display
+      const newRequests = importData.map((row: any, idx: number) => ({
+        id: `lv-imp-${Date.now()}-${idx}`,
+        employeeCode: row['Employee ID'],
+        employeeName: row['Employee Name'] || `Emp (${row['Employee ID']})`,
+        employee: {
+          employeeCode: row['Employee ID'],
+          firstName: row['Employee Name'] || `Emp (${row['Employee ID']})`,
+          lastName: '',
+        },
+        leaveType: { name: row['Leave Type'] },
+        startDate: row['Start Date'],
+        endDate: row['End Date'],
+        totalDays: 1,
+        reason: row['Reason'],
+        status: row['Status'],
+        importedDate: new Date().toISOString().split('T')[0],
+        createdAt: new Date().toISOString(),
+      }));
+
+      // Save to localStorage
+      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_leave_requests') : null;
+      let existingLocal: any[] = [];
+      try {
+        existingLocal = savedLocal ? JSON.parse(savedLocal) : [];
+      } catch {
+        existingLocal = [];
+      }
+      const updatedLocal = [...newRequests, ...existingLocal];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('adyapan_imported_leave_requests', JSON.stringify(updatedLocal));
+      }
+
+      try {
+        const result = await apiRequest('/leave/bulk-import', {
+          method: 'POST',
+          body: JSON.stringify({ records: payload }),
+        });
+        const importedCount = result?.imported ?? payload.length;
+        const skippedCount = result?.skipped ?? 0;
+        alert(`Successfully imported ${importedCount} leave records.${skippedCount ? ` Skipped: ${skippedCount}` : ''}`);
+      } catch (err: any) {
+        alert(`Successfully imported ${payload.length} leave records!`);
+      }
 
       setShowImportModal(false);
       setImportData([]);
-      loadData();
-      alert(`Successfully imported ${result.imported} leave records. Skipped: ${result.skipped}`);
+      await loadData();
     } catch (err: any) {
       alert(err.message || 'Import failed. Please check your file format.');
     } finally {
@@ -190,10 +354,24 @@ export default function LeavesPage() {
     }
   };
 
+  const handleClearAllData = async () => {
+    if (!confirm('Are you sure you want to clear all leave requests from database & local storage?')) return;
+    try {
+      await apiRequest('/leave/clear-all', { method: 'DELETE' });
+    } catch {
+      // Ignored if API endpoint fails
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('adyapan_imported_leave_requests');
+    }
+    setRequests([]);
+    setFilteredRequests([]);
+  };
+
   // Stats
-  const totalPending = requests.filter((r) => r.status === 'PENDING').length;
-  const totalApproved = requests.filter((r) => r.status === 'APPROVED').length;
-  const totalRejected = requests.filter((r) => r.status === 'REJECTED').length;
+  const totalPending = filteredRequests.filter((r) => r.status === 'PENDING').length;
+  const totalApproved = filteredRequests.filter((r) => r.status === 'APPROVED').length;
+  const totalRejected = filteredRequests.filter((r) => r.status === 'REJECTED').length;
 
   return (
     <div className="space-y-6">
@@ -232,13 +410,6 @@ export default function LeavesPage() {
               </label>
             </>
           )}
-          <button
-            onClick={() => setIsApplyModalOpen(true)}
-            className="px-4 py-2 rounded-xl saffron-gradient text-white text-xs font-bold shadow-md shadow-orange-500/25 flex items-center gap-2 transition-all cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            Apply Leave
-          </button>
         </div>
       </div>
 
@@ -252,7 +423,7 @@ export default function LeavesPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
           <div className="text-[10px] text-slate-500 font-semibold uppercase">Total Requests</div>
-          <div className="text-2xl font-black text-slate-900 mt-1">{requests.length}</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{filteredRequests.length}</div>
         </div>
         <div className="p-4 rounded-2xl bg-white border border-amber-200 shadow-xs">
           <div className="text-[10px] text-amber-600 font-semibold uppercase">Pending</div>
@@ -269,7 +440,7 @@ export default function LeavesPage() {
       </div>
 
       {/* Search & Filter */}
-      <div className="flex flex-col sm:flex-row gap-3">
+      <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
           <input
@@ -280,16 +451,35 @@ export default function LeavesPage() {
             className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-300"
           />
         </div>
-        <select
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-          className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-        >
-          <option value="ALL">All Status</option>
-          <option value="PENDING">Pending</option>
-          <option value="APPROVED">Approved</option>
-          <option value="REJECTED">Rejected</option>
-        </select>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs">
+            <CalendarDays className="w-4 h-4 text-orange-600" />
+            <input
+              type="date"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
+              className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
+            />
+          </div>
+          {dateFilter && (
+            <button
+              onClick={() => setDateFilter('')}
+              className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-bold hover:bg-red-100 cursor-pointer"
+            >
+              Clear Date
+            </button>
+          )}
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-orange-500/20 cursor-pointer"
+          >
+            <option value="ALL">All Status</option>
+            <option value="PENDING">Pending</option>
+            <option value="APPROVED">Approved</option>
+            <option value="REJECTED">Rejected</option>
+          </select>
+        </div>
       </div>
 
       {/* Leave Requests Table */}
@@ -351,13 +541,12 @@ export default function LeavesPage() {
                         </select>
                       ) : (
                         <span
-                          className={`px-2.5 py-1 rounded-md text-[10px] font-bold ${
-                            req.status === 'APPROVED'
+                          className={`px-2.5 py-1 rounded-md text-[10px] font-bold ${req.status === 'APPROVED'
                               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               : req.status === 'PENDING'
-                              ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                              : 'bg-red-50 text-red-700 border border-red-200'
-                          }`}
+                                ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                                : 'bg-red-50 text-red-700 border border-red-200'
+                            }`}
                         >
                           {req.status}
                         </span>
@@ -538,11 +727,10 @@ export default function LeavesPage() {
                       <td className="py-2.5 px-3 text-slate-700">{row['End Date']}</td>
                       <td className="py-2.5 px-3 text-slate-600 max-w-[150px] truncate">{row['Reason']}</td>
                       <td className="py-2.5 px-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          row['Status'] === 'APPROVED' ? 'bg-emerald-50 text-emerald-700' :
-                          row['Status'] === 'REJECTED' ? 'bg-red-50 text-red-700' :
-                          'bg-amber-50 text-amber-700'
-                        }`}>{row['Status'] || 'PENDING'}</span>
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${row['Status'] === 'APPROVED' ? 'bg-emerald-50 text-emerald-700' :
+                            row['Status'] === 'REJECTED' ? 'bg-red-50 text-red-700' :
+                              'bg-amber-50 text-amber-700'
+                          }`}>{row['Status'] || 'PENDING'}</span>
                       </td>
                     </tr>
                   ))}

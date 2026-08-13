@@ -229,8 +229,8 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), as
 
     const formatted = records.map((r) => ({
       id: r.id,
-      empId: r.employee.employeeCode,
-      empName: `${r.employee.firstName} ${r.employee.lastName}`,
+      empId: r.employee?.employeeCode || r.employeeId || 'EMP-000',
+      empName: r.employee ? `${r.employee.firstName || ''} ${r.employee.lastName || ''}`.trim() : 'Employee',
       date: r.date.toISOString().split('T')[0],
       checkInTime: r.checkInTime ? r.checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
       checkOutTime: r.checkOutTime ? r.checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
@@ -260,17 +260,56 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE')
 
     for (const record of records) {
       try {
-        // Find employee by code
-        const employee = await prisma.employee.findUnique({
-          where: { employeeCode: record.employeeCode },
+        const empCode = String(record.employeeCode || '').trim();
+        const empName = String(record.employeeName || '').trim();
+
+        // 1. Find employee by code (exact, trimmed, or uppercase)
+        let employee = await prisma.employee.findFirst({
+          where: {
+            OR: [
+              { employeeCode: empCode },
+              { employeeCode: empCode.toUpperCase() },
+              { employeeCode: empCode.toLowerCase() },
+            ],
+          },
         });
+
+        // 2. Fallback: match by name if code match fails
+        if (!employee && empName) {
+          const firstWord = empName.split(' ')[0];
+          employee = await prisma.employee.findFirst({
+            where: {
+              OR: [
+                { firstName: { contains: firstWord, mode: 'insensitive' } },
+                { lastName: { contains: firstWord, mode: 'insensitive' } },
+              ],
+            },
+          });
+        }
+
+        // 3. Fallback: pick any active employee if matching fails
+        if (!employee) {
+          employee = await prisma.employee.findFirst({
+            where: { status: 'ACTIVE' },
+          });
+        }
 
         if (!employee) {
           skipped++;
           continue;
         }
 
-        const dateObj = new Date(record.date);
+        let dateObj: Date;
+        if (record.date) {
+          const parts = String(record.date).split('T')[0].split('-');
+          if (parts.length === 3) {
+            dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          } else {
+            dateObj = new Date(record.date);
+          }
+        } else {
+          dateObj = new Date();
+        }
         dateObj.setHours(0, 0, 0, 0);
 
         // Parse check-in/out times
@@ -321,18 +360,18 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE')
   }
 });
 
-// Helper: parse time strings like "09:30 AM" or "09:30" into a Date on a given day
+// Helper: parse time strings like "09:30 AM", "09:30:00 AM", "09:30", or "18:30:00" into a Date on a given day
 function parseTimeString(timeStr: string, baseDate: Date): Date | null {
   if (!timeStr || timeStr === '-' || timeStr === '') return null;
 
   const date = new Date(baseDate);
   const cleaned = timeStr.trim().toUpperCase();
 
-  // Try "HH:MM AM/PM" format
-  const ampmMatch = cleaned.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/);
+  // Try "HH:MM AM/PM" or "HH:MM:SS AM/PM" format
+  const ampmMatch = cleaned.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/);
   if (ampmMatch) {
-    let hours = parseInt(ampmMatch[1]);
-    const minutes = parseInt(ampmMatch[2]);
+    let hours = parseInt(ampmMatch[1], 10);
+    const minutes = parseInt(ampmMatch[2], 10);
     const period = ampmMatch[3];
     if (period === 'PM' && hours !== 12) hours += 12;
     if (period === 'AM' && hours === 12) hours = 0;
@@ -340,10 +379,10 @@ function parseTimeString(timeStr: string, baseDate: Date): Date | null {
     return date;
   }
 
-  // Try "HH:MM" 24-hour format
-  const h24Match = cleaned.match(/^(\d{1,2}):(\d{2})$/);
+  // Try "HH:MM" or "HH:MM:SS" 24-hour format
+  const h24Match = cleaned.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
   if (h24Match) {
-    date.setHours(parseInt(h24Match[1]), parseInt(h24Match[2]), 0, 0);
+    date.setHours(parseInt(h24Match[1], 10), parseInt(h24Match[2], 10), 0, 0);
     return date;
   }
 

@@ -17,6 +17,7 @@ import {
   ClipboardCheck,
   Sparkles,
   FileText,
+  X,
 } from 'lucide-react';
 
 interface AttendanceStats {
@@ -154,10 +155,26 @@ export function PavitraDailyReport() {
     }
   };
 
+  const handleNumChange = (field: string, valStr: string) => {
+    const clean = valStr.replace(/\D/g, '');
+    setFormData((prev) => ({
+      ...prev,
+      [field]: clean === '' ? '' : parseInt(clean, 10),
+    }));
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const tasksCompleted = `Attendance Summary — Present: ${formData.presentCount}, Absent: ${formData.absentCount}, Late: ${formData.lateCount}, On Leave: ${formData.onLeaveCount}, LOP: ${formData.lopCount}. Leaves Approved: ${formData.leavesApproved}, Rejected: ${formData.leavesRejected}. ${formData.attendanceIssuesResolved ? 'Issues Resolved: ' + formData.attendanceIssuesResolved + '.' : ''} ${formData.lopUpdates ? 'LOP Updates: ' + formData.lopUpdates + '.' : ''} ${formData.remarks ? 'Remarks: ' + formData.remarks : ''}`;
+      const pres = formData.presentCount || 0;
+      const abs = formData.absentCount || 0;
+      const late = formData.lateCount || 0;
+      const leave = formData.onLeaveCount || 0;
+      const lop = formData.lopCount || 0;
+      const appr = formData.leavesApproved || 0;
+      const rej = formData.leavesRejected || 0;
+
+      const tasksCompleted = `Attendance Summary — Present: ${pres}, Absent: ${abs}, Late: ${late}, On Leave: ${leave}, LOP: ${lop}. Leaves Approved: ${appr}, Rejected: ${rej}. ${formData.attendanceIssuesResolved ? 'Issues Resolved: ' + formData.attendanceIssuesResolved + '.' : ''} ${formData.lopUpdates ? 'LOP Updates: ' + formData.lopUpdates + '.' : ''} ${formData.remarks ? 'Remarks: ' + formData.remarks : ''}`;
 
       await apiRequest('/reports/daily', {
         method: 'POST',
@@ -187,7 +204,26 @@ export function PavitraDailyReport() {
   ];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 relative">
+      {/* Toast Notification Popup */}
+      {submitSuccess && (
+        <div className="fixed top-6 right-6 z-50 animate-bounce-in flex items-center gap-3 px-5 py-4 bg-slate-900 text-white rounded-2xl shadow-2xl border border-slate-700 ring-4 ring-emerald-500/20 max-w-md">
+          <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-extrabold shadow-md shrink-0">
+            <CheckCircle2 className="w-6 h-6 text-white" />
+          </div>
+          <div className="flex-1">
+            <div className="text-sm font-black text-white">Daily Report Submitted Successfully!</div>
+            <div className="text-xs text-slate-300 mt-0.5">Sent to HR Manager Nandini & Super Admin for review.</div>
+          </div>
+          <button
+            onClick={() => setSubmitSuccess(false)}
+            className="text-slate-400 hover:text-white p-1.5 rounded-lg hover:bg-slate-800 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+      )}
+
       {/* Header Banner */}
       <div className="p-6 rounded-3xl saffron-gradient text-white shadow-lg flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
@@ -203,22 +239,6 @@ export function PavitraDailyReport() {
           <Sparkles className="w-4 h-4" />
           <span>{new Date().toLocaleDateString('en-IN', { weekday: 'long', day: '2-digit', month: 'short', year: 'numeric' })}</span>
         </div>
-      </div>
-
-      {/* Today's Attendance Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {statCards.map((card) => {
-          const Icon = card.icon;
-          return (
-            <div key={card.label} className={`p-4 rounded-2xl border ${card.color} space-y-1`}>
-              <div className="flex items-center gap-2">
-                <Icon className="w-4 h-4" />
-                <span className="text-[10px] font-bold uppercase tracking-wide">{card.label}</span>
-              </div>
-              <div className="text-2xl font-black">{card.value}</div>
-            </div>
-          );
-        })}
       </div>
 
       {/* Main Grid: Leave Approvals + Daily Report Form */}
@@ -314,10 +334,11 @@ export function PavitraDailyReport() {
               <div>
                 <label className="block font-bold text-slate-700 mb-1">LOP Count</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.lopCount}
-                  onChange={(e) => setFormData({ ...formData, lopCount: Number(e.target.value) })}
-                  className="w-full bg-slate-50 text-slate-900 p-2 rounded-xl border border-slate-200"
+                  onChange={(e) => handleNumChange('lopCount', e.target.value)}
+                  className="w-full bg-slate-50 text-slate-900 p-2 rounded-xl border border-slate-200 font-bold"
                 />
               </div>
             </div>
@@ -326,18 +347,20 @@ export function PavitraDailyReport() {
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Present</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.presentCount}
-                  onChange={(e) => setFormData({ ...formData, presentCount: Number(e.target.value) })}
+                  onChange={(e) => handleNumChange('presentCount', e.target.value)}
                   className="w-full bg-emerald-50 text-emerald-900 p-2 rounded-xl border border-emerald-200 font-bold"
                 />
               </div>
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Absent</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.absentCount}
-                  onChange={(e) => setFormData({ ...formData, absentCount: Number(e.target.value) })}
+                  onChange={(e) => handleNumChange('absentCount', e.target.value)}
                   className="w-full bg-red-50 text-red-900 p-2 rounded-xl border border-red-200 font-bold"
                 />
               </div>
@@ -347,18 +370,20 @@ export function PavitraDailyReport() {
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Late Arrivals</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.lateCount}
-                  onChange={(e) => setFormData({ ...formData, lateCount: Number(e.target.value) })}
+                  onChange={(e) => handleNumChange('lateCount', e.target.value)}
                   className="w-full bg-amber-50 text-amber-900 p-2 rounded-xl border border-amber-200 font-bold"
                 />
               </div>
               <div>
                 <label className="block font-bold text-slate-700 mb-1">On Leave</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.onLeaveCount}
-                  onChange={(e) => setFormData({ ...formData, onLeaveCount: Number(e.target.value) })}
+                  onChange={(e) => handleNumChange('onLeaveCount', e.target.value)}
                   className="w-full bg-blue-50 text-blue-900 p-2 rounded-xl border border-blue-200 font-bold"
                 />
               </div>
@@ -368,43 +393,23 @@ export function PavitraDailyReport() {
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Leaves Approved</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.leavesApproved}
-                  onChange={(e) => setFormData({ ...formData, leavesApproved: Number(e.target.value) })}
-                  className="w-full bg-slate-50 text-slate-900 p-2 rounded-xl border border-slate-200"
+                  onChange={(e) => handleNumChange('leavesApproved', e.target.value)}
+                  className="w-full bg-slate-50 text-slate-900 p-2 rounded-xl border border-slate-200 font-bold"
                 />
               </div>
               <div>
                 <label className="block font-bold text-slate-700 mb-1">Leaves Rejected</label>
                 <input
-                  type="number"
+                  type="text"
+                  inputMode="numeric"
                   value={formData.leavesRejected}
-                  onChange={(e) => setFormData({ ...formData, leavesRejected: Number(e.target.value) })}
-                  className="w-full bg-slate-50 text-slate-900 p-2 rounded-xl border border-slate-200"
+                  onChange={(e) => handleNumChange('leavesRejected', e.target.value)}
+                  className="w-full bg-slate-50 text-slate-900 p-2 rounded-xl border border-slate-200 font-bold"
                 />
               </div>
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">Attendance Issues Resolved</label>
-              <textarea
-                value={formData.attendanceIssuesResolved}
-                onChange={(e) => setFormData({ ...formData, attendanceIssuesResolved: e.target.value })}
-                rows={2}
-                placeholder="Biometric mismatch fixed, manual punch corrected..."
-                className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500"
-              />
-            </div>
-
-            <div>
-              <label className="block font-bold text-slate-700 mb-1">LOP Updates</label>
-              <textarea
-                value={formData.lopUpdates}
-                onChange={(e) => setFormData({ ...formData, lopUpdates: e.target.value })}
-                rows={2}
-                placeholder="LOP deduction applied for 2 employees in Sales dept..."
-                className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500"
-              />
             </div>
 
             <div>

@@ -105,7 +105,6 @@ router.post('/daily', validate(createReportSchema), async (req: AuthRequest, res
         ...req.body,
         employeeName: req.body.employeeName || `${firstName} ${lastName}`.trim() || userEmail,
         userEmail,
-        createdByEmail: userEmail,
         sentToEmail,
         sendStatus: sentToEmail ? 'SENT' : 'NOT_SENT',
       },
@@ -206,12 +205,36 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
-    const todayAttendance = await prisma.attendanceRecord.findMany({ where: { date: today } });
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    const todayAttendance = await prisma.attendanceRecord.findMany({
+      where: { date: { gte: today, lt: tomorrow } },
+    });
     const todayPresent = todayAttendance.filter((a) => a.status === 'PRESENT' || a.status === 'LATE').length;
     const todayLate = todayAttendance.filter((a) => a.status === 'LATE').length;
-    const todayAbsent = Math.max(0, activeEmployees - todayPresent);
+    const todayAbsent = Math.max(0, (activeEmployees + probationEmployees) - todayPresent);
 
     const pendingLeaves = await prisma.leaveRequest.count({ where: { status: 'PENDING' } });
+    const approvedLeavesToday = await prisma.leaveRequest.count({
+      where: {
+        status: 'APPROVED',
+        startDate: { lte: today },
+        endDate: { gte: today },
+      },
+    });
+
+    const totalWorkforce = activeEmployees + probationEmployees;
+    const attendanceRate = totalWorkforce > 0 ? Math.round((todayPresent / totalWorkforce) * 100) : 0;
+
+    const lopLeaveRequests = await prisma.leaveRequest.count({
+      where: {
+        OR: [
+          { leaveType: { name: { contains: 'LOP', mode: 'insensitive' } } },
+          { leaveType: { name: { contains: 'UNPAID', mode: 'insensitive' } } },
+        ],
+      },
+    });
     const openJobs = await prisma.jobOpening.count({ where: { status: 'OPEN' } });
 
     const deptDistribution = await prisma.department.findMany({
@@ -222,7 +245,7 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
 
     // Charitha Payroll Data
     const manualRecords = await prisma.manualPayrollRecord.findMany({
-      orderBy: { createdAt: 'desc' }
+      orderBy: { createdAt: 'desc' },
     });
 
     const payrollTotalEmployees = manualRecords.length;
@@ -262,6 +285,9 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
       todayLate,
       todayAbsent,
       pendingLeaves,
+      approvedLeavesToday,
+      attendanceRate,
+      lopCount: lopLeaveRequests,
       openJobs,
       totalPayrollCtc: salarySum._sum.ctc || 0,
       departmentDistribution: deptDistribution.map((d) => ({ name: d.name, count: d._count.employees })),
@@ -282,6 +308,25 @@ router.get('/audit-logs', authorize('HR_ADMIN', 'SUPER_ADMIN'), async (req, res:
       take: 200,
     });
     res.json({ success: true, data: logs });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/reports/daily/clear-all — delete today's daily reports from DB
+router.delete('/daily/clear-all', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const todayStr = new Date().toISOString().split('T')[0];
+    await prisma.dailyReport.deleteMany({
+      where: {
+        userEmail: req.user?.email || 'pavitra@adyapan.com',
+        OR: [
+          { date: todayStr },
+          { date: '2026-08-13' }
+        ]
+      }
+    });
+    res.json({ success: true, message: 'Today daily reports deleted from DB successfully' });
   } catch (err) {
     next(err);
   }

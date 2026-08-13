@@ -20,6 +20,7 @@ router.get('/', async (req: AuthRequest, res: Response, next) => {
       status,
       userEmail: req.user!.email,
       userRole: req.user!.role,
+      specialization: req.user!.specialization || undefined,
     });
     res.json({ success: true, data: employees, count: employees.length });
   } catch (err) {

@@ -82,10 +82,8 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   // Pavitra-specific navigation (Attendance & Leave)
   const pavitraNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { label: 'Employees', href: '/employees', icon: Users },
-    { label: 'Attendance', href: '/attendance', icon: CalendarDays },
-    { label: 'Leaves', href: '/leaves', icon: Clock },
-    { label: 'Team Leaders', href: '/team-leaders', icon: Users },
+    { label: 'Attendance', href: '/attendance', icon: Clock },
+    { label: 'Leaves', href: '/leaves', icon: CalendarDays },
     { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
   ];
 

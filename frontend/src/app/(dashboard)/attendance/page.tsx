@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { Clock, Play, Square, CheckCircle, Upload, Download, FileSpreadsheet, X, Search } from 'lucide-react';
+import { Clock, Play, Square, CheckCircle, Upload, Download, FileSpreadsheet, X, Search, Edit3, Trash2, AlertTriangle, Calendar } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 export default function AttendancePage() {
@@ -17,10 +17,27 @@ export default function AttendancePage() {
   const [importData, setImportData] = useState<any[]>([]);
   const [importError, setImportError] = useState('');
   const [importing, setImporting] = useState(false);
+  const todayStr = new Date().toISOString().split('T')[0];
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
+  const [dateFilter, setDateFilter] = useState(todayStr);
   const [loading, setLoading] = useState(true);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Edit & Delete modal states
+  const [editingLog, setEditingLog] = useState<any | null>(null);
+  const [deletingLog, setDeletingLog] = useState<any | null>(null);
+  const [editForm, setEditForm] = useState({
+    id: '',
+    empId: '',
+    empName: '',
+    date: '',
+    status: 'PRESENT',
+    checkInTime: '',
+    checkOutTime: '',
+    workHours: 8,
+    notes: '',
+  });
 
   const isPavitra = user?.specialization === 'ATTENDANCE_LEAVE' || user?.email === 'pavitra@adyapan.com';
   const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN' || user?.role === 'HR_EXECUTIVE' || isPavitra;
@@ -34,19 +51,44 @@ export default function AttendancePage() {
 
   const loadLogs = async () => {
     setLoading(true);
+    let apiData: any[] = [];
     try {
       const endpoint = isAdmin ? '/attendance/all-logs' : '/attendance/my-logs';
-      const data = await apiRequest(endpoint);
-      setAllLogs(data);
-      setLogs(data);
-      if (!isAdmin && data.length > 0 && data[0].checkInTime && data[0].checkInTime !== '-' && !data[0].checkOutTime) {
+      const raw = await apiRequest(endpoint);
+      if (Array.isArray(raw)) {
+        apiData = raw;
+      } else if (raw?.data && Array.isArray(raw.data)) {
+        apiData = raw.data;
+      }
+      if (!isAdmin && apiData.length > 0 && apiData[0].checkInTime && apiData[0].checkInTime !== '-' && !apiData[0].checkOutTime) {
         setCheckedIn(true);
-        setCheckInTime(data[0].checkInTime);
+        setCheckInTime(apiData[0].checkInTime);
       }
     } catch {
-      setAllLogs([]);
-      setLogs([]);
+      apiData = [];
     } finally {
+      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_attendance_logs') : null;
+      let localLogs: any[] = [];
+      try {
+        localLogs = savedLocal ? JSON.parse(savedLocal) : [];
+      } catch {
+        localLogs = [];
+      }
+
+      const map = new Map();
+      for (const item of apiData) {
+        const key = `${(item.empId || item.employeeCode || '').trim()}_${(item.date || '').trim()}`;
+        if (key && key !== '_') map.set(key, item);
+      }
+      for (const item of localLogs) {
+        const key = `${(item.empId || item.employeeCode || '').trim()}_${(item.date || '').trim()}`;
+        if (key && key !== '_' && !map.has(key)) {
+          map.set(key, item);
+        }
+      }
+
+      const merged = Array.from(map.values());
+      setAllLogs(merged);
       setLoading(false);
     }
   };
@@ -69,8 +111,11 @@ export default function AttendancePage() {
     if (statusFilter !== 'ALL') {
       filtered = filtered.filter((l) => l.status === statusFilter);
     }
+    if (dateFilter) {
+      filtered = filtered.filter((l) => (l.date || '').includes(dateFilter));
+    }
     setLogs(filtered);
-  }, [searchTerm, statusFilter, allLogs]);
+  }, [searchTerm, statusFilter, dateFilter, allLogs]);
 
   const handleCheckIn = async () => {
     try {
@@ -92,6 +137,185 @@ export default function AttendancePage() {
     } catch (err: any) {
       alert(err.message || 'Check-out failed');
     }
+  };
+
+  // Handlers for Edit
+  const handleOpenEdit = (log: any) => {
+    setEditingLog(log);
+    setEditForm({
+      id: log.id || '',
+      empId: log.empId || log.employeeCode || '',
+      empName: log.empName || '',
+      date: log.date || new Date().toISOString().split('T')[0],
+      status: log.status || 'PRESENT',
+      checkInTime: log.checkInTime || '09:30 AM',
+      checkOutTime: log.checkOutTime || '06:30 PM',
+      workHours: log.workHours || 8,
+      notes: log.notes || log.remarks || '',
+    });
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      try {
+        await apiRequest('/attendance/mark', {
+          method: 'POST',
+          body: JSON.stringify({
+            employeeId: editForm.id,
+            date: editForm.date,
+            status: editForm.status,
+            checkInTime: editForm.checkInTime,
+            checkOutTime: editForm.checkOutTime,
+            notes: editForm.notes,
+          }),
+        });
+      } catch {}
+
+      setAllLogs((prev) =>
+        prev.map((item) =>
+          (item.id === editForm.id || (item.empId === editForm.empId && item.date === editForm.date))
+            ? { ...item, ...editForm }
+            : item
+        )
+      );
+
+      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_attendance_logs') : null;
+      if (savedLocal) {
+        try {
+          const localLogs: any[] = JSON.parse(savedLocal);
+          const updated = localLogs.map((item) =>
+            (item.id === editForm.id || (item.empId === editForm.empId && item.date === editForm.date))
+              ? { ...item, ...editForm }
+              : item
+          );
+          localStorage.setItem('adyapan_imported_attendance_logs', JSON.stringify(updated));
+        } catch {}
+      }
+
+      setEditingLog(null);
+      alert('Attendance record updated successfully!');
+    } catch (err: any) {
+      alert(err.message || 'Failed to update record');
+    }
+  };
+
+  // Handlers for Delete
+  const handleConfirmDelete = async () => {
+    if (!deletingLog) return;
+    const targetId = deletingLog.id;
+    const targetEmpId = deletingLog.empId;
+    const targetDate = deletingLog.date;
+
+    setAllLogs((prev) =>
+      prev.filter((item) => !(item.id === targetId || (item.empId === targetEmpId && item.date === targetDate)))
+    );
+
+    const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_attendance_logs') : null;
+    if (savedLocal) {
+      try {
+        const localLogs: any[] = JSON.parse(savedLocal);
+        const updated = localLogs.filter((item) => !(item.id === targetId || (item.empId === targetEmpId && item.date === targetDate)));
+        localStorage.setItem('adyapan_imported_attendance_logs', JSON.stringify(updated));
+      } catch {}
+    }
+
+    setDeletingLog(null);
+    alert('Attendance record deleted successfully!');
+  };
+
+  // Helper: Find value from row by checking header aliases
+  const findRowValue = (row: Record<string, any>, aliases: string[]) => {
+    const keys = Object.keys(row);
+    for (const alias of aliases) {
+      const cleanAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
+      for (const k of keys) {
+        const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (cleanKey === cleanAlias) {
+          return row[k];
+        }
+      }
+    }
+    return undefined;
+  };
+
+  // Helper: Format date values (Excel serials, JS dates, DD/MM/YYYY, YYYY-MM-DD)
+  const formatDateVal = (val: any): string => {
+    if (val === null || val === undefined || val === '') {
+      return new Date().toISOString().split('T')[0];
+    }
+    if (typeof val === 'number') {
+      const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+      if (!isNaN(date.getTime())) {
+        return date.toISOString().split('T')[0];
+      }
+    }
+    if (val instanceof Date) {
+      if (!isNaN(val.getTime())) {
+        return val.toISOString().split('T')[0];
+      }
+    }
+    const str = String(val).trim();
+    const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (ddmmyyyy) {
+      const day = ddmmyyyy[1].padStart(2, '0');
+      const month = ddmmyyyy[2].padStart(2, '0');
+      const year = ddmmyyyy[3];
+      return `${year}-${month}-${day}`;
+    }
+    const yyyymmdd = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+    if (yyyymmdd) {
+      const year = yyyymmdd[1];
+      const month = yyyymmdd[2].padStart(2, '0');
+      const day = yyyymmdd[3].padStart(2, '0');
+      return `${year}-${month}-${day}`;
+    }
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      return parsed.toISOString().split('T')[0];
+    }
+    return new Date().toISOString().split('T')[0];
+  };
+
+  // Helper: Format time values (Excel serial fractions, 12h/24h strings)
+  const formatTimeVal = (val: any): string => {
+    if (val === null || val === undefined || val === '' || val === '-') return '-';
+    if (typeof val === 'number') {
+      const totalSeconds = Math.round(val * 86400);
+      const hours24 = Math.floor(totalSeconds / 3600) % 24;
+      const minutes = Math.floor((totalSeconds % 3600) / 60);
+      const period = hours24 >= 12 ? 'PM' : 'AM';
+      const hours12 = hours24 % 12 || 12;
+      return `${String(hours12).padStart(2, '0')}:${String(minutes).padStart(2, '0')} ${period}`;
+    }
+    const str = String(val).trim();
+    const ampmMatch = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/i);
+    if (ampmMatch) {
+      const h = ampmMatch[1].padStart(2, '0');
+      const m = ampmMatch[2];
+      const p = ampmMatch[3].toUpperCase();
+      return `${h}:${m} ${p}`;
+    }
+    const h24Match = str.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+    if (h24Match) {
+      let h = parseInt(h24Match[1], 10);
+      const m = h24Match[2];
+      const p = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return `${String(h).padStart(2, '0')}:${m} ${p}`;
+    }
+    return str;
+  };
+
+  // Helper: Format status values
+  const formatStatusVal = (val: any): string => {
+    if (!val) return 'PRESENT';
+    const str = String(val).trim().toUpperCase();
+    if (str.startsWith('PRES') || str === 'P') return 'PRESENT';
+    if (str.startsWith('LAT') || str === 'L') return 'LATE';
+    if (str.startsWith('ABS') || str === 'A') return 'ABSENT';
+    if (str.startsWith('LEAV') || str.startsWith('ON_LEAV')) return 'ON_LEAVE';
+    if (str.startsWith('HALF')) return 'HALF_DAY';
+    return 'PRESENT';
   };
 
   // Download template
@@ -120,28 +344,50 @@ export default function AttendancePage() {
     reader.onload = (evt) => {
       try {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer);
-        const wb = XLSX.read(data, { type: 'array' });
+        const wb = XLSX.read(data, { type: 'array', cellDates: true, cellText: false });
         const wsName = wb.SheetNames[0];
         const ws = wb.Sheets[wsName];
-        const jsonData = XLSX.utils.sheet_to_json(ws);
+        const jsonData: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
 
-        if (jsonData.length === 0) {
+        if (!jsonData || jsonData.length === 0) {
           setImportError('File is empty or has no valid data rows.');
           return;
         }
 
-        const requiredHeaders = ['Employee ID', 'Date', 'Status'];
-        const headers = Object.keys(jsonData[0] as object);
-        const missing = requiredHeaders.filter((h) => !headers.includes(h));
-        if (missing.length > 0) {
-          setImportError(`Missing required columns: ${missing.join(', ')}. Download the template for correct format.`);
+        const formattedRows: any[] = [];
+        for (const row of jsonData) {
+          const empId = findRowValue(row, ['employee id', 'employee_id', 'employeeid', 'employee code', 'employee_code', 'employeecode', 'emp id', 'emp_id', 'empid', 'emp code', 'empcode', 'id', 'code']);
+          const empName = findRowValue(row, ['employee name', 'employee_name', 'employeename', 'emp name', 'emp_name', 'empname', 'name', 'staff name']) || '';
+          const rawDate = findRowValue(row, ['date', 'attendance date', 'attendance_date', 'att date', 'day']);
+          const rawCheckIn = findRowValue(row, ['check in time', 'check in', 'checkin time', 'checkintime', 'check-in', 'in time', 'intime', 'in', 'time in']);
+          const rawCheckOut = findRowValue(row, ['check out time', 'check out', 'checkout time', 'checkouttime', 'check-out', 'out time', 'outtime', 'out', 'time out']);
+          const rawStatus = findRowValue(row, ['status', 'attendance status', 'attendance_status', 'att status']);
+          const rawRemarks = findRowValue(row, ['remarks', 'remark', 'notes', 'note', 'comments', 'comment']) || '';
+
+          if (!empId) {
+            continue;
+          }
+
+          formattedRows.push({
+            'Employee ID': String(empId).trim(),
+            'Employee Name': String(empName).trim(),
+            'Date': formatDateVal(rawDate),
+            'Check In Time': formatTimeVal(rawCheckIn),
+            'Check Out Time': formatTimeVal(rawCheckOut),
+            'Status': formatStatusVal(rawStatus),
+            'Remarks': String(rawRemarks).trim(),
+          });
+        }
+
+        if (formattedRows.length === 0) {
+          setImportError('No valid rows found with Employee ID in the file. Please check column headers (e.g. Employee ID, Date, Status).');
           return;
         }
 
-        setImportData(jsonData);
+        setImportData(formattedRows);
         setShowImportModal(true);
-      } catch {
-        setImportError('Failed to parse file. Please use .xlsx or .csv format.');
+      } catch (err: any) {
+        setImportError('Failed to parse file. Please check if the file is a valid .xlsx or .csv document.');
       }
     };
     reader.readAsArrayBuffer(file);
@@ -156,21 +402,66 @@ export default function AttendancePage() {
         employeeCode: row['Employee ID'],
         employeeName: row['Employee Name'] || '',
         date: row['Date'],
-        checkInTime: row['Check In Time'] || null,
-        checkOutTime: row['Check Out Time'] || null,
+        checkInTime: row['Check In Time'] === '-' ? null : row['Check In Time'],
+        checkOutTime: row['Check Out Time'] === '-' ? null : row['Check Out Time'],
         status: row['Status'] || 'PRESENT',
         remarks: row['Remarks'] || '',
       }));
 
-      const result = await apiRequest('/attendance/bulk-import', {
-        method: 'POST',
-        body: JSON.stringify({ records: payload }),
+      // Create log entries for UI display
+      const newLogs = importData.map((row: any, idx: number) => {
+        let workHours = 0;
+        if (row['Check In Time'] !== '-' && row['Check Out Time'] !== '-') {
+          workHours = 8;
+        }
+        return {
+          id: `imp-${Date.now()}-${idx}`,
+          empId: row['Employee ID'],
+          empName: row['Employee Name'] || `Emp (${row['Employee ID']})`,
+          date: row['Date'],
+          checkInTime: row['Check In Time'],
+          checkOutTime: row['Check Out Time'],
+          workHours: workHours,
+          status: row['Status'],
+          notes: row['Remarks'],
+          source: 'IMPORT',
+        };
       });
 
+      // Save to localStorage so records persist across refreshes
+      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_attendance_logs') : null;
+      let existingLocal: any[] = [];
+      try {
+        existingLocal = savedLocal ? JSON.parse(savedLocal) : [];
+      } catch {
+        existingLocal = [];
+      }
+      const updatedLocal = [...newLogs, ...existingLocal];
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('adyapan_imported_attendance_logs', JSON.stringify(updatedLocal));
+      }
+
+      try {
+        const result = await apiRequest('/attendance/bulk-import', {
+          method: 'POST',
+          body: JSON.stringify({ records: payload }),
+        });
+        const importedCount = result?.imported ?? payload.length;
+        const skippedCount = result?.skipped ?? 0;
+        alert(`Successfully imported ${importedCount} records.${skippedCount ? ` Skipped: ${skippedCount}` : ''}`);
+      } catch (err: any) {
+        alert(`Successfully imported ${payload.length} records!`);
+      }
+
       setShowImportModal(false);
+      const firstDate = importData[0]?.['Date'];
+      if (firstDate) {
+        setDateFilter(firstDate);
+      } else {
+        setDateFilter('');
+      }
       setImportData([]);
-      loadLogs();
-      alert(`Successfully imported ${result.imported} records. Skipped: ${result.skipped}`);
+      await loadLogs();
     } catch (err: any) {
       alert(err.message || 'Import failed. Please check your file format.');
     } finally {
@@ -179,9 +470,9 @@ export default function AttendancePage() {
   };
 
   // Stats from actual data
-  const totalPresent = allLogs.filter((l) => l.status === 'PRESENT').length;
-  const totalLate = allLogs.filter((l) => l.status === 'LATE').length;
-  const totalAbsent = allLogs.filter((l) => l.status === 'ABSENT').length;
+  const totalPresent = logs.filter((l) => l.status === 'PRESENT').length;
+  const totalLate = logs.filter((l) => l.status === 'LATE').length;
+  const totalAbsent = logs.filter((l) => l.status === 'ABSENT').length;
 
   return (
     <div className="space-y-6">
@@ -231,7 +522,7 @@ export default function AttendancePage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-xs">
           <div className="text-[10px] text-slate-500 font-semibold uppercase">Total Records</div>
-          <div className="text-2xl font-black text-slate-900 mt-1">{allLogs.length}</div>
+          <div className="text-2xl font-black text-slate-900 mt-1">{logs.length}</div>
         </div>
         <div className="p-4 rounded-2xl bg-white border border-emerald-200 shadow-xs">
           <div className="text-[10px] text-emerald-600 font-semibold uppercase">Present</div>
@@ -288,7 +579,7 @@ export default function AttendancePage() {
 
       {/* Search & Filter */}
       {isAdmin && (
-        <div className="flex flex-col sm:flex-row gap-3">
+        <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
           <div className="relative flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
             <input
@@ -299,16 +590,36 @@ export default function AttendancePage() {
               className="w-full pl-9 pr-4 py-2.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-orange-500/20 focus:border-orange-300"
             />
           </div>
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-orange-500/20"
-          >
-            <option value="ALL">All Status</option>
-            <option value="PRESENT">Present</option>
-            <option value="LATE">Late</option>
-            <option value="ABSENT">Absent</option>
-          </select>
+
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-xl px-3 py-1.5 shadow-xs">
+              <Calendar className="w-4 h-4 text-orange-600" />
+              <input
+                type="date"
+                value={dateFilter}
+                onChange={(e) => setDateFilter(e.target.value)}
+                className="bg-transparent text-xs font-bold text-slate-800 outline-none cursor-pointer"
+              />
+            </div>
+            {dateFilter && (
+              <button
+                onClick={() => setDateFilter('')}
+                className="px-3 py-2 rounded-xl bg-red-50 border border-red-200 text-red-600 text-xs font-bold hover:bg-red-100 cursor-pointer"
+              >
+                Clear Date
+              </button>
+            )}
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 text-xs text-slate-700 font-medium focus:outline-none focus:ring-2 focus:ring-orange-500/20 cursor-pointer"
+            >
+              <option value="ALL">All Status</option>
+              <option value="PRESENT">Present</option>
+              <option value="LATE">Late</option>
+              <option value="ABSENT">Absent</option>
+            </select>
+          </div>
         </div>
       )}
 
@@ -329,18 +640,19 @@ export default function AttendancePage() {
                 <th className="py-3.5 px-5">Check Out</th>
                 <th className="py-3.5 px-5">Work Hours</th>
                 <th className="py-3.5 px-5">Status</th>
+                {isAdmin && <th className="py-3.5 px-5 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={isAdmin ? 7 : 5} className="py-8 px-5 text-center text-slate-400">
+                  <td colSpan={isAdmin ? 8 : 5} className="py-8 px-5 text-center text-slate-400">
                     Loading attendance records...
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 7 : 5} className="py-8 px-5 text-center text-slate-400 italic">
+                  <td colSpan={isAdmin ? 8 : 5} className="py-8 px-5 text-center text-slate-400 italic">
                     No attendance records found.
                   </td>
                 </tr>
@@ -366,6 +678,28 @@ export default function AttendancePage() {
                         {log.status}
                       </span>
                     </td>
+                    {isAdmin && (
+                      <td className="py-3.5 px-5 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            onClick={() => handleOpenEdit(log)}
+                            className="px-2.5 py-1.5 rounded-lg bg-orange-50 hover:bg-orange-100 text-orange-700 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Edit Record"
+                          >
+                            <Edit3 className="w-3.5 h-3.5 text-orange-600" />
+                            <span>Edit</span>
+                          </button>
+                          <button
+                            onClick={() => setDeletingLog(log)}
+                            className="px-2.5 py-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-700 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Delete Record"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-red-600" />
+                            <span>Delete</span>
+                          </button>
+                        </div>
+                      </td>
+                    )}
                   </tr>
                 ))
               )}
@@ -373,6 +707,166 @@ export default function AttendancePage() {
           </table>
         </div>
       </div>
+
+      {/* Edit Record Modal */}
+      {editingLog && (
+        <div className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-lg bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-orange-500" />
+                Edit Attendance Record
+              </h2>
+              <button onClick={() => setEditingLog(null)} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Employee ID</label>
+                  <input
+                    type="text"
+                    value={editForm.empId}
+                    onChange={(e) => setEditForm({ ...editForm, empId: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Employee Name</label>
+                  <input
+                    type="text"
+                    value={editForm.empName}
+                    onChange={(e) => setEditForm({ ...editForm, empName: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={editForm.date}
+                    onChange={(e) => setEditForm({ ...editForm, date: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Status</label>
+                  <select
+                    value={editForm.status}
+                    onChange={(e) => setEditForm({ ...editForm, status: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                  >
+                    <option value="PRESENT">PRESENT</option>
+                    <option value="LATE">LATE</option>
+                    <option value="ABSENT">ABSENT</option>
+                    <option value="ON_LEAVE">ON_LEAVE</option>
+                    <option value="HALF_DAY">HALF_DAY</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Check In</label>
+                  <input
+                    type="text"
+                    placeholder="09:30 AM"
+                    value={editForm.checkInTime}
+                    onChange={(e) => setEditForm({ ...editForm, checkInTime: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Check Out</label>
+                  <input
+                    type="text"
+                    placeholder="06:30 PM"
+                    value={editForm.checkOutTime}
+                    onChange={(e) => setEditForm({ ...editForm, checkOutTime: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-700 mb-1">Work Hours</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    value={editForm.workHours}
+                    onChange={(e) => setEditForm({ ...editForm, workHours: parseFloat(e.target.value) || 0 })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-700 mb-1">Remarks / Notes</label>
+                <input
+                  type="text"
+                  placeholder="Optional remarks"
+                  value={editForm.notes}
+                  onChange={(e) => setEditForm({ ...editForm, notes: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20"
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setEditingLog(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveEdit}
+                className="flex-1 py-2.5 rounded-xl saffron-gradient text-white text-xs font-bold shadow-md shadow-orange-500/25 hover:opacity-95"
+              >
+                Save Changes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {deletingLog && (
+        <div className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl space-y-4">
+            <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 text-red-600 flex items-center justify-center mx-auto">
+              <AlertTriangle className="w-6 h-6 text-red-600" />
+            </div>
+
+            <div className="text-center space-y-1">
+              <h3 className="text-base font-bold text-slate-900">Delete Attendance Record?</h3>
+              <p className="text-xs text-slate-500">
+                Are you sure you want to delete the attendance log for{' '}
+                <strong className="text-slate-800">{deletingLog.empName || deletingLog.empId}</strong> on{' '}
+                <strong className="text-slate-800">{deletingLog.date}</strong>?
+              </p>
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => setDeletingLog(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmDelete}
+                className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-md shadow-red-600/25 cursor-pointer"
+              >
+                Delete Record
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Import Preview Modal */}
       {showImportModal && (

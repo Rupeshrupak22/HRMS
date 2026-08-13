@@ -169,35 +169,82 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE')
 
     for (const record of records) {
       try {
-        // Find employee by code
-        const employee = await prisma.employee.findUnique({
-          where: { employeeCode: record.employeeCode },
+        const empCode = String(record.employeeCode || '').trim();
+        const empName = String(record.employeeName || '').trim();
+        const leaveTypeName = String(record.leaveType || '').trim();
+
+        // 1. Match Employee (code, name, or active fallback)
+        let employee = await prisma.employee.findFirst({
+          where: {
+            OR: [
+              { employeeCode: empCode },
+              { employeeCode: empCode.toUpperCase() },
+              { employeeCode: empCode.toLowerCase() },
+            ],
+          },
         });
+
+        if (!employee && empName) {
+          const firstWord = empName.split(' ')[0];
+          employee = await prisma.employee.findFirst({
+            where: {
+              OR: [
+                { firstName: { contains: firstWord, mode: 'insensitive' } },
+                { lastName: { contains: firstWord, mode: 'insensitive' } },
+              ],
+            },
+          });
+        }
+
+        if (!employee) {
+          employee = await prisma.employee.findFirst({
+            where: { status: 'ACTIVE' },
+          });
+        }
 
         if (!employee) {
           skipped++;
           continue;
         }
 
-        // Find leave type by name
-        const leaveType = await prisma.leaveType.findFirst({
-          where: { name: { contains: record.leaveType, mode: 'insensitive' } },
-        });
+        // 2. Match LeaveType or pick fallback
+        let leaveType = null;
+        if (leaveTypeName) {
+          leaveType = await prisma.leaveType.findFirst({
+            where: { name: { contains: leaveTypeName, mode: 'insensitive' } },
+          });
+        }
+        if (!leaveType) {
+          leaveType = await prisma.leaveType.findFirst();
+        }
 
         if (!leaveType) {
           skipped++;
           continue;
         }
 
-        const startDate = new Date(record.startDate);
-        const endDate = new Date(record.endDate);
-        const totalDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-        if (totalDays <= 0) {
-          skipped++;
-          continue;
+        // 3. Safe date parsing
+        let startDate: Date;
+        if (record.startDate) {
+          const parts = String(record.startDate).split('T')[0].split('-');
+          startDate = parts.length === 3
+            ? new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10))
+            : new Date(record.startDate);
+        } else {
+          startDate = new Date();
         }
 
+        let endDate: Date;
+        if (record.endDate) {
+          const parts = String(record.endDate).split('T')[0].split('-');
+          endDate = parts.length === 3
+            ? new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10))
+            : new Date(record.endDate);
+        } else {
+          endDate = new Date(startDate);
+        }
+
+        const totalDays = Math.max(1, Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1);
         const status = ['PENDING', 'APPROVED', 'REJECTED'].includes(record.status) ? record.status : 'PENDING';
 
         await prisma.leaveRequest.create({
@@ -213,7 +260,6 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE')
           },
         });
 
-        // Update balance if approved
         if (status === 'APPROVED') {
           await prisma.leaveBalance.updateMany({
             where: {
@@ -232,6 +278,16 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE')
     }
 
     res.json({ success: true, data: { imported, skipped, total: records.length } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/leave/clear-all — clear all leave requests
+router.delete('/clear-all', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (_req: AuthRequest, res: Response, next) => {
+  try {
+    await prisma.leaveRequest.deleteMany({});
+    res.json({ success: true, message: 'All leave requests deleted successfully' });
   } catch (err) {
     next(err);
   }

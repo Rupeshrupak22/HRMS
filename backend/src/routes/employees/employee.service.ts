@@ -3,7 +3,7 @@ import prisma from '../../lib/prisma';
 import { BadRequestError, NotFoundError } from '../../lib/errors';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './employee.schema';
 
-export async function findAll(params: { search?: string; departmentId?: string; status?: string; userEmail?: string; userRole?: string }) {
+export async function findAll(params: { search?: string; departmentId?: string; status?: string; userEmail?: string; userRole?: string; specialization?: string }) {
   const where: any = {};
 
   if (params.search) {
@@ -17,9 +17,11 @@ export async function findAll(params: { search?: string; departmentId?: string; 
   if (params.departmentId) where.departmentId = params.departmentId;
   if (params.status) where.status = params.status;
 
-  // Data isolation: HR_EXECUTIVE sees only employees they created
-  // HR_ADMIN (Nandini/HR Manager) and SUPER_ADMIN see all
-  if (params.userRole === 'HR_EXECUTIVE' && params.userEmail) {
+  // Data isolation: Regular HR_EXECUTIVE sees only employees they created
+  // Specialist HR_EXECUTIVES (Pavitra, Veena, Nitisha, Aravind, Charitha, Nandini), HR_ADMIN, and SUPER_ADMIN see all
+  const isSpecialist = Boolean(params.specialization) || ['pavitra@adyapan.com', 'veena@adyapan.com', 'nitisha@adyapan.com', 'aravind@adyapan.com', 'charitha@adyapan.com', 'nandini@adyapan.com', 'nandani@adyapan.com'].includes((params.userEmail || '').toLowerCase());
+
+  if (params.userRole === 'HR_EXECUTIVE' && params.userEmail && !isSpecialist) {
     where.createdByEmail = params.userEmail;
   }
 
