@@ -92,6 +92,12 @@ export function authorize(...roles: Role[]) {
       return;
     }
 
+    // Specialists with ATTENDANCE_LEAVE specialization get HR-level access
+    if (req.user.specialization === 'ATTENDANCE_LEAVE') {
+      next();
+      return;
+    }
+
     if (roles.length > 0 && !roles.includes(req.user.role as Role)) {
       next(new ForbiddenError('You do not have permission to access this resource'));
       return;

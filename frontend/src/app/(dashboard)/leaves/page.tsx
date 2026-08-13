@@ -42,11 +42,16 @@ export default function LeavesPage() {
   const [addForm, setAddForm] = useState({
     employeeCode: '',
     employeeName: '',
+    department: '',
     leaveType: 'Casual Leave',
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
     reason: 'Personal Work',
     status: 'APPROVED',
+    attendanceStatus: 'ON LEAVE',
+    approvedBy: '',
+    leaveProof: 'N/A',
+    mailStatus: 'NOT SENT',
   });
 
   // Helper: Find value from row by checking header aliases
@@ -227,14 +232,14 @@ export default function LeavesPage() {
   // Download template
   const handleDownloadTemplate = () => {
     const templateData = [
-      { 'Employee ID': 'EMP-001', 'Employee Name': 'John Doe', 'Leave Type': 'Casual Leave', 'Start Date': '2026-08-15', 'End Date': '2026-08-16', 'Reason': 'Personal work', 'Status': 'APPROVED' },
-      { 'Employee ID': 'EMP-002', 'Employee Name': 'Jane Smith', 'Leave Type': 'Sick Leave', 'Start Date': '2026-08-14', 'End Date': '2026-08-14', 'Reason': 'Fever', 'Status': 'PENDING' },
+      { 'Employee ID': 'EMP-001', 'Employee Name': 'John Doe', 'Department': 'Engineering', 'Leave Type': 'Casual Leave', 'Start Date': '2026-08-15', 'End Date': '2026-08-16', 'Reason': 'Personal work', 'Status': 'APPROVED', 'Attendance Status': 'ON LEAVE', 'Approved By': 'Pavitra', 'Leave Proof': 'Submitted', 'Mail Status': 'SENT' },
+      { 'Employee ID': 'EMP-002', 'Employee Name': 'Jane Smith', 'Department': 'Marketing', 'Leave Type': 'Sick Leave', 'Start Date': '2026-08-14', 'End Date': '2026-08-14', 'Reason': 'Fever', 'Status': 'PENDING', 'Attendance Status': 'ABSENT', 'Approved By': '', 'Leave Proof': 'Pending', 'Mail Status': 'NOT SENT' },
     ];
     const ws = XLSX.utils.json_to_sheet(templateData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Leave Template');
     ws['!cols'] = [
-      { wch: 14 }, { wch: 20 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 30 }, { wch: 12 },
+      { wch: 14 }, { wch: 20 }, { wch: 18 }, { wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 30 }, { wch: 12 }, { wch: 18 }, { wch: 16 }, { wch: 14 }, { wch: 14 },
     ];
     XLSX.writeFile(wb, 'Leave_Import_Template.xlsx');
   };
@@ -263,22 +268,32 @@ export default function LeavesPage() {
         for (const row of jsonData) {
           const empId = findRowValue(row, ['employee id', 'employee_id', 'employeeid', 'employee code', 'employee_code', 'employeecode', 'emp id', 'emp_id', 'empid', 'emp code', 'empcode', 'id', 'code']);
           const empName = findRowValue(row, ['employee name', 'employee_name', 'employeename', 'emp name', 'emp_name', 'empname', 'name', 'staff name']) || '';
+          const department = findRowValue(row, ['department', 'dept', 'department name', 'department_name', 'dept name', 'dept_name']) || '';
           const leaveType = findRowValue(row, ['leave type', 'leave_type', 'leavetype', 'type']) || 'Casual Leave';
           const rawStart = findRowValue(row, ['start date', 'start_date', 'startdate', 'from date', 'from_date', 'from']);
           const rawEnd = findRowValue(row, ['end date', 'end_date', 'enddate', 'to date', 'to_date', 'to']);
           const reason = findRowValue(row, ['reason', 'reasons', 'remarks', 'remark', 'notes', 'note']) || 'Personal work';
           const rawStatus = findRowValue(row, ['status', 'leave status', 'leave_status']);
+          const approvedBy = findRowValue(row, ['approved by', 'approved_by', 'approvedby', 'leave approved by', 'reviewer', 'approver']) || '';
+          const mailStatus = findRowValue(row, ['mail status', 'mail_status', 'mailstatus', 'email status', 'email_status']) || 'NOT SENT';
+          const attendanceStatus = findRowValue(row, ['attendance status', 'attendance_status', 'attendancestatus', 'att status']) || 'ON LEAVE';
+          const leaveProof = findRowValue(row, ['leave proof', 'leave_proof', 'leaveproof', 'proof', 'document']) || 'N/A';
 
           if (!empId) continue;
 
           formattedRows.push({
             'Employee ID': String(empId).trim(),
             'Employee Name': String(empName).trim(),
+            'Department': String(department).trim(),
             'Leave Type': String(leaveType).trim(),
             'Start Date': formatDateVal(rawStart),
             'End Date': formatDateVal(rawEnd || rawStart),
             'Reason': String(reason).trim(),
             'Status': formatStatusVal(rawStatus),
+            'Attendance Status': String(attendanceStatus).trim(),
+            'Approved By': String(approvedBy).trim(),
+            'Leave Proof': String(leaveProof).trim(),
+            'Mail Status': String(mailStatus).trim().toUpperCase() || 'NOT SENT',
           });
         }
 
@@ -304,11 +319,16 @@ export default function LeavesPage() {
       const payload = importData.map((row: any) => ({
         employeeCode: row['Employee ID'],
         employeeName: row['Employee Name'],
+        department: row['Department'],
         leaveType: row['Leave Type'],
         startDate: row['Start Date'],
         endDate: row['End Date'],
         reason: row['Reason'],
         status: row['Status'] || 'PENDING',
+        attendanceStatus: row['Attendance Status'] || 'ON LEAVE',
+        approvedBy: row['Approved By'],
+        leaveProof: row['Leave Proof'] || 'N/A',
+        mailStatus: row['Mail Status'] || 'NOT SENT',
       }));
 
       // Create log entries for UI display
@@ -316,10 +336,12 @@ export default function LeavesPage() {
         id: `lv-imp-${Date.now()}-${idx}`,
         employeeCode: row['Employee ID'],
         employeeName: row['Employee Name'] || `Emp (${row['Employee ID']})`,
+        department: row['Department'],
         employee: {
           employeeCode: row['Employee ID'],
           firstName: row['Employee Name'] || `Emp (${row['Employee ID']})`,
           lastName: '',
+          department: { name: row['Department'] },
         },
         leaveType: { name: row['Leave Type'] },
         startDate: row['Start Date'],
@@ -327,6 +349,10 @@ export default function LeavesPage() {
         totalDays: 1,
         reason: row['Reason'],
         status: row['Status'],
+        attendanceStatus: row['Attendance Status'] || 'ON LEAVE',
+        approvedBy: row['Approved By'],
+        leaveProof: row['Leave Proof'] || 'N/A',
+        mailStatus: row['Mail Status'] || 'NOT SENT',
         importedDate: new Date().toISOString().split('T')[0],
         createdAt: new Date().toISOString(),
       }));
@@ -375,10 +401,12 @@ export default function LeavesPage() {
       id: `man-lve-${Date.now()}`,
       employeeCode: addForm.employeeCode.trim(),
       employeeName: addForm.employeeName.trim() || `Emp (${addForm.employeeCode.trim()})`,
+      department: addForm.department.trim(),
       employee: {
         employeeCode: addForm.employeeCode.trim(),
         firstName: addForm.employeeName.trim() || `Emp (${addForm.employeeCode.trim()})`,
         lastName: '',
+        department: { name: addForm.department.trim() },
       },
       leaveType: typeof addForm.leaveType === 'object' ? addForm.leaveType : { name: addForm.leaveType },
       startDate: addForm.startDate,
@@ -386,6 +414,10 @@ export default function LeavesPage() {
       totalDays: 1,
       reason: addForm.reason,
       status: addForm.status || 'APPROVED',
+      attendanceStatus: addForm.attendanceStatus || 'ON LEAVE',
+      approvedBy: addForm.approvedBy.trim(),
+      leaveProof: addForm.leaveProof || 'N/A',
+      mailStatus: addForm.mailStatus || 'NOT SENT',
       importedDate: addForm.startDate || new Date().toISOString().split('T')[0],
       createdAt: new Date().toISOString(),
     };
@@ -405,11 +437,16 @@ export default function LeavesPage() {
           records: [{
             employeeCode: newReq.employeeCode,
             employeeName: newReq.employeeName,
+            department: newReq.department,
             leaveType: typeof newReq.leaveType === 'object' ? newReq.leaveType.name : newReq.leaveType,
             startDate: newReq.startDate,
             endDate: newReq.endDate,
             reason: newReq.reason,
             status: newReq.status,
+            attendanceStatus: newReq.attendanceStatus,
+            approvedBy: newReq.approvedBy,
+            leaveProof: newReq.leaveProof,
+            mailStatus: newReq.mailStatus,
           }]
         }),
       });
@@ -568,25 +605,30 @@ export default function LeavesPage() {
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase">
                 <th className="py-3.5 px-4">Emp ID</th>
                 <th className="py-3.5 px-4">Employee Name</th>
+                <th className="py-3.5 px-4">Department</th>
                 <th className="py-3.5 px-4">Leave Type</th>
                 <th className="py-3.5 px-4">From</th>
                 <th className="py-3.5 px-4">To</th>
                 <th className="py-3.5 px-4">Days</th>
                 <th className="py-3.5 px-4">Reason</th>
                 <th className="py-3.5 px-4">Status</th>
+                <th className="py-3.5 px-4">Attendance Status</th>
+                <th className="py-3.5 px-4">Approved By</th>
+                <th className="py-3.5 px-4">Leave Proof</th>
+                <th className="py-3.5 px-4">Mail Status</th>
                 {isAdmin && <th className="py-3.5 px-4">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={isAdmin ? 9 : 8} className="py-8 px-5 text-center text-slate-400">
+                  <td colSpan={isAdmin ? 14 : 13} className="py-8 px-5 text-center text-slate-400">
                     Loading leave records...
                   </td>
                 </tr>
               ) : filteredRequests.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 9 : 8} className="py-8 px-5 text-center text-slate-400 italic">
+                  <td colSpan={isAdmin ? 14 : 13} className="py-8 px-5 text-center text-slate-400 italic">
                     No leave requests found.
                   </td>
                 </tr>
@@ -597,6 +639,7 @@ export default function LeavesPage() {
                     <td className="py-3 px-4 font-semibold text-slate-900">
                       {req.employee?.firstName} {req.employee?.lastName}
                     </td>
+                    <td className="py-3 px-4 text-slate-700">{req.employee?.department?.name || req.department || '-'}</td>
                     <td className="py-3 px-4 text-slate-700">{req.leaveType?.name || '-'}</td>
                     <td className="py-3 px-4 text-slate-700">{new Date(req.startDate).toLocaleDateString('en-IN')}</td>
                     <td className="py-3 px-4 text-slate-700">{new Date(req.endDate).toLocaleDateString('en-IN')}</td>
@@ -625,6 +668,34 @@ export default function LeavesPage() {
                           {req.status}
                         </span>
                       )}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                        req.attendanceStatus === 'PRESENT' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                        req.attendanceStatus === 'ABSENT' ? 'bg-red-50 text-red-700 border border-red-200' :
+                        'bg-slate-50 text-slate-500 border border-slate-200'
+                      }`}>
+                        {req.attendanceStatus || 'ON LEAVE'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-slate-700">{req.approvedBy || req.reviewedBy?.firstName || '-'}</td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                        req.leaveProof === 'Submitted' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                        req.leaveProof === 'Pending' ? 'bg-amber-50 text-amber-700 border border-amber-200' :
+                        'bg-slate-50 text-slate-500 border border-slate-200'
+                      }`}>
+                        {req.leaveProof || 'N/A'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                        req.mailStatus === 'SENT' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                        req.mailStatus === 'FAILED' ? 'bg-red-50 text-red-700 border border-red-200' :
+                        'bg-slate-50 text-slate-500 border border-slate-200'
+                      }`}>
+                        {req.mailStatus || 'NOT SENT'}
+                      </span>
                     </td>
                     {isAdmin && (
                       <td className="py-3 px-4">
@@ -784,11 +855,16 @@ export default function LeavesPage() {
                   <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase sticky top-0">
                     <th className="py-2.5 px-3">Emp ID</th>
                     <th className="py-2.5 px-3">Name</th>
+                    <th className="py-2.5 px-3">Department</th>
                     <th className="py-2.5 px-3">Leave Type</th>
                     <th className="py-2.5 px-3">From</th>
                     <th className="py-2.5 px-3">To</th>
                     <th className="py-2.5 px-3">Reason</th>
                     <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3">Att. Status</th>
+                    <th className="py-2.5 px-3">Approved By</th>
+                    <th className="py-2.5 px-3">Proof</th>
+                    <th className="py-2.5 px-3">Mail Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -796,6 +872,7 @@ export default function LeavesPage() {
                     <tr key={i} className="hover:bg-orange-50/30">
                       <td className="py-2.5 px-3 font-mono font-bold text-slate-700">{row['Employee ID']}</td>
                       <td className="py-2.5 px-3 text-slate-900">{row['Employee Name'] || '-'}</td>
+                      <td className="py-2.5 px-3 text-slate-700">{row['Department'] || '-'}</td>
                       <td className="py-2.5 px-3 text-slate-700">{row['Leave Type']}</td>
                       <td className="py-2.5 px-3 text-slate-700">{row['Start Date']}</td>
                       <td className="py-2.5 px-3 text-slate-700">{row['End Date']}</td>
@@ -805,6 +882,15 @@ export default function LeavesPage() {
                             row['Status'] === 'REJECTED' ? 'bg-red-50 text-red-700' :
                               'bg-amber-50 text-amber-700'
                           }`}>{row['Status'] || 'PENDING'}</span>
+                      </td>
+                      <td className="py-2.5 px-3 text-slate-700">{row['Attendance Status'] || 'ON LEAVE'}</td>
+                      <td className="py-2.5 px-3 text-slate-700">{row['Approved By'] || '-'}</td>
+                      <td className="py-2.5 px-3 text-slate-700">{row['Leave Proof'] || 'N/A'}</td>
+                      <td className="py-2.5 px-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${row['Mail Status'] === 'SENT' ? 'bg-emerald-50 text-emerald-700' :
+                            row['Mail Status'] === 'FAILED' ? 'bg-red-50 text-red-700' :
+                              'bg-slate-50 text-slate-500'
+                          }`}>{row['Mail Status'] || 'NOT SENT'}</span>
                       </td>
                     </tr>
                   ))}
@@ -872,6 +958,17 @@ export default function LeavesPage() {
                 </div>
               </div>
 
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Department</label>
+                <input
+                  type="text"
+                  placeholder="e.g. Engineering / Marketing / HR"
+                  value={addForm.department}
+                  onChange={(e) => setAddForm({ ...addForm, department: e.target.value })}
+                  className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+                />
+              </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Leave Type *</label>
@@ -932,6 +1029,60 @@ export default function LeavesPage() {
                   onChange={(e) => setAddForm({ ...addForm, reason: e.target.value })}
                   className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
                 />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Approved By</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Pavitra / Manager Name"
+                    value={addForm.approvedBy}
+                    onChange={(e) => setAddForm({ ...addForm, approvedBy: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Mail Status</label>
+                  <select
+                    value={addForm.mailStatus}
+                    onChange={(e) => setAddForm({ ...addForm, mailStatus: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-bold cursor-pointer"
+                  >
+                    <option value="NOT SENT">NOT SENT</option>
+                    <option value="SENT">SENT</option>
+                    <option value="FAILED">FAILED</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Attendance Status</label>
+                  <select
+                    value={addForm.attendanceStatus}
+                    onChange={(e) => setAddForm({ ...addForm, attendanceStatus: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-bold cursor-pointer"
+                  >
+                    <option value="ON LEAVE">ON LEAVE</option>
+                    <option value="PRESENT">PRESENT</option>
+                    <option value="ABSENT">ABSENT</option>
+                    <option value="HALF DAY">HALF DAY</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Leave Proof</label>
+                  <select
+                    value={addForm.leaveProof}
+                    onChange={(e) => setAddForm({ ...addForm, leaveProof: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-bold cursor-pointer"
+                  >
+                    <option value="N/A">N/A</option>
+                    <option value="Submitted">Submitted</option>
+                    <option value="Pending">Pending</option>
+                    <option value="Not Required">Not Required</option>
+                  </select>
+                </div>
               </div>
 
               <div className="flex gap-3 pt-2">

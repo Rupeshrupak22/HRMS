@@ -47,10 +47,15 @@ export default function AttendancePage() {
   const [addForm, setAddForm] = useState({
     empId: '',
     empName: '',
+    department: '',
     date: todayStr,
     checkInTime: '09:30 AM',
     checkOutTime: '06:30 PM',
     status: 'PRESENT',
+    lateLogin: 'No',
+    earlyLogout: 'No',
+    wfh: 'No',
+    wfhApprovedBy: '',
     notes: 'Manual Entry',
   });
 
@@ -333,15 +338,15 @@ export default function AttendancePage() {
   // Download template
   const handleDownloadTemplate = () => {
     const templateData = [
-      { 'Employee ID': 'EMP-001', 'Employee Name': 'John Doe', 'Date': '2026-08-12', 'Check In Time': '09:30 AM', 'Check Out Time': '06:30 PM', 'Status': 'PRESENT', 'Remarks': '' },
-      { 'Employee ID': 'EMP-002', 'Employee Name': 'Jane Smith', 'Date': '2026-08-12', 'Check In Time': '09:45 AM', 'Check Out Time': '06:30 PM', 'Status': 'LATE', 'Remarks': 'Traffic' },
-      { 'Employee ID': 'EMP-003', 'Employee Name': 'Ravi Kumar', 'Date': '2026-08-12', 'Check In Time': '', 'Check Out Time': '', 'Status': 'ABSENT', 'Remarks': 'Sick' },
+      { 'Employee ID': 'EMP-001', 'Employee Name': 'John Doe', 'Department': 'Engineering', 'Date': '2026-08-12', 'Login Time': '09:30 AM', 'Logout Time': '06:30 PM', 'Attendance Status': 'PRESENT', 'Late Login': 'No', 'Early Logout': 'No', 'Work From Home': 'No', 'WFH Approved By': '', 'Remarks': '' },
+      { 'Employee ID': 'EMP-002', 'Employee Name': 'Jane Smith', 'Department': 'Marketing', 'Date': '2026-08-12', 'Login Time': '10:15 AM', 'Logout Time': '06:30 PM', 'Attendance Status': 'LATE', 'Late Login': 'Yes', 'Early Logout': 'No', 'Work From Home': 'No', 'WFH Approved By': '', 'Remarks': 'Traffic' },
+      { 'Employee ID': 'EMP-003', 'Employee Name': 'Ravi Kumar', 'Department': 'HR', 'Date': '2026-08-12', 'Login Time': '09:30 AM', 'Logout Time': '06:30 PM', 'Attendance Status': 'PRESENT', 'Late Login': 'No', 'Early Logout': 'No', 'Work From Home': 'Yes', 'WFH Approved By': 'Pavitra', 'Remarks': 'Remote' },
     ];
     const ws = XLSX.utils.json_to_sheet(templateData);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Attendance Template');
     ws['!cols'] = [
-      { wch: 14 }, { wch: 20 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 10 }, { wch: 20 },
+      { wch: 14 }, { wch: 20 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 14 }, { wch: 18 }, { wch: 12 }, { wch: 14 }, { wch: 16 }, { wch: 18 }, { wch: 20 },
     ];
     XLSX.writeFile(wb, 'Attendance_Import_Template.xlsx');
   };
@@ -370,10 +375,15 @@ export default function AttendancePage() {
         for (const row of jsonData) {
           const empId = findRowValue(row, ['employee id', 'employee_id', 'employeeid', 'employee code', 'employee_code', 'employeecode', 'emp id', 'emp_id', 'empid', 'emp code', 'empcode', 'id', 'code']);
           const empName = findRowValue(row, ['employee name', 'employee_name', 'employeename', 'emp name', 'emp_name', 'empname', 'name', 'staff name']) || '';
+          const department = findRowValue(row, ['department', 'dept', 'department name', 'department_name', 'dept name', 'dept_name']) || '';
           const rawDate = findRowValue(row, ['date', 'attendance date', 'attendance_date', 'att date', 'day']);
-          const rawCheckIn = findRowValue(row, ['check in time', 'check in', 'checkin time', 'checkintime', 'check-in', 'in time', 'intime', 'in', 'time in']);
-          const rawCheckOut = findRowValue(row, ['check out time', 'check out', 'checkout time', 'checkouttime', 'check-out', 'out time', 'outtime', 'out', 'time out']);
-          const rawStatus = findRowValue(row, ['status', 'attendance status', 'attendance_status', 'att status']);
+          const rawCheckIn = findRowValue(row, ['login time', 'logintime', 'login_time', 'check in time', 'check in', 'checkin time', 'checkintime', 'check-in', 'in time', 'intime', 'in', 'time in']);
+          const rawCheckOut = findRowValue(row, ['logout time', 'logouttime', 'logout_time', 'check out time', 'check out', 'checkout time', 'checkouttime', 'check-out', 'out time', 'outtime', 'out', 'time out']);
+          const rawStatus = findRowValue(row, ['attendance status', 'attendance_status', 'status', 'att status']);
+          const rawLateLogin = findRowValue(row, ['late login', 'late_login', 'latelogin', 'late']) || 'No';
+          const rawEarlyLogout = findRowValue(row, ['early logout', 'early_logout', 'earlylogout', 'early']) || 'No';
+          const rawWfh = findRowValue(row, ['work from home', 'work_from_home', 'workfromhome', 'wfh']) || 'No';
+          const rawWfhApprovedBy = findRowValue(row, ['wfh approved by', 'wfh_approved_by', 'wfhapprovedby', 'wfh approver']) || '';
           const rawRemarks = findRowValue(row, ['remarks', 'remark', 'notes', 'note', 'comments', 'comment']) || '';
 
           if (!empId) {
@@ -383,10 +393,15 @@ export default function AttendancePage() {
           formattedRows.push({
             'Employee ID': String(empId).trim(),
             'Employee Name': String(empName).trim(),
+            'Department': String(department).trim(),
             'Date': formatDateVal(rawDate),
-            'Check In Time': formatTimeVal(rawCheckIn),
-            'Check Out Time': formatTimeVal(rawCheckOut),
-            'Status': formatStatusVal(rawStatus),
+            'Login Time': formatTimeVal(rawCheckIn),
+            'Logout Time': formatTimeVal(rawCheckOut),
+            'Attendance Status': formatStatusVal(rawStatus),
+            'Late Login': String(rawLateLogin).trim().toLowerCase().startsWith('y') ? 'Yes' : 'No',
+            'Early Logout': String(rawEarlyLogout).trim().toLowerCase().startsWith('y') ? 'Yes' : 'No',
+            'Work From Home': String(rawWfh).trim().toLowerCase().startsWith('y') ? 'Yes' : 'No',
+            'WFH Approved By': String(rawWfhApprovedBy).trim(),
             'Remarks': String(rawRemarks).trim(),
           });
         }
@@ -413,28 +428,38 @@ export default function AttendancePage() {
       const payload = importData.map((row: any) => ({
         employeeCode: row['Employee ID'],
         employeeName: row['Employee Name'] || '',
+        department: row['Department'] || '',
         date: row['Date'],
-        checkInTime: row['Check In Time'] === '-' ? null : row['Check In Time'],
-        checkOutTime: row['Check Out Time'] === '-' ? null : row['Check Out Time'],
-        status: row['Status'] || 'PRESENT',
+        checkInTime: row['Login Time'] === '-' ? null : row['Login Time'],
+        checkOutTime: row['Logout Time'] === '-' ? null : row['Logout Time'],
+        status: row['Attendance Status'] || 'PRESENT',
+        lateLogin: row['Late Login'] || 'No',
+        earlyLogout: row['Early Logout'] || 'No',
+        wfh: row['Work From Home'] || 'No',
+        wfhApprovedBy: row['WFH Approved By'] || '',
         remarks: row['Remarks'] || '',
       }));
 
       // Create log entries for UI display
       const newLogs = importData.map((row: any, idx: number) => {
         let workHours = 0;
-        if (row['Check In Time'] !== '-' && row['Check Out Time'] !== '-') {
+        if (row['Login Time'] !== '-' && row['Logout Time'] !== '-') {
           workHours = 8;
         }
         return {
           id: `imp-${Date.now()}-${idx}`,
           empId: row['Employee ID'],
           empName: row['Employee Name'] || `Emp (${row['Employee ID']})`,
+          department: row['Department'] || '',
           date: row['Date'],
-          checkInTime: row['Check In Time'],
-          checkOutTime: row['Check Out Time'],
+          checkInTime: row['Login Time'],
+          checkOutTime: row['Logout Time'],
           workHours: workHours,
-          status: row['Status'],
+          status: row['Attendance Status'],
+          lateLogin: row['Late Login'] || 'No',
+          earlyLogout: row['Early Logout'] || 'No',
+          wfh: row['Work From Home'] || 'No',
+          wfhApprovedBy: row['WFH Approved By'] || '',
           notes: row['Remarks'],
           source: 'IMPORT',
         };
@@ -490,11 +515,16 @@ export default function AttendancePage() {
       id: `man-${Date.now()}`,
       empId: addForm.empId.trim(),
       empName: addForm.empName.trim() || `Emp (${addForm.empId.trim()})`,
+      department: addForm.department.trim(),
       date: addForm.date || todayStr,
       checkInTime: addForm.checkInTime || '-',
       checkOutTime: addForm.checkOutTime || '-',
       workHours: addForm.checkInTime && addForm.checkOutTime ? 8 : 0,
       status: addForm.status || 'PRESENT',
+      lateLogin: addForm.lateLogin || 'No',
+      earlyLogout: addForm.earlyLogout || 'No',
+      wfh: addForm.wfh || 'No',
+      wfhApprovedBy: addForm.wfhApprovedBy.trim(),
       notes: addForm.notes || 'Manual Entry',
       source: 'MANUAL',
     };
@@ -514,10 +544,15 @@ export default function AttendancePage() {
           records: [{
             employeeCode: newLog.empId,
             employeeName: newLog.empName,
+            department: newLog.department,
             date: newLog.date,
             checkInTime: newLog.checkInTime === '-' ? null : newLog.checkInTime,
             checkOutTime: newLog.checkOutTime === '-' ? null : newLog.checkOutTime,
             status: newLog.status,
+            lateLogin: newLog.lateLogin,
+            earlyLogout: newLog.earlyLogout,
+            wfh: newLog.wfh,
+            wfhApprovedBy: newLog.wfhApprovedBy,
             remarks: newLog.notes,
           }]
         }),
@@ -703,24 +738,29 @@ export default function AttendancePage() {
               <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase">
                 {isAdmin && <th className="py-3.5 px-5">Emp ID</th>}
                 {isAdmin && <th className="py-3.5 px-5">Employee Name</th>}
+                {isAdmin && <th className="py-3.5 px-5">Department</th>}
                 <th className="py-3.5 px-5">Date</th>
-                <th className="py-3.5 px-5">Check In</th>
-                <th className="py-3.5 px-5">Check Out</th>
+                <th className="py-3.5 px-5">Login Time</th>
+                <th className="py-3.5 px-5">Logout Time</th>
                 <th className="py-3.5 px-5">Work Hours</th>
-                <th className="py-3.5 px-5">Status</th>
+                <th className="py-3.5 px-5">Late Login</th>
+                <th className="py-3.5 px-5">Early Logout</th>
+                <th className="py-3.5 px-5">Attendance Status</th>
+                <th className="py-3.5 px-5">WFH</th>
+                <th className="py-3.5 px-5">WFH Approved By</th>
                 {isAdmin && <th className="py-3.5 px-5 text-right">Actions</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={isAdmin ? 8 : 5} className="py-8 px-5 text-center text-slate-400">
+                  <td colSpan={isAdmin ? 13 : 10} className="py-8 px-5 text-center text-slate-400">
                     Loading attendance records...
                   </td>
                 </tr>
               ) : logs.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 8 : 5} className="py-8 px-5 text-center text-slate-400 italic">
+                  <td colSpan={isAdmin ? 13 : 10} className="py-8 px-5 text-center text-slate-400 italic">
                     No attendance records found.
                   </td>
                 </tr>
@@ -729,10 +769,25 @@ export default function AttendancePage() {
                   <tr key={idx} className="hover:bg-orange-50/40 transition-colors">
                     {isAdmin && <td className="py-3.5 px-5 font-mono font-bold text-slate-700">{log.empId || '-'}</td>}
                     {isAdmin && <td className="py-3.5 px-5 font-semibold text-slate-900">{log.empName || '-'}</td>}
+                    {isAdmin && <td className="py-3.5 px-5 text-slate-700">{log.department || '-'}</td>}
                     <td className="py-3.5 px-5 font-bold text-slate-900">{log.date}</td>
                     <td className="py-3.5 px-5 text-slate-700 font-medium">{log.checkInTime || '-'}</td>
                     <td className="py-3.5 px-5 text-slate-700 font-medium">{log.checkOutTime || '-'}</td>
                     <td className="py-3.5 px-5 font-mono text-slate-700 font-semibold">{log.workHours ? `${log.workHours} hrs` : '-'}</td>
+                    <td className="py-3.5 px-5">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                        log.lateLogin === 'Yes' ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-slate-50 text-slate-500 border border-slate-200'
+                      }`}>
+                        {log.lateLogin || 'No'}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-5">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                        log.earlyLogout === 'Yes' ? 'bg-orange-50 text-orange-700 border border-orange-200' : 'bg-slate-50 text-slate-500 border border-slate-200'
+                      }`}>
+                        {log.earlyLogout || 'No'}
+                      </span>
+                    </td>
                     <td className="py-3.5 px-5">
                       <span
                         className={`px-2.5 py-1 rounded-md text-[10px] font-bold ${
@@ -746,6 +801,14 @@ export default function AttendancePage() {
                         {log.status}
                       </span>
                     </td>
+                    <td className="py-3.5 px-5">
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
+                        log.wfh === 'Yes' ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-slate-50 text-slate-500 border border-slate-200'
+                      }`}>
+                        {log.wfh || 'No'}
+                      </span>
+                    </td>
+                    <td className="py-3.5 px-5 text-slate-700">{log.wfhApprovedBy || '-'}</td>
                     {isAdmin && (
                       <td className="py-3.5 px-5 text-right">
                         <div className="flex items-center justify-end gap-1.5">
@@ -959,10 +1022,14 @@ export default function AttendancePage() {
                   <tr className="bg-slate-50 border-b border-slate-200 text-[10px] font-bold text-slate-500 uppercase sticky top-0">
                     <th className="py-2.5 px-3">Emp ID</th>
                     <th className="py-2.5 px-3">Name</th>
+                    <th className="py-2.5 px-3">Dept</th>
                     <th className="py-2.5 px-3">Date</th>
-                    <th className="py-2.5 px-3">Check In</th>
-                    <th className="py-2.5 px-3">Check Out</th>
+                    <th className="py-2.5 px-3">Login Time</th>
+                    <th className="py-2.5 px-3">Logout Time</th>
                     <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3">Late</th>
+                    <th className="py-2.5 px-3">Early Out</th>
+                    <th className="py-2.5 px-3">WFH</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -970,16 +1037,20 @@ export default function AttendancePage() {
                     <tr key={i} className="hover:bg-orange-50/30">
                       <td className="py-2.5 px-3 font-mono font-bold text-slate-700">{row['Employee ID']}</td>
                       <td className="py-2.5 px-3 text-slate-900">{row['Employee Name'] || '-'}</td>
+                      <td className="py-2.5 px-3 text-slate-700">{row['Department'] || '-'}</td>
                       <td className="py-2.5 px-3 text-slate-700">{row['Date']}</td>
-                      <td className="py-2.5 px-3 text-slate-700">{row['Check In Time'] || '-'}</td>
-                      <td className="py-2.5 px-3 text-slate-700">{row['Check Out Time'] || '-'}</td>
+                      <td className="py-2.5 px-3 text-slate-700">{row['Login Time'] || '-'}</td>
+                      <td className="py-2.5 px-3 text-slate-700">{row['Logout Time'] || '-'}</td>
                       <td className="py-2.5 px-3">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          row['Status'] === 'PRESENT' ? 'bg-emerald-50 text-emerald-700' :
-                          row['Status'] === 'LATE' ? 'bg-amber-50 text-amber-700' :
+                          row['Attendance Status'] === 'PRESENT' ? 'bg-emerald-50 text-emerald-700' :
+                          row['Attendance Status'] === 'LATE' ? 'bg-amber-50 text-amber-700' :
                           'bg-red-50 text-red-700'
-                        }`}>{row['Status']}</span>
+                        }`}>{row['Attendance Status']}</span>
                       </td>
+                      <td className="py-2.5 px-3 text-slate-700">{row['Late Login']}</td>
+                      <td className="py-2.5 px-3 text-slate-700">{row['Early Logout']}</td>
+                      <td className="py-2.5 px-3 text-slate-700">{row['Work From Home']}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -1048,6 +1119,16 @@ export default function AttendancePage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
+                  <label className="block font-bold text-slate-700 mb-1">Department</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Engineering / Marketing"
+                    value={addForm.department}
+                    onChange={(e) => setAddForm({ ...addForm, department: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+                  />
+                </div>
+                <div>
                   <label className="block font-bold text-slate-700 mb-1">Attendance Date *</label>
                   <input
                     type="date"
@@ -1056,6 +1137,32 @@ export default function AttendancePage() {
                     className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium cursor-pointer"
                   />
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Login Time</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 09:30 AM"
+                    value={addForm.checkInTime}
+                    onChange={(e) => setAddForm({ ...addForm, checkInTime: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Logout Time</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. 06:30 PM"
+                    value={addForm.checkOutTime}
+                    onChange={(e) => setAddForm({ ...addForm, checkOutTime: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="block font-bold text-slate-700 mb-1">Attendance Status *</label>
                   <select
@@ -1070,26 +1177,49 @@ export default function AttendancePage() {
                     <option value="ON_LEAVE">ON LEAVE</option>
                   </select>
                 </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Late Login</label>
+                  <select
+                    value={addForm.lateLogin}
+                    onChange={(e) => setAddForm({ ...addForm, lateLogin: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-bold cursor-pointer"
+                  >
+                    <option value="No">No</option>
+                    <option value="Yes">Yes</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Early Logout</label>
+                  <select
+                    value={addForm.earlyLogout}
+                    onChange={(e) => setAddForm({ ...addForm, earlyLogout: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-bold cursor-pointer"
+                  >
+                    <option value="No">No</option>
+                    <option value="Yes">Yes</option>
+                  </select>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Check In Time</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 09:30 AM"
-                    value={addForm.checkInTime}
-                    onChange={(e) => setAddForm({ ...addForm, checkInTime: e.target.value })}
-                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
-                  />
+                  <label className="block font-bold text-slate-700 mb-1">Work From Home</label>
+                  <select
+                    value={addForm.wfh}
+                    onChange={(e) => setAddForm({ ...addForm, wfh: e.target.value })}
+                    className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-bold cursor-pointer"
+                  >
+                    <option value="No">No</option>
+                    <option value="Yes">Yes</option>
+                  </select>
                 </div>
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Check Out Time</label>
+                  <label className="block font-bold text-slate-700 mb-1">WFH Approved By</label>
                   <input
                     type="text"
-                    placeholder="e.g. 06:30 PM"
-                    value={addForm.checkOutTime}
-                    onChange={(e) => setAddForm({ ...addForm, checkOutTime: e.target.value })}
+                    placeholder="e.g. Pavitra / Manager"
+                    value={addForm.wfhApprovedBy}
+                    onChange={(e) => setAddForm({ ...addForm, wfhApprovedBy: e.target.value })}
                     className="w-full bg-slate-50 text-slate-900 p-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
                   />
                 </div>
