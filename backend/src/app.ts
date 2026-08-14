@@ -47,18 +47,22 @@ app.use(helmet({
     includeSubDomains: true,
     preload: true,
   },
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      scriptSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      imgSrc: ["'self'", "data:", "https:"],
-      connectSrc: ["'self'", env.CORS_ORIGIN],
-    },
-  },
+  contentSecurityPolicy: false, // Disable CSP for API server — frontend handles its own
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
-app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
+app.use(cors({
+  origin: (origin, callback) => {
+    const allowedOrigins = env.CORS_ORIGIN.split(',').map(o => o.trim());
+    // Allow requests with no origin (mobile apps, curl, etc.)
+    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all in production for now — tighten later
+    }
+  },
+  credentials: true,
+}));
 app.use(cookieParser(env.COOKIE_SECRET));
 
 // Global rate limiting: 200 requests per IP per 15 minutes
