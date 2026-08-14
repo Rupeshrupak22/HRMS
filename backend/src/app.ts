@@ -2,11 +2,14 @@ import express, { Router } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import fs from 'fs';
 import path from 'path';
 import { env } from './lib/env';
 import prisma from './lib/prisma';
 import { errorHandler } from './middleware/errorHandler';
+import { csrfProtection } from './middleware/csrf';
 
 // Route imports
 import authRoutes from './routes/auth/auth.routes';
@@ -30,14 +33,46 @@ import aravindRoutes from './routes/specialists/aravind.routes';
 import nitishaRoutes from './routes/specialists/nitisha.routes';
 import veenaRoutes from './routes/specialists/veena.routes';
 import aiRoutes from './routes/ai/ai.routes';
+import { authenticate } from './middleware/auth';
 
 const app = express();
 
 // Global middleware
-app.use(helmet());
+app.use(helmet({
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'"],
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", env.CORS_ORIGIN],
+    },
+  },
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+}));
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
+app.use(cookieParser(env.COOKIE_SECRET));
+
+// Global rate limiting: 100 requests per IP per 15 minutes
+const globalLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 100,
+  message: { success: false, message: 'Too many requests. Please try again later.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+app.use(globalLimiter);
+
+app.use(express.json({ limit: '2mb' }));
+app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+
+// CSRF protection for state-changing requests
+app.use(csrfProtection);
 
 if (env.NODE_ENV === 'development') {
   app.use(morgan('dev'));
@@ -123,12 +158,21 @@ const getOverallReportsHandler = async (_req: express.Request, res: express.Resp
 };
 
 const postOverallReportHandler = async (req: express.Request, res: express.Response) => {
-  const newReport = {
+  // Validate incoming report data
+  const allowedFields = ['reportDate', 'submittedBy', 'department', 'summary', 'metrics', 'status', 'notes'];
+  const sanitizedBody: Record<string, any> = {};
+  for (const key of allowedFields) {
+    if (req.body[key] !== undefined) {
+      sanitizedBody[key] = req.body[key];
+    }
+  }
+
+  const newReport: Record<string, any> = {
     id: `ov-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
     status: 'SUBMITTED',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
-    ...req.body,
+    ...sanitizedBody,
   };
   const currentDisk = loadDiskReports();
   const updatedDisk = [newReport, ...currentDisk.filter((r: any) => r.id !== newReport.id && r.reportDate !== newReport.reportDate)];
@@ -136,7 +180,7 @@ const postOverallReportHandler = async (req: express.Request, res: express.Respo
 
   try {
     if ((prisma as any).overallReport) {
-      const dbReport = await (prisma as any).overallReport.create({ data: req.body });
+      const dbReport = await (prisma as any).overallReport.create({ data: sanitizedBody });
       return res.status(201).json(dbReport);
     }
   } catch (err: any) {
@@ -145,11 +189,11 @@ const postOverallReportHandler = async (req: express.Request, res: express.Respo
   return res.status(201).json(newReport);
 };
 
-// GET & POST /api/v1/overall-report — HR Manager report data for admin
-app.get('/api/v1/overall-report', getOverallReportsHandler);
-app.get('/api/overall-report', getOverallReportsHandler);
-app.post('/api/v1/overall-report', postOverallReportHandler);
-app.post('/api/overall-report', postOverallReportHandler);
+// GET & POST /api/v1/overall-report — HR Manager report data (protected)
+app.get('/api/v1/overall-report', authenticate, getOverallReportsHandler);
+app.get('/api/overall-report', authenticate, getOverallReportsHandler);
+app.post('/api/v1/overall-report', authenticate, postOverallReportHandler);
+app.post('/api/overall-report', authenticate, postOverallReportHandler);
 
 // Public payroll read endpoint (no auth required - for manager reports)
 const defaultPayrollRecords = [
@@ -195,8 +239,8 @@ const getPayrollPublicHandler = async (_req: express.Request, res: express.Respo
   }
 };
 
-app.get('/api/v1/payroll-public', getPayrollPublicHandler);
-app.get('/api/payroll-public', getPayrollPublicHandler);
+app.get('/api/v1/payroll-public', authenticate, getPayrollPublicHandler);
+app.get('/api/payroll-public', authenticate, getPayrollPublicHandler);
 
 // 404 handler
 app.use((_req, res) => {

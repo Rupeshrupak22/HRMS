@@ -1,8 +1,8 @@
 import { z } from 'zod';
 
 export const loginSchema = z.object({
-  identifier: z.string().min(1, 'Email or employee code is required'),
-  password: z.string().min(1, 'Password is required'),
+  identifier: z.string().min(1, 'Email or employee code is required').max(254, 'Identifier too long'),
+  password: z.string().min(1, 'Password is required').max(128, 'Password too long'),
 });
 
 export const refreshTokenSchema = z.object({

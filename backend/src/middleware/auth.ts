@@ -10,24 +10,32 @@ import { AuthRequest, JwtPayload, Role } from '../types';
  */
 export async function authenticate(req: AuthRequest, _res: Response, next: NextFunction): Promise<void> {
   try {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new UnauthorizedError('Missing or invalid authorization header');
+    // Try to get token from: 1) httpOnly cookie, 2) Authorization header
+    let token: string | null = null;
+
+    if (req.cookies?.access_token) {
+      token = req.cookies.access_token;
+    } else {
+      const authHeader = req.headers.authorization;
+      if (authHeader?.startsWith('Bearer ')) {
+        token = authHeader.split(' ')[1];
+      }
     }
 
-    const token = authHeader.split(' ')[1];
+    if (!token) {
+      throw new UnauthorizedError('Missing authentication credentials');
+    }
+
     let payload: JwtPayload | null = null;
 
     try {
       payload = jwt.verify(token, env.JWT_SECRET) as JwtPayload;
     } catch {
-      // Fallback: decode token to check if user identity is present even if token expired
-      const decoded = jwt.decode(token) as any;
-      if (decoded && (decoded.sub || decoded.email)) {
-        payload = decoded;
-      } else {
-        throw new UnauthorizedError('Invalid or expired token');
-      }
+      throw new UnauthorizedError('Invalid or expired token');
+    }
+
+    if (!payload || !payload.sub) {
+      throw new UnauthorizedError('Invalid token payload');
     }
 
     let user = null;
@@ -44,14 +52,12 @@ export async function authenticate(req: AuthRequest, _res: Response, next: NextF
       });
     }
 
-    if (!user || user.isLocked) {
-      // Fallback for demo specialist accounts
-      const firstUser = await prisma.user.findFirst({ include: { employee: true } });
-      if (firstUser) {
-        user = firstUser;
-      } else {
-        throw new UnauthorizedError('User account is locked or invalid');
-      }
+    if (!user) {
+      throw new UnauthorizedError('User not found');
+    }
+
+    if (user.isLocked) {
+      throw new UnauthorizedError('User account is locked. Contact HR admin.');
     }
 
     req.user = {
@@ -92,8 +98,9 @@ export function authorize(...roles: Role[]) {
       return;
     }
 
-    // Specialists with ATTENDANCE_LEAVE specialization get HR-level access
-    if (req.user.specialization === 'ATTENDANCE_LEAVE') {
+    // Specialists with specific specialization get access to their domain routes
+    // But they still must match allowed roles for critical operations
+    if (req.user.specialization && roles.includes('HR_EXECUTIVE' as Role)) {
       next();
       return;
     }

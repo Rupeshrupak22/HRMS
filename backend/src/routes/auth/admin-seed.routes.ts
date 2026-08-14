@@ -1,11 +1,13 @@
 import { Router, Response } from 'express';
 import bcrypt from 'bcrypt';
 import prisma from '../../lib/prisma';
+import { authenticate, authorize } from '../../middleware/auth';
+import { AuthRequest } from '../../types';
 
 const router = Router();
 
-// POST /api/auth/seed-admin — one-time admin creation
-router.post('/seed-admin', async (_req, res: Response, next) => {
+// POST /api/auth/seed-admin — one-time admin creation (protected - requires existing SUPER_ADMIN)
+router.post('/seed-admin', authenticate, authorize('SUPER_ADMIN'), async (_req: AuthRequest, res: Response, next) => {
   try {
     const existing = await prisma.user.findUnique({ where: { email: 'admin@adyapan.com' } });
     if (existing) {
@@ -23,7 +25,7 @@ router.post('/seed-admin', async (_req, res: Response, next) => {
       },
     });
 
-    res.status(201).json({ message: 'Admin created', email: 'admin@adyapan.com', password: 'Admin@123' });
+    res.status(201).json({ message: 'Admin created', email: 'admin@adyapan.com' });
   } catch (err) {
     next(err);
   }
