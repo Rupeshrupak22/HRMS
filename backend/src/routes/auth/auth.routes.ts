@@ -17,13 +17,17 @@ const COOKIE_OPTIONS = {
   path: '/',
 };
 
-// Rate limiting: max 5 login attempts per IP per 15 minutes
+// Rate limiting: max 20 login attempts per IP per 15 minutes
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 20,
   message: { success: false, message: 'Too many login attempts. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
+  // Trust proxy headers on Render
+  keyGenerator: (req) => {
+    return (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
+  },
 });
 
 // POST /api/auth/login

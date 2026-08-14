@@ -37,6 +37,9 @@ import { authenticate } from './middleware/auth';
 
 const app = express();
 
+// Trust proxy (required for Render, Vercel, etc.)
+app.set('trust proxy', 1);
+
 // Global middleware
 app.use(helmet({
   hsts: {
@@ -58,10 +61,10 @@ app.use(helmet({
 app.use(cors({ origin: env.CORS_ORIGIN, credentials: true }));
 app.use(cookieParser(env.COOKIE_SECRET));
 
-// Global rate limiting: 100 requests per IP per 15 minutes
+// Global rate limiting: 200 requests per IP per 15 minutes
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: 200,
   message: { success: false, message: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
