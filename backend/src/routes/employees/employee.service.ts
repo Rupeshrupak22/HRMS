@@ -1,7 +1,12 @@
 import bcrypt from 'bcrypt';
+import crypto from 'crypto';
 import prisma from '../../lib/prisma';
 import { BadRequestError, NotFoundError } from '../../lib/errors';
 import { CreateEmployeeDto, UpdateEmployeeDto } from './employee.schema';
+
+function generateSecurePassword(): string {
+  return crypto.randomBytes(12).toString('base64url') + '!A1';
+}
 
 export async function findAll(params: { search?: string; departmentId?: string; status?: string; userEmail?: string; userRole?: string; specialization?: string }) {
   const where: any = {};
@@ -71,9 +76,12 @@ export async function create(dto: CreateEmployeeDto, createdByEmail?: string) {
   const existing = await prisma.user.findUnique({ where: { email: dto.email.toLowerCase() } });
   if (existing) throw new BadRequestError('Email already exists');
 
-  // Handle password - use provided or default
-  const password = (dto as any).password || 'Password123!';
-  const hashedPassword = await bcrypt.hash(password, 10);
+  // Handle password - require a strong password or generate a secure random one
+  const password = (dto as any).password || generateSecurePassword();
+  if (password.length < 8) {
+    throw new BadRequestError('Password must be at least 8 characters');
+  }
+  const hashedPassword = await bcrypt.hash(password, 12);
 
   // Handle fullName split into firstName/lastName
   let firstName = dto.firstName || '';

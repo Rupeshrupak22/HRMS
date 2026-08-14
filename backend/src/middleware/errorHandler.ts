@@ -32,9 +32,9 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
     return;
   }
 
-  // Unknown errors
+  // Unknown errors — never expose internal details
   console.error('Unhandled error:', err);
   res.status(500).json({
-    message: process.env.NODE_ENV === 'production' ? 'Internal server error' : err.message,
+    message: 'Internal server error',
   });
 }

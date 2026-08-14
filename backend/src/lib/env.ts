@@ -10,4 +10,6 @@ export const env = {
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '8h',
   JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  COOKIE_SECRET: process.env.COOKIE_SECRET || 'change-me-cookie-secret',
+  IS_PRODUCTION: (process.env.NODE_ENV || 'development') === 'production',
 };

@@ -82,7 +82,7 @@ router.get('/daily', async (req: AuthRequest, res: Response, next) => {
       });
 
       if (!existingYesterday) {
-        await prisma.dailyReport.create({
+        await (prisma.dailyReport.create as any)({
           data: {
             userEmail: 'pavitra@adyapan.com',
             employeeName: 'Pavitra (Attendance & Leave)',

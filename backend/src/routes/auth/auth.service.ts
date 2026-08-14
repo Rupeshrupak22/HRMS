@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import prisma from '../../lib/prisma';
 import { env } from '../../lib/env';
 import { UnauthorizedError } from '../../lib/errors';
+import { logAudit } from '../../lib/audit';
 import { LoginDto, RefreshTokenDto } from './auth.schema';
 import { JwtPayload } from '../../types';
 
@@ -27,22 +28,31 @@ export async function login(dto: LoginDto) {
   }
 
   if (!user) {
+    logAudit({ action: 'LOGIN_FAILED', userEmail: identifier, metadata: { reason: 'user_not_found' } });
     throw new UnauthorizedError('Invalid credentials');
   }
 
   if (user.isLocked) {
+    logAudit({ action: 'LOGIN_FAILED', userId: user.id, userEmail: user.email, metadata: { reason: 'account_locked' } });
     throw new UnauthorizedError('Account is locked. Please contact HR admin.');
   }
 
   const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
   if (!isPasswordValid) {
     const updatedAttempts = user.failedAttempts + 1;
+    const isNowLocked = updatedAttempts >= 5;
     await prisma.user.update({
       where: { id: user.id },
       data: {
         failedAttempts: updatedAttempts,
-        isLocked: updatedAttempts >= 5,
+        isLocked: isNowLocked,
       },
+    });
+    logAudit({
+      action: isNowLocked ? 'ACCOUNT_LOCKED' : 'LOGIN_FAILED',
+      userId: user.id,
+      userEmail: user.email,
+      metadata: { failedAttempts: updatedAttempts, locked: isNowLocked },
     });
     throw new UnauthorizedError('Invalid credentials');
   }
@@ -52,6 +62,8 @@ export async function login(dto: LoginDto) {
     where: { id: user.id },
     data: { failedAttempts: 0, lastLoginAt: new Date() },
   });
+
+  logAudit({ action: 'LOGIN_SUCCESS', userId: user.id, userEmail: user.email });
 
   const tokens = generateTokens(user.id, user.email, user.role);
   await updateRefreshToken(user.id, tokens.refreshToken);
@@ -106,6 +118,7 @@ export async function logout(userId: string) {
     where: { id: userId },
     data: { refreshToken: null },
   });
+  logAudit({ action: 'LOGOUT', userId });
   return { success: true, message: 'Logged out successfully' };
 }
 

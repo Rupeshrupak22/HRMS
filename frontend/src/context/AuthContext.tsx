@@ -107,7 +107,7 @@ export const HR_SPECIALIST_ACCOUNTS: Record<string, UserProfile> = {
   },
 };
 
-const DEMO_USERS: Record<RoleName, UserProfile> = {
+const DEMO_USERS: Record<RoleName, UserProfile> | null = process.env.NODE_ENV === 'production' ? null : {
   SUPER_ADMIN: {
     id: 'usr-admin',
     email: 'superadmin@adyapan.com',
@@ -197,6 +197,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       localStorage.setItem('adyapan_access_token', data.accessToken);
       localStorage.setItem('adyapan_refresh_token', data.refreshToken);
       localStorage.setItem('adyapan_user', JSON.stringify(userProfile));
+
+      // Fetch CSRF token after successful login
+      try {
+        await apiRequest('/auth/csrf-token', { method: 'GET' });
+      } catch {
+        // CSRF token fetch is non-critical
+      }
     } catch (err) {
       throw err;
     } finally {
@@ -205,6 +212,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const logout = () => {
+    // Call backend logout to clear httpOnly cookies and invalidate refresh token
+    apiRequest('/auth/logout', { method: 'POST' }).catch(() => {});
     localStorage.removeItem('adyapan_access_token');
     localStorage.removeItem('adyapan_refresh_token');
     localStorage.removeItem('adyapan_user');
@@ -213,7 +222,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const switchRole = (role: RoleName) => {
+    // Role switching is only allowed in development mode for testing
+    if (process.env.NODE_ENV === 'production' || !DEMO_USERS) {
+      console.warn('Role switching is disabled in production');
+      return;
+    }
     const newUser = DEMO_USERS[role];
+    if (!newUser) return;
     setUser(newUser);
     localStorage.setItem('adyapan_user', JSON.stringify(newUser));
   };
