@@ -14,7 +14,6 @@ const createReportSchema = z.object({
   hoursWorked: z.number().optional(),
   tasksCompleted: z.string().optional(),
   blockers: z.string().optional(),
-  type: z.string().optional(),
   role: z.string().optional(),
   candidateSource: z.string().optional(),
   screeningCompleted: z.string().optional(),
@@ -82,7 +81,7 @@ router.get('/daily', async (req: AuthRequest, res: Response, next) => {
       });
 
       if (!existingYesterday) {
-        await (prisma.dailyReport.create as any)({
+        await prisma.dailyReport.create({
           data: {
             userEmail: 'pavitra@adyapan.com',
             employeeName: 'Pavitra (Attendance & Leave)',
@@ -91,7 +90,6 @@ router.get('/daily', async (req: AuthRequest, res: Response, next) => {
             issue: 'No issues logged',
             comment: 'Daily attendance logs verified and synchronized for yesterday.',
             status: 'APPROVED',
-            type: 'ATTENDANCE_LEAVE',
             role: 'SPECIALIST',
           }
         });
@@ -134,6 +132,10 @@ router.post('/daily', validate(createReportSchema), async (req: AuthRequest, res
     const report = await prisma.dailyReport.create({
       data: {
         ...req.body,
+        type: undefined,
+        hoursWorked: undefined,
+        tasksCompleted: undefined,
+        blockers: undefined,
         employeeName: req.body.employeeName || `${firstName} ${lastName}`.trim() || userEmail,
         userEmail,
         sentToEmail,
