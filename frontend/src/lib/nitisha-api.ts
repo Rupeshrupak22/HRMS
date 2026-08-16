@@ -1,4 +1,5 @@
-const BASE = 'http://localhost:4000/api/v1/nitisha';
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000/api/v1';
+const BASE = API_BASE + '/nitisha';
 
 async function request(endpoint: string, options: RequestInit = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('adyapan_access_token') : null;
@@ -10,6 +11,7 @@ async function request(endpoint: string, options: RequestInit = {}) {
 
   const res = await fetch(`${BASE}${endpoint}`, {
     cache: 'no-store',
+    credentials: 'include',
     ...options,
     headers,
   });
