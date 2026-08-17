@@ -389,4 +389,106 @@ function parseTimeString(timeStr: string, baseDate: Date): Date | null {
   return null;
 }
 
+// PUT /api/attendance/monthly-update — update monthly attendance records from month view edit
+router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+  try {
+    const { employeeCode, employeeName, department, designation, month, records } = req.body;
+    // month format: "2026-08"
+    if (!employeeCode || !month || !records || !Array.isArray(records)) {
+      res.status(400).json({ success: false, message: 'employeeCode, month, and records are required' });
+      return;
+    }
+
+    // Find employee by code
+    const empCode = String(employeeCode).trim();
+    let employee = await prisma.employee.findFirst({
+      where: {
+        OR: [
+          { employeeCode: empCode },
+          { employeeCode: empCode.toUpperCase() },
+          { employeeCode: empCode.toLowerCase() },
+        ],
+      },
+    });
+
+    // Fallback: match by name
+    if (!employee && employeeName) {
+      const firstWord = String(employeeName).split(' ')[0];
+      employee = await prisma.employee.findFirst({
+        where: {
+          OR: [
+            { firstName: { contains: firstWord, mode: 'insensitive' } },
+            { lastName: { contains: firstWord, mode: 'insensitive' } },
+          ],
+        },
+      });
+    }
+
+    if (!employee) {
+      res.status(404).json({ success: false, message: `Employee not found: ${empCode}` });
+      return;
+    }
+
+    let updated = 0;
+    let created = 0;
+
+    for (const record of records) {
+      try {
+        const dateStr = record.date; // "2026-08-01"
+        const parts = dateStr.split('-');
+        const dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        dateObj.setHours(0, 0, 0, 0);
+
+        let checkInTime: Date | null = null;
+        let checkOutTime: Date | null = null;
+        if (record.checkInTime) checkInTime = parseTimeString(record.checkInTime, dateObj);
+        if (record.checkOutTime) checkOutTime = parseTimeString(record.checkOutTime, dateObj);
+
+        const workHours = checkInTime && checkOutTime
+          ? Math.round(((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)) * 100) / 100
+          : 0;
+
+        const existing = await prisma.attendanceRecord.findUnique({
+          where: { employeeId_date: { employeeId: employee.id, date: dateObj } },
+        });
+
+        if (existing) {
+          await prisma.attendanceRecord.update({
+            where: { id: existing.id },
+            data: {
+              status: record.status || 'PRESENT',
+              checkInTime,
+              checkOutTime,
+              workHours,
+              notes: record.remarks || existing.notes,
+              source: 'ADMIN',
+            },
+          });
+          updated++;
+        } else {
+          await prisma.attendanceRecord.create({
+            data: {
+              employeeId: employee.id,
+              date: dateObj,
+              status: record.status || 'PRESENT',
+              checkInTime,
+              checkOutTime,
+              workHours,
+              notes: record.remarks || null,
+              source: 'ADMIN',
+            },
+          });
+          created++;
+        }
+      } catch {
+        // Skip individual record errors
+      }
+    }
+
+    res.json({ success: true, data: { updated, created, total: records.length } });
+  } catch (err) {
+    next(err);
+  }
+});
+
 export default router;

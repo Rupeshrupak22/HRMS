@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { Clock, Play, Square, CheckCircle, Upload, Download, FileSpreadsheet, X, Search, Edit3, Trash2, AlertTriangle, Calendar } from 'lucide-react';
+import { Clock, Play, Square, CheckCircle, Upload, Download, FileSpreadsheet, X, Search, Edit3, Trash2, AlertTriangle, Calendar, Eye } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 export default function AttendancePage() {
@@ -48,6 +48,12 @@ export default function AttendancePage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+
+  // Month view modal states
+  const [monthViewEmployee, setMonthViewEmployee] = useState<any | null>(null);
+  const [monthEditEmployee, setMonthEditEmployee] = useState<any | null>(null);
+  const [monthEditForm, setMonthEditForm] = useState<any>({});
+  const [monthDeleteEmployee, setMonthDeleteEmployee] = useState<any | null>(null);
 
   // Compute monthly summary per employee
   const getMonthlyStats = () => {
@@ -170,6 +176,8 @@ export default function AttendancePage() {
     empId: '',
     empName: '',
     department: '',
+    designation: '',
+    role: '',
     date: todayStr,
     checkInTime: '09:30 AM',
     checkOutTime: '06:30 PM',
@@ -178,6 +186,19 @@ export default function AttendancePage() {
     earlyLogout: 'No',
     wfh: 'No',
     wfhApprovedBy: '',
+    sickLeave: 'No',
+    emergencyLeave: 'No',
+    paidLeave: 'No',
+    longLeave: 'No',
+    casualLeave: 'No',
+    mailReceived: 'No',
+    mailNotReceived: 'No',
+    approvedBy: '',
+    notApproved: 'No',
+    nationalHoliday: 'No',
+    festiveHoliday: 'No',
+    holiday: 'No',
+    training: 'No',
     notes: 'Manual Entry',
   });
 
@@ -508,48 +529,174 @@ export default function AttendancePage() {
           return;
         }
 
-        const formattedRows: any[] = [];
-        for (const row of jsonData) {
-          const empId = findRowValue(row, ['employee id', 'employee_id', 'employeeid', 'employee code', 'employee_code', 'employeecode', 'emp id', 'emp_id', 'empid', 'emp code', 'empcode', 'id', 'code']);
-          const empName = findRowValue(row, ['employee name', 'employee_name', 'employeename', 'emp name', 'emp_name', 'empname', 'name', 'staff name']) || '';
-          const department = findRowValue(row, ['department', 'dept', 'department name', 'department_name', 'dept name', 'dept_name']) || '';
-          const rawDate = findRowValue(row, ['date', 'attendance date', 'attendance_date', 'att date', 'day']);
-          const rawCheckIn = findRowValue(row, ['login time', 'logintime', 'login_time', 'check in time', 'check in', 'checkin time', 'checkintime', 'check-in', 'in time', 'intime', 'in', 'time in']);
-          const rawCheckOut = findRowValue(row, ['logout time', 'logouttime', 'logout_time', 'check out time', 'check out', 'checkout time', 'checkouttime', 'check-out', 'out time', 'outtime', 'out', 'time out']);
-          const rawStatus = findRowValue(row, ['attendance status', 'attendance_status', 'status', 'att status']);
-          const rawLateLogin = findRowValue(row, ['late login', 'late_login', 'latelogin', 'late']) || 'No';
-          const rawEarlyLogout = findRowValue(row, ['early logout', 'early_logout', 'earlylogout', 'early']) || 'No';
-          const rawWfh = findRowValue(row, ['work from home', 'work_from_home', 'workfromhome', 'wfh']) || 'No';
-          const rawWfhApprovedBy = findRowValue(row, ['wfh approved by', 'wfh_approved_by', 'wfhapprovedby', 'wfh approver']) || '';
-          const rawRemarks = findRowValue(row, ['remarks', 'remark', 'notes', 'note', 'comments', 'comment']) || '';
+        // Detect if this is a monthly format (has columns like "1-Aug", "2-Aug", etc.)
+        const firstRowKeys = Object.keys(jsonData[0]);
+        const dayColumnPattern = /^(\d{1,2})[-\s]?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i;
+        const dayColumns = firstRowKeys.filter((k) => dayColumnPattern.test(k));
 
-          if (!empId) {
-            continue;
+        if (dayColumns.length > 0) {
+          // ========== MONTHLY FORMAT IMPORT ==========
+          // Columns like: Sl#, Employee Name, Employee ID, Role, Department, Designation, 1-Aug, 2-Aug, ..., Present, Absent, etc.
+          const monthMap: Record<string, number> = { jan: 0, feb: 1, mar: 2, apr: 3, may: 4, jun: 5, jul: 6, aug: 7, sep: 8, oct: 9, nov: 10, dec: 11 };
+
+          const formattedRows: any[] = [];
+
+          for (const row of jsonData) {
+            const empName = String(row['Employee Name'] || row['employee name'] || row['Name'] || '').trim();
+            const empId = String(row['Employee ID'] || row['employee id'] || row['Emp ID'] || row['EmpID'] || '').trim();
+            const role = String(row['Role'] || row['role'] || '').trim();
+            const department = String(row['Department'] || row['department'] || row['Dept'] || '').trim();
+            const designation = String(row['Designation'] || row['designation'] || '').trim();
+
+            if (!empName && !empId) continue;
+
+            // Process each day column
+            for (const dayCol of dayColumns) {
+              const val = String(row[dayCol] || '').trim();
+              if (!val) continue; // skip empty days
+
+              const match = dayCol.match(/^(\d{1,2})[-\s]?(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)/i);
+              if (!match) continue;
+
+              const dayNum = parseInt(match[1], 10);
+              const monthStr = match[2].toLowerCase();
+              const monthIdx = monthMap[monthStr];
+              if (monthIdx === undefined) continue;
+
+              // Determine the year from selectedMonth or current year
+              const [selYear] = selectedMonth.split('-').map(Number);
+              const year = selYear || new Date().getFullYear();
+              const dateStr = `${year}-${String(monthIdx + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+
+              // Map the status value
+              const statusUpper = val.toUpperCase();
+              let status = 'PRESENT';
+              let lateLogin = 'No';
+              let earlyLogout = 'No';
+              let leaveType = '';
+              let notes = val;
+
+              if (statusUpper === 'PRESENT' || statusUpper === 'P') {
+                status = 'PRESENT';
+              } else if (statusUpper === 'ABSENT' || statusUpper === 'A') {
+                status = 'ABSENT';
+              } else if (statusUpper.includes('SICK LEAVE') || statusUpper === 'SL') {
+                status = 'ON_LEAVE';
+                leaveType = 'Sick Leave';
+              } else if (statusUpper.includes('EMERGENCY LEAVE') || statusUpper === 'EL') {
+                status = 'ON_LEAVE';
+                leaveType = 'Emergency Leave';
+              } else if (statusUpper.includes('LONG LEAVE') || statusUpper === 'LL') {
+                status = 'ON_LEAVE';
+                leaveType = 'Long Leave';
+              } else if (statusUpper.includes('CASUAL LEAVE') || statusUpper === 'CL') {
+                status = 'ON_LEAVE';
+                leaveType = 'Casual Leave';
+              } else if (statusUpper.includes('PAID LEAVE') || statusUpper === 'PL') {
+                status = 'ON_LEAVE';
+                leaveType = 'Paid Leave';
+              } else if (statusUpper.includes('PERSONAL LEAVE')) {
+                status = 'ON_LEAVE';
+                leaveType = 'Personal Leave';
+              } else if (statusUpper.includes('HALF DAY') || statusUpper === 'HD') {
+                status = 'HALF_DAY';
+              } else if (statusUpper.includes('WEEK-OFF') || statusUpper.includes('WEEKOFF') || statusUpper === 'WO') {
+                status = 'HOLIDAY';
+                leaveType = 'Week-off';
+              } else if (statusUpper === 'HOLIDAY' || statusUpper === 'NH') {
+                status = 'HOLIDAY';
+                leaveType = 'National Holiday';
+              } else if (statusUpper === 'LOP' || statusUpper.includes('LOSS OF PAY')) {
+                status = 'ABSENT';
+                leaveType = 'LOP';
+              } else if (statusUpper.includes('LATE')) {
+                status = 'LATE';
+                lateLogin = 'Yes';
+              } else if (statusUpper.includes('ONBOARDING')) {
+                status = 'PRESENT';
+                leaveType = 'Onboarding';
+              } else if (statusUpper.includes('RESIGNED')) {
+                status = 'ABSENT';
+                leaveType = 'Resigned';
+              } else if (statusUpper.includes('TRAINING')) {
+                status = 'PRESENT';
+                leaveType = 'Training';
+              } else {
+                status = 'PRESENT';
+              }
+
+              formattedRows.push({
+                'Employee ID': empId || `EMP-${formattedRows.length}`,
+                'Employee Name': empName,
+                'Department': department,
+                'Date': dateStr,
+                'Login Time': status === 'PRESENT' || status === 'LATE' || status === 'HALF_DAY' ? '09:30 AM' : '-',
+                'Logout Time': status === 'PRESENT' || status === 'LATE' ? '06:30 PM' : (status === 'HALF_DAY' ? '01:30 PM' : '-'),
+                'Attendance Status': status,
+                'Late Login': lateLogin,
+                'Early Logout': earlyLogout,
+                'Work From Home': 'No',
+                'WFH Approved By': '',
+                'Remarks': notes,
+                '_role': role,
+                '_designation': designation,
+                '_leaveType': leaveType,
+              });
+            }
           }
 
-          formattedRows.push({
-            'Employee ID': String(empId).trim(),
-            'Employee Name': String(empName).trim(),
-            'Department': String(department).trim(),
-            'Date': formatDateVal(rawDate),
-            'Login Time': formatTimeVal(rawCheckIn),
-            'Logout Time': formatTimeVal(rawCheckOut),
-            'Attendance Status': formatStatusVal(rawStatus),
-            'Late Login': String(rawLateLogin).trim().toLowerCase().startsWith('y') ? 'Yes' : 'No',
-            'Early Logout': String(rawEarlyLogout).trim().toLowerCase().startsWith('y') ? 'Yes' : 'No',
-            'Work From Home': String(rawWfh).trim().toLowerCase().startsWith('y') ? 'Yes' : 'No',
-            'WFH Approved By': String(rawWfhApprovedBy).trim(),
-            'Remarks': String(rawRemarks).trim(),
-          });
-        }
+          if (formattedRows.length === 0) {
+            setImportError('No valid attendance data found. Please check the file format.');
+            return;
+          }
 
-        if (formattedRows.length === 0) {
-          setImportError('No valid rows found with Employee ID in the file. Please check column headers (e.g. Employee ID, Date, Status).');
-          return;
-        }
+          setImportData(formattedRows);
+          setShowImportModal(true);
+        } else {
+          // ========== DAILY FORMAT IMPORT (existing logic) ==========
+          const formattedRows: any[] = [];
+          for (const row of jsonData) {
+            const empId = findRowValue(row, ['employee id', 'employee_id', 'employeeid', 'employee code', 'employee_code', 'employeecode', 'emp id', 'emp_id', 'empid', 'emp code', 'empcode', 'id', 'code']);
+            const empName = findRowValue(row, ['employee name', 'employee_name', 'employeename', 'emp name', 'emp_name', 'empname', 'name', 'staff name']) || '';
+            const department = findRowValue(row, ['department', 'dept', 'department name', 'department_name', 'dept name', 'dept_name']) || '';
+            const rawDate = findRowValue(row, ['date', 'attendance date', 'attendance_date', 'att date', 'day']);
+            const rawCheckIn = findRowValue(row, ['login time', 'logintime', 'login_time', 'check in time', 'check in', 'checkin time', 'checkintime', 'check-in', 'in time', 'intime', 'in', 'time in']);
+            const rawCheckOut = findRowValue(row, ['logout time', 'logouttime', 'logout_time', 'check out time', 'check out', 'checkout time', 'checkouttime', 'check-out', 'out time', 'outtime', 'out', 'time out']);
+            const rawStatus = findRowValue(row, ['attendance status', 'attendance_status', 'status', 'att status']);
+            const rawLateLogin = findRowValue(row, ['late login', 'late_login', 'latelogin', 'late']) || 'No';
+            const rawEarlyLogout = findRowValue(row, ['early logout', 'early_logout', 'earlylogout', 'early']) || 'No';
+            const rawWfh = findRowValue(row, ['work from home', 'work_from_home', 'workfromhome', 'wfh']) || 'No';
+            const rawWfhApprovedBy = findRowValue(row, ['wfh approved by', 'wfh_approved_by', 'wfhapprovedby', 'wfh approver']) || '';
+            const rawRemarks = findRowValue(row, ['remarks', 'remark', 'notes', 'note', 'comments', 'comment']) || '';
 
-        setImportData(formattedRows);
-        setShowImportModal(true);
+            if (!empId) {
+              continue;
+            }
+
+            formattedRows.push({
+              'Employee ID': String(empId).trim(),
+              'Employee Name': String(empName).trim(),
+              'Department': String(department).trim(),
+              'Date': formatDateVal(rawDate),
+              'Login Time': formatTimeVal(rawCheckIn),
+              'Logout Time': formatTimeVal(rawCheckOut),
+              'Attendance Status': formatStatusVal(rawStatus),
+              'Late Login': String(rawLateLogin).trim().toLowerCase().startsWith('y') ? 'Yes' : 'No',
+              'Early Logout': String(rawEarlyLogout).trim().toLowerCase().startsWith('y') ? 'Yes' : 'No',
+              'Work From Home': String(rawWfh).trim().toLowerCase().startsWith('y') ? 'Yes' : 'No',
+              'WFH Approved By': String(rawWfhApprovedBy).trim(),
+              'Remarks': String(rawRemarks).trim(),
+            });
+          }
+
+          if (formattedRows.length === 0) {
+            setImportError('No valid rows found with Employee ID in the file. Please check column headers (e.g. Employee ID, Date, Status).');
+            return;
+          }
+
+          setImportData(formattedRows);
+          setShowImportModal(true);
+        }
       } catch (err: any) {
         setImportError('Failed to parse file. Please check if the file is a valid .xlsx or .csv document.');
       }
@@ -879,12 +1026,13 @@ export default function AttendancePage() {
                       <th className="py-2.5 px-2 text-center bg-lime-50 min-w-[60px]">Festive Holiday</th>
                       <th className="py-2.5 px-2 text-center bg-slate-100 min-w-[45px]">Holiday</th>
                       <th className="py-2.5 px-2 text-center bg-yellow-50 min-w-[45px]">Training</th>
+                      <th className="py-2.5 px-2 text-center bg-slate-50 min-w-[130px] sticky right-0 z-10">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
                     {employees.length === 0 ? (
                       <tr>
-                        <td colSpan={daysInMonth + 21} className="py-8 px-5 text-center text-slate-400 italic text-xs">
+                        <td colSpan={daysInMonth + 22} className="py-8 px-5 text-center text-slate-400 italic text-xs">
                           No attendance records found for {monthName}. Import or add records first.
                         </td>
                       </tr>
@@ -937,11 +1085,553 @@ export default function AttendancePage() {
                           <td className="py-2 px-2 text-center font-black text-lime-700 bg-lime-50/50">{emp.festiveHoliday}</td>
                           <td className="py-2 px-2 text-center font-black text-slate-700 bg-slate-50/50">{emp.holiday}</td>
                           <td className="py-2 px-2 text-center font-black text-yellow-700 bg-yellow-50/50">{emp.training}</td>
+                          {/* Action buttons */}
+                          <td className="py-2 px-2 sticky right-0 bg-white z-10">
+                            <div className="flex items-center gap-1 justify-center">
+                              <button
+                                onClick={() => setMonthViewEmployee(emp)}
+                                className="px-2 py-1 rounded-md bg-blue-50 hover:bg-blue-100 text-blue-700 text-[9px] font-bold border border-blue-200 cursor-pointer transition-colors"
+                                title="View Full Details"
+                              >
+                                <Eye className="w-3 h-3 inline mr-0.5" />View
+                              </button>
+                              <button
+                                onClick={() => {
+                                  // Pre-fill day values from emp.days
+                                  const dayValues: any = {};
+                                  const [yr, mn] = selectedMonth.split('-').map(Number);
+                                  const totalDays = new Date(yr, mn, 0).getDate();
+                                  for (let d = 1; d <= totalDays; d++) {
+                                    if (emp.days[d]) {
+                                      dayValues[`day_${d}`] = emp.days[d];
+                                    }
+                                  }
+                                  setMonthEditEmployee(emp);
+                                  setMonthEditForm({
+                                    empId: emp.empId,
+                                    empName: emp.empName,
+                                    role: emp.role,
+                                    department: emp.department,
+                                    designation: emp.designation,
+                                    present: emp.present,
+                                    absent: emp.absent,
+                                    earlyLogout: emp.earlyLogout,
+                                    lateLogin: emp.lateLogin,
+                                    sickLeave: emp.sickLeave,
+                                    emergencyLeave: emp.emergencyLeave,
+                                    paidLeave: emp.paidLeave,
+                                    longLeave: emp.longLeave,
+                                    mailReceived: emp.mailReceived,
+                                    mailNotReceived: emp.mailNotReceived,
+                                    casualLeave: emp.casualLeave,
+                                    approvedBy: emp.approvedBy,
+                                    notApproved: emp.notApproved,
+                                    nationalHoliday: emp.nationalHoliday,
+                                    festiveHoliday: emp.festiveHoliday,
+                                    holiday: emp.holiday,
+                                    training: emp.training,
+                                    ...dayValues,
+                                  });
+                                }}
+                                className="px-2 py-1 rounded-md bg-orange-50 hover:bg-orange-100 text-orange-700 text-[9px] font-bold border border-orange-200 cursor-pointer transition-colors"
+                                title="Edit"
+                              >
+                                <Edit3 className="w-3 h-3 inline mr-0.5" />Edit
+                              </button>
+                              <button
+                                onClick={() => setMonthDeleteEmployee(emp)}
+                                className="px-2 py-1 rounded-md bg-red-50 hover:bg-red-100 text-red-700 text-[9px] font-bold border border-red-200 cursor-pointer transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3 h-3 inline mr-0.5" />Del
+                              </button>
+                            </div>
+                          </td>
                         </tr>
                       ))
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* =================== MONTH VIEW MODALS =================== */}
+
+      {/* View Full Details Modal */}
+      {monthViewEmployee && (() => {
+        const emp = monthViewEmployee;
+        const [year, month] = selectedMonth.split('-').map(Number);
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const monthName = new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="w-full max-w-2xl bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl max-h-[85vh] overflow-y-auto space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <Eye className="w-5 h-5 text-blue-500" />
+                  Full Attendance Details — {emp.empName}
+                </h2>
+                <button onClick={() => setMonthViewEmployee(null)} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Employee Info */}
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] text-slate-500 font-bold uppercase">Employee Name</div>
+                  <div className="text-sm font-black text-slate-900 mt-0.5">{emp.empName}</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] text-slate-500 font-bold uppercase">Employee ID</div>
+                  <div className="text-sm font-black text-slate-900 mt-0.5">{emp.empId}</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] text-slate-500 font-bold uppercase">Role</div>
+                  <div className="text-sm font-bold text-slate-800 mt-0.5">{emp.role}</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                  <div className="text-[10px] text-slate-500 font-bold uppercase">Department</div>
+                  <div className="text-sm font-bold text-slate-800 mt-0.5">{emp.department}</div>
+                </div>
+                <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 col-span-2">
+                  <div className="text-[10px] text-slate-500 font-bold uppercase">Designation</div>
+                  <div className="text-sm font-bold text-slate-800 mt-0.5">{emp.designation}</div>
+                </div>
+              </div>
+
+              {/* Day-wise breakdown */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-black text-slate-800">Day-wise Attendance</h3>
+                <div className="grid grid-cols-7 sm:grid-cols-10 gap-1.5">
+                  {Array.from({ length: daysInMonth }, (_, i) => {
+                    const dayCode = emp.days[i + 1] || '-';
+                    let bgColor = 'bg-slate-50 border-slate-200 text-slate-400';
+                    if (dayCode === 'P') bgColor = 'bg-emerald-50 border-emerald-200 text-emerald-700';
+                    else if (dayCode === 'A') bgColor = 'bg-red-50 border-red-200 text-red-700';
+                    else if (dayCode === 'SL') bgColor = 'bg-purple-50 border-purple-200 text-purple-700';
+                    else if (dayCode === 'EL') bgColor = 'bg-pink-50 border-pink-200 text-pink-700';
+                    else if (dayCode === 'PL') bgColor = 'bg-blue-50 border-blue-200 text-blue-700';
+                    else if (dayCode === 'CL') bgColor = 'bg-indigo-50 border-indigo-200 text-indigo-700';
+                    else if (dayCode === 'LL') bgColor = 'bg-teal-50 border-teal-200 text-teal-700';
+                    else if (dayCode === 'NH') bgColor = 'bg-cyan-50 border-cyan-200 text-cyan-700';
+                    else if (dayCode === 'FH') bgColor = 'bg-lime-50 border-lime-200 text-lime-700';
+                    else if (dayCode === 'T') bgColor = 'bg-yellow-50 border-yellow-200 text-yellow-700';
+                    else if (dayCode === 'HD') bgColor = 'bg-sky-50 border-sky-200 text-sky-700';
+                    return (
+                      <div key={i + 1} className={`p-1.5 rounded-lg border text-center ${bgColor}`}>
+                        <div className="text-[9px] font-bold">{i + 1}</div>
+                        <div className="text-[10px] font-black">{dayCode}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Summary counts */}
+              <div className="space-y-2">
+                <h3 className="text-xs font-black text-slate-800">Monthly Summary Counts</h3>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 text-[10px]">
+                  <div className="p-2 rounded-lg bg-emerald-50 border border-emerald-200 text-center">
+                    <div className="font-bold text-emerald-600">Present</div>
+                    <div className="text-lg font-black text-emerald-700">{emp.present}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-center">
+                    <div className="font-bold text-red-600">Absent</div>
+                    <div className="text-lg font-black text-red-700">{emp.absent}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-orange-50 border border-orange-200 text-center">
+                    <div className="font-bold text-orange-600">Early Logout</div>
+                    <div className="text-lg font-black text-orange-700">{emp.earlyLogout}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-amber-50 border border-amber-200 text-center">
+                    <div className="font-bold text-amber-600">Late Login</div>
+                    <div className="text-lg font-black text-amber-700">{emp.lateLogin}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-purple-50 border border-purple-200 text-center">
+                    <div className="font-bold text-purple-600">Sick Leave</div>
+                    <div className="text-lg font-black text-purple-700">{emp.sickLeave}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-pink-50 border border-pink-200 text-center">
+                    <div className="font-bold text-pink-600">Emergency Leave</div>
+                    <div className="text-lg font-black text-pink-700">{emp.emergencyLeave}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-blue-50 border border-blue-200 text-center">
+                    <div className="font-bold text-blue-600">Paid Leave</div>
+                    <div className="text-lg font-black text-blue-700">{emp.paidLeave}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-teal-50 border border-teal-200 text-center">
+                    <div className="font-bold text-teal-600">Long Leaves</div>
+                    <div className="text-lg font-black text-teal-700">{emp.longLeave}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-green-50 border border-green-200 text-center">
+                    <div className="font-bold text-green-600">Mail Received</div>
+                    <div className="text-lg font-black text-green-700">{emp.mailReceived}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-rose-50 border border-rose-200 text-center">
+                    <div className="font-bold text-rose-600">Mail Not Received</div>
+                    <div className="text-lg font-black text-rose-700">{emp.mailNotReceived}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-indigo-50 border border-indigo-200 text-center">
+                    <div className="font-bold text-indigo-600">Casual Leave</div>
+                    <div className="text-lg font-black text-indigo-700">{emp.casualLeave}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-violet-50 border border-violet-200 text-center">
+                    <div className="font-bold text-violet-600">Approved By</div>
+                    <div className="text-sm font-black text-violet-700">{emp.approvedBy}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-center">
+                    <div className="font-bold text-red-600">Not Approved</div>
+                    <div className="text-lg font-black text-red-700">{emp.notApproved}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-cyan-50 border border-cyan-200 text-center">
+                    <div className="font-bold text-cyan-600">National Holiday</div>
+                    <div className="text-lg font-black text-cyan-700">{emp.nationalHoliday}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-lime-50 border border-lime-200 text-center">
+                    <div className="font-bold text-lime-600">Festive Holiday</div>
+                    <div className="text-lg font-black text-lime-700">{emp.festiveHoliday}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-slate-100 border border-slate-200 text-center">
+                    <div className="font-bold text-slate-600">Holiday</div>
+                    <div className="text-lg font-black text-slate-700">{emp.holiday}</div>
+                  </div>
+                  <div className="p-2 rounded-lg bg-yellow-50 border border-yellow-200 text-center">
+                    <div className="font-bold text-yellow-600">Training</div>
+                    <div className="text-lg font-black text-yellow-700">{emp.training}</div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end pt-2">
+                <button
+                  onClick={() => setMonthViewEmployee(null)}
+                  className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Edit Employee Month Record Modal */}
+      {monthEditEmployee && (() => {
+        const emp = monthEditEmployee;
+        const [year, month] = selectedMonth.split('-').map(Number);
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const monthName = new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="w-full max-w-3xl bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl max-h-[90vh] overflow-y-auto space-y-4">
+              <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+                <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
+                  <Edit3 className="w-5 h-5 text-orange-500" />
+                  Edit Monthly Record — {emp.empName}
+                </h2>
+                <button onClick={() => setMonthEditEmployee(null)} className="p-1 rounded-lg hover:bg-slate-100 text-slate-400 cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs">
+                {/* Employee Info Fields */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Employee Name</label>
+                    <input type="text" value={monthEditForm.empName || ''} onChange={(e) => setMonthEditForm({ ...monthEditForm, empName: e.target.value })} className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 font-bold text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Employee ID</label>
+                    <input type="text" value={monthEditForm.empId || ''} readOnly className="w-full px-3 py-2 rounded-xl bg-slate-100 border border-slate-200 font-bold text-slate-600" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Role</label>
+                    <input type="text" value={monthEditForm.role || ''} onChange={(e) => setMonthEditForm({ ...monthEditForm, role: e.target.value })} className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Department</label>
+                    <input type="text" value={monthEditForm.department || ''} onChange={(e) => setMonthEditForm({ ...monthEditForm, department: e.target.value })} className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">Designation</label>
+                    <input type="text" value={monthEditForm.designation || ''} onChange={(e) => setMonthEditForm({ ...monthEditForm, designation: e.target.value })} className="w-full px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-slate-800 focus:outline-none focus:ring-2 focus:ring-orange-500/20" />
+                  </div>
+                </div>
+
+                {/* Day-wise edit */}
+                <div>
+                  <label className="block text-[11px] font-black text-slate-800 mb-2">Day-wise Attendance (1-{daysInMonth} {new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'short' })})</label>
+                  <div className="grid grid-cols-7 sm:grid-cols-10 gap-1.5">
+                    {Array.from({ length: daysInMonth }, (_, i) => {
+                      const dayCode = emp.days[i + 1] || '-';
+                      return (
+                        <div key={i + 1} className="text-center">
+                          <div className="text-[9px] font-bold text-slate-500 mb-0.5">{i + 1}</div>
+                          <input
+                            type="text"
+                            value={monthEditForm[`day_${i + 1}`] !== undefined ? monthEditForm[`day_${i + 1}`] : dayCode}
+                            onChange={(e) => setMonthEditForm({ ...monthEditForm, [`day_${i + 1}`]: e.target.value.toUpperCase() })}
+                            className="w-full px-1 py-1 rounded-md border border-slate-200 text-[10px] font-bold text-center bg-slate-50 focus:outline-none focus:ring-1 focus:ring-orange-400 focus:border-orange-300"
+                            maxLength={3}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Summary count fields */}
+                <div>
+                  <label className="block text-[11px] font-black text-slate-800 mb-2">Summary Counts</label>
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
+                    <div>
+                      <label className="block text-[10px] font-bold text-emerald-700 mb-0.5">Present</label>
+                      <input type="number" value={monthEditForm.present ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, present: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-emerald-50 border border-emerald-200 text-sm font-black text-emerald-700 text-center focus:outline-none focus:ring-1 focus:ring-emerald-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-red-700 mb-0.5">Absent</label>
+                      <input type="number" value={monthEditForm.absent ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, absent: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-red-50 border border-red-200 text-sm font-black text-red-700 text-center focus:outline-none focus:ring-1 focus:ring-red-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-orange-700 mb-0.5">Early Logout</label>
+                      <input type="number" value={monthEditForm.earlyLogout ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, earlyLogout: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-orange-50 border border-orange-200 text-sm font-black text-orange-700 text-center focus:outline-none focus:ring-1 focus:ring-orange-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-amber-700 mb-0.5">Late Login</label>
+                      <input type="number" value={monthEditForm.lateLogin ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, lateLogin: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-amber-50 border border-amber-200 text-sm font-black text-amber-700 text-center focus:outline-none focus:ring-1 focus:ring-amber-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-purple-700 mb-0.5">Sick Leave</label>
+                      <input type="number" value={monthEditForm.sickLeave ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, sickLeave: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-purple-50 border border-purple-200 text-sm font-black text-purple-700 text-center focus:outline-none focus:ring-1 focus:ring-purple-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-pink-700 mb-0.5">Emergency Leave</label>
+                      <input type="number" value={monthEditForm.emergencyLeave ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, emergencyLeave: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-pink-50 border border-pink-200 text-sm font-black text-pink-700 text-center focus:outline-none focus:ring-1 focus:ring-pink-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-blue-700 mb-0.5">Paid Leave</label>
+                      <input type="number" value={monthEditForm.paidLeave ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, paidLeave: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-sm font-black text-blue-700 text-center focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-teal-700 mb-0.5">Long Leaves</label>
+                      <input type="number" value={monthEditForm.longLeave ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, longLeave: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-teal-50 border border-teal-200 text-sm font-black text-teal-700 text-center focus:outline-none focus:ring-1 focus:ring-teal-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-green-700 mb-0.5">Mail Received</label>
+                      <input type="number" value={monthEditForm.mailReceived ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, mailReceived: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-green-50 border border-green-200 text-sm font-black text-green-700 text-center focus:outline-none focus:ring-1 focus:ring-green-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-rose-700 mb-0.5">Mail Not Received</label>
+                      <input type="number" value={monthEditForm.mailNotReceived ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, mailNotReceived: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-rose-50 border border-rose-200 text-sm font-black text-rose-700 text-center focus:outline-none focus:ring-1 focus:ring-rose-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-indigo-700 mb-0.5">Casual Leave</label>
+                      <input type="number" value={monthEditForm.casualLeave ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, casualLeave: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-indigo-50 border border-indigo-200 text-sm font-black text-indigo-700 text-center focus:outline-none focus:ring-1 focus:ring-indigo-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-violet-700 mb-0.5">Approved By</label>
+                      <input type="text" value={monthEditForm.approvedBy || '-'} onChange={(e) => setMonthEditForm({ ...monthEditForm, approvedBy: e.target.value })} className="w-full px-2 py-1.5 rounded-lg bg-violet-50 border border-violet-200 text-xs font-bold text-violet-700 text-center focus:outline-none focus:ring-1 focus:ring-violet-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-red-700 mb-0.5">Not Approved</label>
+                      <input type="number" value={monthEditForm.notApproved ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, notApproved: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-red-50 border border-red-200 text-sm font-black text-red-700 text-center focus:outline-none focus:ring-1 focus:ring-red-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-cyan-700 mb-0.5">National Holiday</label>
+                      <input type="number" value={monthEditForm.nationalHoliday ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, nationalHoliday: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-cyan-50 border border-cyan-200 text-sm font-black text-cyan-700 text-center focus:outline-none focus:ring-1 focus:ring-cyan-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-lime-700 mb-0.5">Festive Holiday</label>
+                      <input type="number" value={monthEditForm.festiveHoliday ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, festiveHoliday: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-lime-50 border border-lime-200 text-sm font-black text-lime-700 text-center focus:outline-none focus:ring-1 focus:ring-lime-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 mb-0.5">Holiday</label>
+                      <input type="number" value={monthEditForm.holiday ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, holiday: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-slate-100 border border-slate-200 text-sm font-black text-slate-700 text-center focus:outline-none focus:ring-1 focus:ring-slate-400" />
+                    </div>
+                    <div>
+                      <label className="block text-[10px] font-bold text-yellow-700 mb-0.5">Training</label>
+                      <input type="number" value={monthEditForm.training ?? 0} onChange={(e) => setMonthEditForm({ ...monthEditForm, training: parseInt(e.target.value) || 0 })} className="w-full px-2 py-1.5 rounded-lg bg-yellow-50 border border-yellow-200 text-sm font-black text-yellow-700 text-center focus:outline-none focus:ring-1 focus:ring-yellow-400" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex gap-3 pt-3">
+                <button
+                  onClick={() => setMonthEditEmployee(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const monthPrefix = selectedMonth;
+                      const empId = monthEditForm.empId;
+                      const [yr, mn] = selectedMonth.split('-').map(Number);
+                      const totalDays = new Date(yr, mn, 0).getDate();
+
+                      // Build records array from day-wise codes to save to DB
+                      const records: any[] = [];
+                      for (let d = 1; d <= totalDays; d++) {
+                        const dayCode = monthEditForm[`day_${d}`] !== undefined ? monthEditForm[`day_${d}`] : (emp.days[d] || '');
+                        if (!dayCode || dayCode === '-') continue;
+
+                        // Map day code to status
+                        let status = 'PRESENT';
+                        if (dayCode === 'P') status = 'PRESENT';
+                        else if (dayCode === 'A') status = 'ABSENT';
+                        else if (dayCode === 'SL') status = 'ON_LEAVE';
+                        else if (dayCode === 'EL') status = 'ON_LEAVE';
+                        else if (dayCode === 'PL') status = 'ON_LEAVE';
+                        else if (dayCode === 'CL') status = 'ON_LEAVE';
+                        else if (dayCode === 'LL') status = 'ON_LEAVE';
+                        else if (dayCode === 'NH') status = 'HOLIDAY';
+                        else if (dayCode === 'FH') status = 'HOLIDAY';
+                        else if (dayCode === 'T') status = 'PRESENT';
+                        else if (dayCode === 'HD') status = 'HALF_DAY';
+                        else if (dayCode === 'WFH') status = 'PRESENT';
+
+                        const dateStr = `${yr}-${String(mn).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                        records.push({
+                          date: dateStr,
+                          status,
+                          checkInTime: null,
+                          checkOutTime: null,
+                          remarks: `Monthly Edit - ${dayCode}`,
+                        });
+                      }
+
+                      // Save to backend DB via monthly-update endpoint
+                      if (records.length > 0) {
+                        await apiRequest('/attendance/monthly-update', {
+                          method: 'PUT',
+                          body: JSON.stringify({
+                            employeeCode: empId,
+                            employeeName: monthEditForm.empName || '',
+                            department: monthEditForm.department || '',
+                            designation: monthEditForm.designation || '',
+                            month: selectedMonth,
+                            records,
+                          }),
+                        });
+                      }
+
+                      // Update employee info fields in all logs for this month (local state)
+                      setAllLogs((prev) =>
+                        prev.map((item) => {
+                          if ((item.empId === empId || item.employeeCode === empId) && (item.date || '').startsWith(monthPrefix)) {
+                            return {
+                              ...item,
+                              empName: monthEditForm.empName,
+                              role: monthEditForm.role,
+                              department: monthEditForm.department,
+                              designation: monthEditForm.designation,
+                            };
+                          }
+                          return item;
+                        })
+                      );
+
+                      // Also update in localStorage
+                      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_attendance_logs') : null;
+                      if (savedLocal) {
+                        try {
+                          const localLogs: any[] = JSON.parse(savedLocal);
+                          const updated = localLogs.map((item) => {
+                            if ((item.empId === empId || item.employeeCode === empId) && (item.date || '').startsWith(monthPrefix)) {
+                              return {
+                                ...item,
+                                empName: monthEditForm.empName,
+                                role: monthEditForm.role,
+                                department: monthEditForm.department,
+                                designation: monthEditForm.designation,
+                              };
+                            }
+                            return item;
+                          });
+                          localStorage.setItem('adyapan_imported_attendance_logs', JSON.stringify(updated));
+                        } catch {}
+                      }
+
+                      setMonthEditEmployee(null);
+                      await loadLogs();
+                      alert(`Attendance record for ${monthEditForm.empName} updated and saved to database successfully!`);
+                    } catch (err: any) {
+                      alert(err.message || 'Failed to save changes to database. Please try again.');
+                    }
+                  }}
+                  className="flex-1 py-2.5 rounded-xl saffron-gradient text-white text-xs font-bold shadow-md shadow-orange-500/25 hover:opacity-95 cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* Delete Employee Month Records Modal */}
+      {monthDeleteEmployee && (() => {
+        const emp = monthDeleteEmployee;
+        const [year, month] = selectedMonth.split('-').map(Number);
+        const monthName = new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+        return (
+          <div className="fixed inset-0 z-50 bg-slate-950/50 backdrop-blur-xs flex items-center justify-center p-4">
+            <div className="w-full max-w-md bg-white border border-slate-200 rounded-3xl p-6 shadow-2xl space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 text-red-600 flex items-center justify-center mx-auto">
+                <AlertTriangle className="w-6 h-6 text-red-600" />
+              </div>
+
+              <div className="text-center space-y-1">
+                <h3 className="text-base font-bold text-slate-900">Delete All Records for {emp.empName}?</h3>
+                <p className="text-xs text-slate-500">
+                  This will delete all attendance records for <strong className="text-slate-800">{emp.empName}</strong> ({emp.empId}) in <strong className="text-slate-800">{monthName}</strong>.
+                  This action cannot be undone.
+                </p>
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <button
+                  onClick={() => setMonthDeleteEmployee(null)}
+                  className="flex-1 py-2.5 rounded-xl bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    const monthPrefix = selectedMonth;
+                    // Delete all logs for this employee in this month
+                    setAllLogs((prev) =>
+                      prev.filter((item) => !(
+                        (item.empId === emp.empId || item.employeeCode === emp.empId) &&
+                        (item.date || '').startsWith(monthPrefix)
+                      ))
+                    );
+                    // Also remove from localStorage
+                    const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_attendance_logs') : null;
+                    if (savedLocal) {
+                      try {
+                        const localLogs: any[] = JSON.parse(savedLocal);
+                        const updated = localLogs.filter((item) => !(
+                          (item.empId === emp.empId || item.employeeCode === emp.empId) &&
+                          (item.date || '').startsWith(monthPrefix)
+                        ));
+                        localStorage.setItem('adyapan_imported_attendance_logs', JSON.stringify(updated));
+                      } catch {}
+                    }
+                    setMonthDeleteEmployee(null);
+                    alert(`All attendance records for ${emp.empName} in ${monthName} deleted successfully!`);
+                  }}
+                  className="flex-1 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-md shadow-red-600/25 cursor-pointer"
+                >
+                  Delete All Records
+                </button>
               </div>
             </div>
           </div>
