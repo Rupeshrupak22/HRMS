@@ -5,6 +5,7 @@ import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { Download, Upload, Search, Edit3, Trash2, X, AlertTriangle, Plus, Loader2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
+import UploadProgressModal from '@/components/UploadProgressModal';
 
 export default function AttendancePage() {
   const { user } = useAuth();
@@ -28,6 +29,9 @@ export default function AttendancePage() {
   
   const [deleteEmployee, setDeleteEmployee] = useState<any | null>(null);
   const [reportEmployee, setReportEmployee] = useState<any | null>(null);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadStatus, setUploadStatus] = useState<'uploading' | 'success' | 'error'>('uploading');
+  const [showUploadProgress, setShowUploadProgress] = useState(false);
 
   const isPavitra = user?.specialization === 'ATTENDANCE_LEAVE' || user?.email === 'pavitra@adyapan.com';
   const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN' || user?.role === 'HR_EXECUTIVE' || isPavitra;
@@ -219,15 +223,30 @@ export default function AttendancePage() {
 
   const handleConfirmImport = async () => {
     setImporting(true);
+    setShowUploadProgress(true);
+    setUploadProgress(0);
+    setUploadStatus('uploading');
+    
     try {
-      await apiRequest('/attendance/bulk-import', {
-        method: 'POST',
-        body: JSON.stringify({ records: importData }),
-      });
+      const totalRecords = importData.length;
+      const batchSize = 50;
+      const batches = Math.ceil(totalRecords / batchSize);
+      
+      for (let i = 0; i < batches; i++) {
+        const batch = importData.slice(i * batchSize, (i + 1) * batchSize);
+        await apiRequest('/attendance/bulk-import', {
+          method: 'POST',
+          body: JSON.stringify({ records: batch }),
+        });
+        const progress = Math.round(((i + 1) / batches) * 100);
+        setUploadProgress(progress);
+      }
+      
+      setUploadStatus('success');
       setShowImportModal(false);
       await fetchAttendanceData();
     } catch (err: any) {
-      alert(err?.message || 'Import failed.');
+      setUploadStatus('error');
     } finally {
       setImporting(false);
     }
@@ -1120,6 +1139,16 @@ export default function AttendancePage() {
             </div>
           </div>
         )}
+
+        {/* Upload Progress Modal */}
+        <UploadProgressModal
+          isOpen={showUploadProgress}
+          progress={uploadProgress}
+          status={uploadStatus}
+          title="Importing Attendance Data..."
+          message={uploadStatus === 'uploading' ? `Processing records...` : uploadStatus === 'success' ? 'All attendance records imported successfully!' : 'Failed to import. Please try again.'}
+          onClose={() => setShowUploadProgress(false)}
+        />
 
       </div>
     </div>

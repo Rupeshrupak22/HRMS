@@ -43,8 +43,8 @@ export default function LoginPage() {
 
       {/* Main Neumorphic Circle Container */}
       <div className="relative">
-        {/* Outer Circle - Neumorphic */}
-        <div className="w-[420px] h-[420px] sm:w-[480px] sm:h-[480px] rounded-full bg-gradient-to-br from-slate-100 to-gray-200 shadow-[20px_20px_60px_#b8b8b8,-20px_-20px_60px_#ffffff,inset_2px_2px_4px_rgba(255,255,255,0.6)] flex items-center justify-center p-8">
+        {/* Outer Circle - Neumorphic with solid border */}
+        <div className="w-[460px] h-[460px] sm:w-[540px] sm:h-[540px] rounded-full bg-gradient-to-br from-slate-100 to-gray-200 border-2 border-orange-400/60 shadow-[20px_20px_60px_#b8b8b8,-20px_-20px_60px_#ffffff,inset_2px_2px_4px_rgba(255,255,255,0.6)] flex items-center justify-center p-10">
           {/* Inner Content Area */}
           <div className="w-full max-w-[300px] flex flex-col items-center">
             {/* Logo */}
