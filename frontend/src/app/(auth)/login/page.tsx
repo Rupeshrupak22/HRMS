@@ -4,7 +4,7 @@ import React, { useState } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { Eye, EyeOff, LogIn, User, Lock, GraduationCap } from 'lucide-react';
+import { Eye, EyeOff, LogIn, User, Lock } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
+  const [rememberMe, setRememberMe] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -27,101 +28,109 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 p-4">
-      {/* Decorative Background Elements */}
+    <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-100 via-gray-100 to-slate-200 p-4 relative overflow-hidden">
+      {/* Decorative Background Circles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute top-20 left-10 w-32 h-32 bg-orange-200/30 rounded-full blur-3xl animate-float-slow" />
-        <div className="absolute bottom-20 right-10 w-40 h-40 bg-amber-200/30 rounded-full blur-3xl animate-float-slow" style={{ animationDelay: '2s' }} />
-        <div className="absolute top-1/2 left-1/4 w-24 h-24 bg-orange-300/20 rounded-full blur-2xl animate-pulse-glow" />
+        {/* Large top-left circle */}
+        <div className="absolute -top-32 -left-32 w-[500px] h-[500px] rounded-full bg-gradient-to-br from-white/60 to-transparent shadow-[inset_8px_8px_16px_rgba(0,0,0,0.05),inset_-8px_-8px_16px_rgba(255,255,255,0.9)]" />
+        {/* Large bottom-right circle */}
+        <div className="absolute -bottom-40 -right-40 w-[600px] h-[600px] rounded-full bg-gradient-to-tl from-white/60 to-transparent shadow-[inset_8px_8px_16px_rgba(0,0,0,0.05),inset_-8px_-8px_16px_rgba(255,255,255,0.9)]" />
+        {/* Medium circle */}
+        <div className="absolute top-1/4 right-1/4 w-48 h-48 rounded-full bg-gradient-to-br from-orange-50/40 to-transparent shadow-[4px_4px_8px_rgba(0,0,0,0.05),-4px_-4px_8px_rgba(255,255,255,0.8)]" />
+        {/* Small accent circles */}
+        <div className="absolute bottom-1/4 left-1/5 w-24 h-24 rounded-full bg-gradient-to-br from-orange-100/30 to-transparent shadow-[2px_2px_4px_rgba(0,0,0,0.04),-2px_-2px_4px_rgba(255,255,255,0.7)]" />
       </div>
 
-      {/* Login Card */}
-      <div className="relative w-full max-w-md bg-white rounded-3xl shadow-2xl shadow-orange-500/10 p-8 sm:p-10 border border-orange-100/50">
-        {/* Logo */}
-        <div className="flex justify-center mb-4">
-          <img src="/icon-192x192.png" alt="Adyapan" className="w-16 h-16 rounded-2xl shadow-lg shadow-orange-500/25" />
-        </div>
-
-        {/* Brand Name */}
-        <div className="text-center mb-2">
-          <h1 className="text-2xl font-black text-slate-900 tracking-wide">ADYAPAN</h1>
-          <p className="text-xs font-bold text-orange-600 tracking-widest uppercase mt-1">
-            HR Management System
-          </p>
-        </div>
-
-        {/* Subtitle */}
-        <p className="text-center text-sm text-slate-500 mb-6">
-          Sign in to access your workspace
-        </p>
-
-        {/* Error Message */}
-        {error && (
-          <div className="mb-4 p-3 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600 text-center font-medium">
-            {error}
-          </div>
-        )}
-
-        {/* Login Form */}
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* HR ID or Email Field */}
-          <div>
-            <div className="relative">
-              <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type="text"
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                required
-                className="w-full pl-12 pr-4 py-4 rounded-xl border-2 border-orange-300 focus:border-orange-500 focus:outline-none text-xs text-slate-800 placeholder-slate-400 bg-white font-medium transition-colors"
-                placeholder="HR ID OR EMAIL"
+      {/* Main Neumorphic Circle Container */}
+      <div className="relative">
+        {/* Outer Circle - Neumorphic */}
+        <div className="w-[420px] h-[420px] sm:w-[480px] sm:h-[480px] rounded-full bg-gradient-to-br from-slate-100 to-gray-200 shadow-[20px_20px_60px_#b8b8b8,-20px_-20px_60px_#ffffff,inset_2px_2px_4px_rgba(255,255,255,0.6)] flex items-center justify-center p-8">
+          {/* Inner Content Area */}
+          <div className="w-full max-w-[300px] flex flex-col items-center">
+            {/* Logo */}
+            <div className="mb-3">
+              <img
+                src="/icon-192x192.png"
+                alt="Adyapan"
+                className="w-14 h-14 rounded-2xl shadow-md shadow-orange-500/20"
               />
-              <label className="absolute -top-2.5 left-3 px-1 bg-white text-[10px] font-bold text-orange-600 uppercase tracking-wider">
-                HR ID or Email
-              </label>
             </div>
-          </div>
 
-          {/* Password Field */}
-          <div>
-            <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-              <input
-                type={showPassword ? 'text' : 'password'}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                className="w-full pl-12 pr-12 py-4 rounded-xl border-2 border-slate-200 focus:border-orange-400 focus:outline-none text-xs text-slate-800 placeholder-slate-400 bg-white font-medium transition-colors"
-                placeholder="PASSWORD"
-              />
-              <label className="absolute -top-2.5 left-3 px-1 bg-white text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                Password
-              </label>
+            {/* Title */}
+            <h1 className="text-2xl font-black text-slate-800 tracking-wide mb-0.5">
+              Login
+            </h1>
+            <p className="text-xs text-slate-500 mb-5">Sign in to your account</p>
+
+            {/* Error Message */}
+            {error && (
+              <div className="w-full mb-3 p-2 rounded-lg bg-red-50 border border-red-200 text-[10px] text-red-600 text-center font-medium">
+                {error}
+              </div>
+            )}
+
+            {/* Login Form */}
+            <form onSubmit={handleSubmit} className="w-full space-y-3">
+              {/* Username/Email Field */}
+              <div className="relative">
+                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={identifier}
+                  onChange={(e) => setIdentifier(e.target.value)}
+                  required
+                  className="w-full pl-10 pr-4 py-3 rounded-xl bg-slate-100 shadow-[inset_3px_3px_6px_rgba(0,0,0,0.08),inset_-3px_-3px_6px_rgba(255,255,255,0.9)] focus:shadow-[inset_3px_3px_6px_rgba(234,88,12,0.1),inset_-3px_-3px_6px_rgba(255,255,255,0.9)] focus:outline-none text-xs text-slate-700 placeholder-slate-400 font-medium transition-all"
+                  placeholder="Username"
+                />
+              </div>
+
+              {/* Password Field */}
+              <div className="relative">
+                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-red-400" />
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  className="w-full pl-10 pr-10 py-3 rounded-xl bg-slate-100 shadow-[inset_3px_3px_6px_rgba(0,0,0,0.08),inset_-3px_-3px_6px_rgba(255,255,255,0.9)] focus:shadow-[inset_3px_3px_6px_rgba(234,88,12,0.1),inset_-3px_-3px_6px_rgba(255,255,255,0.9)] focus:outline-none text-xs text-slate-700 placeholder-slate-400 font-medium transition-all"
+                  placeholder="Password"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
+
+              {/* Remember Me */}
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="rememberMe"
+                  checked={rememberMe}
+                  onChange={(e) => setRememberMe(e.target.checked)}
+                  className="w-3.5 h-3.5 rounded border-slate-300 text-orange-500 focus:ring-orange-400 cursor-pointer"
+                />
+                <label htmlFor="rememberMe" className="text-[11px] text-slate-500 cursor-pointer select-none">
+                  Remember me
+                </label>
+              </div>
+
+              {/* Sign In Button */}
               <button
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer transition-colors"
+                type="submit"
+                disabled={loading}
+                className="w-full py-3 rounded-xl bg-slate-200 shadow-[5px_5px_10px_#b8b8b8,-5px_-5px_10px_#ffffff] hover:shadow-[2px_2px_5px_#b8b8b8,-2px_-2px_5px_#ffffff] active:shadow-[inset_3px_3px_6px_rgba(0,0,0,0.1),inset_-3px_-3px_6px_rgba(255,255,255,0.7)] text-slate-700 font-bold text-sm flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60"
               >
-                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                <span>{loading ? 'SIGNING IN...' : 'SIGN IN'}</span>
               </button>
-            </div>
+            </form>
+
+
           </div>
-
-          {/* Sign In Button */}
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-4 rounded-xl saffron-gradient hover:opacity-90 text-white font-bold text-sm shadow-lg shadow-orange-500/25 flex items-center justify-center gap-2 transition-all cursor-pointer disabled:opacity-60"
-          >
-            <LogIn className="w-4 h-4" />
-            <span>{loading ? 'SIGNING IN...' : 'SIGN IN'}</span>
-          </button>
-        </form>
-
-        {/* Footer */}
-        <p className="text-center text-[10px] text-slate-400 mt-6 font-medium">
-          © 2026 Adyapan Pvt. Ltd. All rights reserved.
-        </p>
+        </div>
       </div>
     </div>
   );
