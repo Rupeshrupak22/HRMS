@@ -26,6 +26,87 @@ interface OnboardingRecord {
   offerRemarks: string;
 }
 
+function formatExcelDate(val: any): string {
+  if (val === null || val === undefined || val === '' || val === '-') return '-';
+  
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return '-';
+    const adjusted = new Date(val.getTime() + 60 * 1000);
+    const y = adjusted.getFullYear();
+    const m = String(adjusted.getMonth() + 1).padStart(2, '0');
+    const d = String(adjusted.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  if (typeof val === 'number') {
+    const utcDays = val - 25569;
+    const utcMs = Math.round(utcDays * 86400 * 1000);
+    const date = new Date(utcMs + 60 * 1000);
+    if (!isNaN(date.getTime())) {
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  const str = String(val).trim();
+  if (!str || str === '-') return '-';
+
+  if (str.includes('GMT') || str.includes('India Standard Time') || (str.includes('T') && str.length > 15)) {
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      const adjusted = new Date(parsed.getTime() + 60 * 1000);
+      const y = adjusted.getFullYear();
+      const m = String(adjusted.getMonth() + 1).padStart(2, '0');
+      const d = String(adjusted.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (ddmmyyyy) {
+    const d = ddmmyyyy[1].padStart(2, '0');
+    const m = ddmmyyyy[2].padStart(2, '0');
+    const y = ddmmyyyy[3];
+    return `${y}-${m}-${d}`;
+  }
+
+  const yyyymmdd = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (yyyymmdd) {
+    const y = yyyymmdd[1];
+    const m = yyyymmdd[2].padStart(2, '0');
+    const d = yyyymmdd[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  const monthNameMatch = str.match(/^(\d{1,2})[-\s/](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-\s/](\d{2,4})/i);
+  if (monthNameMatch) {
+    const months: Record<string, string> = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
+    const d = monthNameMatch[1].padStart(2, '0');
+    const m = months[monthNameMatch[2].toLowerCase().slice(0, 3)] || '01';
+    let y = monthNameMatch[3];
+    if (y.length === 2) y = '20' + y;
+    return `${y}-${m}-${d}`;
+  }
+
+  return str;
+}
+
+function findRowValue(row: Record<string, any>, aliases: string[]): any {
+  const keys = Object.keys(row);
+  for (const alias of aliases) {
+    const cleanAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const k of keys) {
+      const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanKey === cleanAlias) {
+        return row[k];
+      }
+    }
+  }
+  return undefined;
+}
+
 export default function OnboardingPage() {
   const [records, setRecords] = useState<OnboardingRecord[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -105,23 +186,23 @@ export default function OnboardingPage() {
         }
 
         const formatted = jsonData.map((row) => ({
-          candidateName: String(row['Candidate Name'] || row['Name'] || row['candidate_name'] || '').trim(),
-          phoneNumber: String(row['Phone Number'] || row['Phone'] || row['phone'] || '').trim(),
-          email: String(row['Email'] || row['email'] || '').trim(),
-          college: String(row['College'] || row['college'] || '').trim(),
-          location: String(row['Location'] || row['location'] || '').trim(),
-          source: String(row['Source'] || row['source'] || 'LinkedIn').trim(),
-          roleApplied: String(row['Role Applied'] || row['Role'] || row['role'] || 'Sales').trim(),
-          recruiter: String(row['Recruiter'] || row['recruiter'] || 'Abbu Veena').trim(),
-          applicationDate: String(row['Application Date'] || row['Date'] || '').trim(),
-          currentStage: String(row['Current Stage'] || row['Stage'] || 'Screening').trim(),
-          status: String(row['Status'] || 'Active').trim(),
-          interviews: String(row['Interviews'] || '').trim(),
-          selection: String(row['Selection'] || '').trim(),
-          offers: String(row['Offers'] || '').trim(),
-          joining: String(row['Joining'] || '').trim(),
-          onboarding: String(row['Onboarding'] || '').trim(),
-          offerRemarks: String(row['Offer Remarks'] || row['Remarks'] || '').trim(),
+          candidateName: String(findRowValue(row, ['Candidate Name', 'EMPLOYEE NAME', 'Name', 'candidate_name', 'Applicant Name']) || '').trim(),
+          phoneNumber: String(findRowValue(row, ['Phone Number', 'MOBILE NUMBER', 'Mobile Number', 'Phone', 'phone', 'Contact']) || '').trim(),
+          email: String(findRowValue(row, ['Email', 'EMAIL', 'email', 'Email Address']) || '').trim(),
+          college: String(findRowValue(row, ['College', 'College/University', 'COLLEGE/UNIVERSITY', 'college', 'University']) || '').trim(),
+          location: String(findRowValue(row, ['Location', 'LOCATION', 'location', 'City']) || '').trim(),
+          source: String(findRowValue(row, ['Source', 'SOURCE', 'source']) || 'LinkedIn').trim(),
+          roleApplied: String(findRowValue(row, ['Role Applied', 'ROLE APPLIED', 'Role', 'role', 'Position']) || 'Sales').trim(),
+          recruiter: String(findRowValue(row, ['Recruiter', 'RECRUITER', 'recruiter']) || 'Abbu Veena').trim(),
+          applicationDate: formatExcelDate(findRowValue(row, ['Application Date', 'APPLICATION DATE', 'Date', 'date', 'Applied Date'])),
+          currentStage: String(findRowValue(row, ['Current Stage', 'CURRENT STAGE', 'Stage', 'stage']) || 'Screening').trim(),
+          status: String(findRowValue(row, ['Status', 'STATUS', 'status']) || 'Active').trim(),
+          interviews: String(findRowValue(row, ['Interviews', 'INTERVIEWS', 'interviews']) || '').trim(),
+          selection: String(findRowValue(row, ['Selection', 'SELECTION', 'selection']) || '').trim(),
+          offers: formatExcelDate(findRowValue(row, ['Offers', 'OFFERS', 'offers', 'Offer Date'])),
+          joining: formatExcelDate(findRowValue(row, ['Joining', 'JOINING', 'joining', 'Joining Date', 'DOJ', 'Date of Joining'])),
+          onboarding: String(findRowValue(row, ['Onboarding', 'ONBOARDING', 'onboarding']) || '').trim(),
+          offerRemarks: String(findRowValue(row, ['Offer Remarks', 'OFFER REMARKS', 'Remarks', 'remarks', 'Notes']) || '').trim(),
         })).filter(r => r.candidateName);
 
         if (formatted.length === 0) {
@@ -383,7 +464,7 @@ export default function OnboardingPage() {
                   <td className="px-4 py-3 text-slate-700">{r.source}</td>
                   <td className="px-4 py-3 text-slate-700">{r.roleApplied}</td>
                   <td className="px-4 py-3 text-slate-700">{r.recruiter}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.applicationDate}</td>
+                  <td className="px-4 py-3 text-slate-700">{formatExcelDate(r.applicationDate)}</td>
                   <td className="px-4 py-3">
                     <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.currentStage === 'Joined' ? 'bg-green-100 text-green-700' : r.currentStage === 'Dropout' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>
                       {r.currentStage}
@@ -396,8 +477,8 @@ export default function OnboardingPage() {
                   </td>
                   <td className="px-4 py-3 text-slate-700">{r.interviews}</td>
                   <td className="px-4 py-3 text-slate-700">{r.selection}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.offers}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.joining}</td>
+                  <td className="px-4 py-3 text-slate-700">{formatExcelDate(r.offers)}</td>
+                  <td className="px-4 py-3 text-slate-700 font-medium">{formatExcelDate(r.joining)}</td>
                   <td className="px-4 py-3 text-slate-700">{r.onboarding}</td>
                   <td className="px-4 py-3 text-slate-700">{r.offerRemarks}</td>
                   <td className="px-4 py-3">
