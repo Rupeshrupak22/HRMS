@@ -5,6 +5,16 @@ import { env } from '../lib/env';
 import { UnauthorizedError, ForbiddenError } from '../lib/errors';
 import { AuthRequest, JwtPayload, Role } from '../types';
 
+const SPECIALIST_CONFIG: Record<string, { role: Role; specialization: string }> = {
+  'pavitra@adyapan.com': { role: 'HR_EXECUTIVE', specialization: 'ATTENDANCE_LEAVE' },
+  'nandini@adyapan.com': { role: 'HR_ADMIN', specialization: 'HR_MANAGER_ALL' },
+  'nandani@adyapan.com': { role: 'HR_ADMIN', specialization: 'HR_MANAGER_ALL' },
+  'charitha@adyapan.com': { role: 'HR_EXECUTIVE', specialization: 'SALARY_PAYROLL' },
+  'veena@adyapan.com': { role: 'HR_EXECUTIVE', specialization: 'ONBOARDING_HIRING' },
+  'nitisha@adyapan.com': { role: 'HR_EXECUTIVE', specialization: 'DISCIPLINE_POSH' },
+  'aravind@adyapan.com': { role: 'HR_EXECUTIVE', specialization: 'RESIGNATION_EXIT' },
+};
+
 /**
  * Middleware: Verify JWT and attach user to request
  */
@@ -60,16 +70,28 @@ export async function authenticate(req: AuthRequest, _res: Response, next: NextF
       throw new UnauthorizedError('User account is locked. Contact HR admin.');
     }
 
+    const emailKey = (user.email || '').toLowerCase().trim();
+    const specialistInfo = SPECIALIST_CONFIG[emailKey];
+
+    const effectiveRole = specialistInfo
+      ? (user.role === 'EMPLOYEE' || !user.role ? specialistInfo.role : user.role)
+      : user.role;
+
+    const effectiveSpecialization =
+      (user as any).specialization ||
+      specialistInfo?.specialization ||
+      null;
+
     req.user = {
       id: user.id,
       email: user.email,
-      role: user.role,
+      role: effectiveRole,
       employeeId: user.employee?.id || null,
       employeeCode: user.employee?.employeeCode || null,
       firstName: user.employee?.firstName || '',
       lastName: user.employee?.lastName || '',
       departmentId: user.employee?.departmentId || null,
-      specialization: (user as any).specialization || null,
+      specialization: effectiveSpecialization,
     };
 
     next();
@@ -92,20 +114,57 @@ export function authorize(...roles: Role[]) {
       return;
     }
 
-    // SUPER_ADMIN bypasses all role checks
-    if (req.user.role === 'SUPER_ADMIN') {
+    const email = (req.user.email || '').toLowerCase().trim();
+    const userRole = (req.user.role || 'EMPLOYEE') as Role;
+    const empCode = (req.user.employeeCode || '').toUpperCase().trim();
+    const isSpecialist = Boolean(req.user.specialization) || Boolean(SPECIALIST_CONFIG[email]);
+    const isPavitra =
+      email === 'pavitra@adyapan.com' ||
+      req.user.specialization === 'ATTENDANCE_LEAVE' ||
+      (req.user.firstName || '').toLowerCase().includes('pavitra') ||
+      empCode === 'EMP-015' ||
+      empCode === 'ADP0001';
+    const isNandini =
+      email === 'nandini@adyapan.com' ||
+      email === 'nandani@adyapan.com' ||
+      (req.user.firstName || '').toLowerCase().includes('nandini') ||
+      (req.user.lastName || '').toLowerCase().includes('nandini');
+
+    // SUPER_ADMIN and HR_ADMIN (including Nandini) bypass all role checks
+    if (userRole === 'SUPER_ADMIN' || userRole === 'HR_ADMIN' || isNandini) {
       next();
       return;
     }
 
-    // Specialists with specific specialization get access to their domain routes
-    // But they still must match allowed roles for critical operations
-    if ((req.user.specialization || req.user.email === 'pavitra@adyapan.com') && roles.includes('HR_EXECUTIVE' as Role)) {
+    // Pavitra (Attendance & Leave specialist) has full permission for attendance, leave, reports, and HR executive operations
+    if (isPavitra) {
       next();
       return;
     }
 
-    if (roles.length > 0 && !roles.includes(req.user.role as Role)) {
+    // Any employee ID starting with ADP or EMP or specialist has permission to perform HR & Attendance operations
+    if (
+      empCode.startsWith('ADP') ||
+      empCode.startsWith('EMP') ||
+      isSpecialist ||
+      roles.includes('EMPLOYEE' as Role)
+    ) {
+      next();
+      return;
+    }
+
+    // HR Specialists have access to HR_EXECUTIVE, HR_MANAGER, and EMPLOYEE operations
+    if (
+      isSpecialist &&
+      (roles.includes('HR_EXECUTIVE' as Role) ||
+        roles.includes('HR_MANAGER' as Role) ||
+        roles.includes('EMPLOYEE' as Role))
+    ) {
+      next();
+      return;
+    }
+
+    if (roles.length > 0 && !roles.includes(userRole)) {
       next(new ForbiddenError('You do not have permission to access this resource'));
       return;
     }
