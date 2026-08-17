@@ -228,20 +228,21 @@ export default function AttendancePage() {
     setUploadStatus('uploading');
     
     try {
-      const totalRecords = importData.length;
-      const batchSize = 50;
-      const batches = Math.ceil(totalRecords / batchSize);
-      
-      for (let i = 0; i < batches; i++) {
-        const batch = importData.slice(i * batchSize, (i + 1) * batchSize);
-        await apiRequest('/attendance/bulk-import', {
-          method: 'POST',
-          body: JSON.stringify({ records: batch }),
+      // Simulate progress while the single API call runs
+      const progressInterval = setInterval(() => {
+        setUploadProgress(prev => {
+          if (prev >= 90) return prev;
+          return prev + Math.random() * 15;
         });
-        const progress = Math.round(((i + 1) / batches) * 100);
-        setUploadProgress(progress);
-      }
+      }, 300);
+
+      await apiRequest('/attendance/bulk-import', {
+        method: 'POST',
+        body: JSON.stringify({ records: importData }),
+      });
       
+      clearInterval(progressInterval);
+      setUploadProgress(100);
       setUploadStatus('success');
       setShowImportModal(false);
       await fetchAttendanceData();
