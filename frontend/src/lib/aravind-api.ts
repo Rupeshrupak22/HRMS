@@ -61,6 +61,12 @@ export const aravindApi = {
   updateExitInterview: (id: string, data: any) => request(`/exit-interview/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteExitInterview: (id: string) => request(`/exit-interview/${id}`, { method: 'DELETE' }),
 
+  // Abscond
+  getAbscond: () => request('/abscond'),
+  createAbscond: (data: any) => request('/abscond', { method: 'POST', body: JSON.stringify(data) }),
+  updateAbscond: (id: string, data: any) => request(`/abscond/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAbscond: (id: string) => request(`/abscond/${id}`, { method: 'DELETE' }),
+
   // Daily Reports
   getDailyReports: () => request('/daily-reports'),
   createDailyReport: (data: any) => request('/daily-reports', { method: 'POST', body: JSON.stringify(data) }),

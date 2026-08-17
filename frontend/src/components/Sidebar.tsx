@@ -54,6 +54,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'F&F', href: '/fnf', icon: CreditCard },
     { label: 'Employee Complaints', href: '/employee-complaints', icon: MessageSquareWarning },
     { label: 'Exit Interview', href: '/exit-interview', icon: ClipboardList },
+    { label: 'Abscond', href: '/abscond', icon: UserX },
     { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
   ];
 
