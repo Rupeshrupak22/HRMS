@@ -277,11 +277,14 @@ export default function AttendancePage() {
   };
 
   const handleConfirmDelete = async () => {
+    if (!deleteEmployee) return;
+    const targetEmpId = deleteEmployee.empId || deleteEmployee.id;
     try {
       await apiRequest('/attendance/monthly-delete', {
         method: 'DELETE',
-        body: JSON.stringify({ employeeId: deleteEmployee.empId, month: selectedMonth })
+        body: JSON.stringify({ employeeId: targetEmpId, month: selectedMonth })
       });
+      setAllLogs(prev => prev.filter(l => l.empId !== targetEmpId && l.employeeId !== targetEmpId));
       setDeleteEmployee(null);
       await fetchAttendanceData();
     } catch (err: any) {

@@ -115,7 +115,7 @@ router.post('/check-out', async (req: AuthRequest, res: Response, next) => {
 });
 
 // POST /api/attendance/mark — admin/HR mark attendance
-router.post('/mark', authorize('HR_ADMIN', 'HR_MANAGER', 'HR_EXECUTIVE'), validate(markAttendanceSchema), async (req: AuthRequest, res: Response, next) => {
+router.post('/mark', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_MANAGER', 'HR_EXECUTIVE', 'EMPLOYEE'), validate(markAttendanceSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, date, status, checkInTime, checkOutTime, notes } = req.body;
     const dateObj = new Date(date);
@@ -146,7 +146,7 @@ router.post('/mark', authorize('HR_ADMIN', 'HR_MANAGER', 'HR_EXECUTIVE'), valida
 });
 
 // GET /api/attendance/today-stats — attendance stats for today
-router.get('/today-stats', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+router.get('/today-stats', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -211,7 +211,7 @@ router.get('/my-logs', async (req: AuthRequest, res: Response, next) => {
 });
 
 // GET /api/attendance/all-logs — admin view all employee attendance
-router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { startDate, endDate, status } = req.query as any;
     const where: any = {};
@@ -261,7 +261,7 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), as
 });
 
 // POST /api/attendance/bulk-import — import attendance from XLSX/CSV
-router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { records } = req.body;
     if (!records || !Array.isArray(records) || records.length === 0) {
@@ -367,8 +367,6 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE')
             workHours,
             notes: record.remarks || null,
             source: 'IMPORT',
-            updatedBy: req.user!.email,
-            isDeleted: false,
           },
           create: {
             employeeId: employee.id,
@@ -379,7 +377,6 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE')
             workHours,
             notes: record.remarks || null,
             source: 'IMPORT',
-            createdBy: req.user!.email,
           },
         });
         imported++;
@@ -424,7 +421,7 @@ function parseTimeString(timeStr: string, baseDate: Date): Date | null {
 }
 
 // PUT /api/attendance/monthly-update — update monthly attendance records from month view edit
-router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeCode, employeeName, role, department, designation, month, records } = req.body;
     // month format: "2026-08"
@@ -545,8 +542,6 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
               workHours,
               notes: record.remarks || existing.notes,
               source: 'ADMIN',
-              updatedBy: req.user!.email,
-              isDeleted: false,
             },
           });
           updated++;
@@ -561,7 +556,6 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
               workHours,
               notes: record.remarks || null,
               source: 'ADMIN',
-              createdBy: req.user!.email,
             },
           });
           created++;
@@ -577,8 +571,8 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
   }
 });
 
-// DELETE /api/attendance/monthly-delete — soft delete a whole month's records for an employee
-router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+// DELETE /api/attendance/monthly-delete — delete a whole month's records for an employee
+router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, month } = req.body;
     // month format: "2026-08"
@@ -591,17 +585,32 @@ router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUT
     const year = parseInt(parts[0], 10);
     const m = parseInt(parts[1], 10);
     const startDate = new Date(year, m - 1, 1);
+    startDate.setHours(0, 0, 0, 0);
     const endDate = new Date(year, m, 0, 23, 59, 59, 999);
 
-    const result = await prisma.attendanceRecord.updateMany({
+    const empIdentifier = String(employeeId).trim();
+
+    // Find all matching employee records (by code or id)
+    const employees = await prisma.employee.findMany({
       where: {
-        employeeId,
-        date: { gte: startDate, lte: endDate },
-        isDeleted: false,
+        OR: [
+          { id: empIdentifier },
+          { employeeCode: empIdentifier },
+          { employeeCode: empIdentifier.toUpperCase() },
+          { employeeCode: empIdentifier.toLowerCase() },
+        ],
       },
-      data: {
-        isDeleted: true,
-        updatedBy: req.user!.email,
+    });
+
+    const employeeIds = employees.map(e => e.id);
+    if (!employeeIds.includes(empIdentifier)) {
+      employeeIds.push(empIdentifier);
+    }
+
+    const result = await prisma.attendanceRecord.deleteMany({
+      where: {
+        employeeId: { in: employeeIds },
+        date: { gte: startDate, lte: endDate },
       },
     });
 
@@ -611,8 +620,8 @@ router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUT
   }
 });
 
-// DELETE /api/attendance/daily-delete — soft delete a specific date's record
-router.delete('/daily-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+// DELETE /api/attendance/daily-delete — delete a specific date's record
+router.delete('/daily-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, date } = req.body;
     if (!employeeId || !date) {
@@ -622,16 +631,31 @@ router.delete('/daily-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIV
 
     const dateObj = new Date(date);
     dateObj.setHours(0, 0, 0, 0);
+    const nextDay = new Date(dateObj);
+    nextDay.setDate(nextDay.getDate() + 1);
 
-    const result = await prisma.attendanceRecord.updateMany({
+    const empIdentifier = String(employeeId).trim();
+
+    const employees = await prisma.employee.findMany({
       where: {
-        employeeId,
-        date: dateObj,
-        isDeleted: false,
+        OR: [
+          { id: empIdentifier },
+          { employeeCode: empIdentifier },
+          { employeeCode: empIdentifier.toUpperCase() },
+          { employeeCode: empIdentifier.toLowerCase() },
+        ],
       },
-      data: {
-        isDeleted: true,
-        updatedBy: req.user!.email,
+    });
+
+    const employeeIds = employees.map(e => e.id);
+    if (!employeeIds.includes(empIdentifier)) {
+      employeeIds.push(empIdentifier);
+    }
+
+    const result = await prisma.attendanceRecord.deleteMany({
+      where: {
+        employeeId: { in: employeeIds },
+        date: { gte: dateObj, lt: nextDay },
       },
     });
 

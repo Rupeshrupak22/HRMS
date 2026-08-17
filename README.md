@@ -2,7 +2,7 @@
 
 Built for **Adyapan Edutech Pvt. Ltd.**
 
-Adyapan HRMS is a modern, secure, and scalable Human Resource Management System designed to scale from 100 to 5,000+ employees. It manages the complete end-to-end employee lifecycle:
+Adyapan HRMS is a modern, secure, and scalable Human Resource Management System. It manages the complete end-to-end employee lifecycle:
 
 Recruitment → Hiring → Onboarding → Employee Management → Attendance → Leave → Payroll → Performance → Assets → Training → Documents → Exit → Full & Final Settlement
 

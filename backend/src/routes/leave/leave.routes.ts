@@ -156,7 +156,7 @@ router.get('/holidays', async (_req, res: Response, next) => {
 });
 
 // POST /api/leave/bulk-import — import leave records from XLSX/CSV
-router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { records } = req.body;
     if (!records || !Array.isArray(records) || records.length === 0) {
@@ -284,7 +284,7 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE')
 });
 
 // DELETE /api/leave/clear-all — clear all leave requests
-router.delete('/clear-all', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (_req: AuthRequest, res: Response, next) => {
+router.delete('/clear-all', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (_req: AuthRequest, res: Response, next) => {
   try {
     await prisma.leaveRequest.deleteMany({});
     res.json({ success: true, message: 'All leave requests deleted successfully' });
