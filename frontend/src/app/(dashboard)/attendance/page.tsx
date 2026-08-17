@@ -42,6 +42,128 @@ export default function AttendancePage() {
   const isPavitra = user?.specialization === 'ATTENDANCE_LEAVE' || user?.email === 'pavitra@adyapan.com';
   const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN' || user?.role === 'HR_EXECUTIVE' || isPavitra;
 
+  // View mode: 'day' (existing daily view) or 'month' (monthly summary with counts)
+  const [viewMode, setViewMode] = useState<'day' | 'month'>('month');
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+
+  // Compute monthly summary per employee
+  const getMonthlyStats = () => {
+    const [year, month] = selectedMonth.split('-').map(Number);
+    const daysInMonth = new Date(year, month, 0).getDate();
+    const monthPrefix = selectedMonth; // e.g. "2026-05"
+
+    // Filter logs for the selected month
+    const monthLogs = allLogs.filter((l) => (l.date || '').startsWith(monthPrefix));
+
+    // Group by employee
+    const empMap = new Map<string, any>();
+    for (const log of monthLogs) {
+      const key = log.empId || log.employeeCode || 'UNKNOWN';
+      if (!empMap.has(key)) {
+        empMap.set(key, {
+          empId: key,
+          empName: log.empName || log.employeeName || '-',
+          department: log.department || '-',
+          designation: log.designation || '-',
+          role: log.role || '-',
+          days: {} as Record<number, string>, // day number -> status code
+          present: 0,
+          absent: 0,
+          earlyLogout: 0,
+          lateLogin: 0,
+          sickLeave: 0,
+          emergencyLeave: 0,
+          paidLeave: 0,
+          longLeave: 0,
+          casualLeave: 0,
+          mailReceived: 0,
+          mailNotReceived: 0,
+          approvedBy: '-',
+          notApproved: 0,
+          nationalHoliday: 0,
+          festiveHoliday: 0,
+          holiday: 0,
+          training: 0,
+          wfh: 0,
+          halfDay: 0,
+        });
+      }
+      const emp = empMap.get(key)!;
+      const dayNum = parseInt((log.date || '').split('-')[2], 10);
+      if (!dayNum) continue;
+
+      // Map status
+      const status = (log.status || '').toUpperCase();
+      const lateLogin = (log.lateLogin || '').toLowerCase() === 'yes';
+      const earlyLogout = (log.earlyLogout || '').toLowerCase() === 'yes';
+      const leaveType = (log.leaveType || log.notes || '').toLowerCase();
+
+      let dayCode = 'P'; // default Present
+      if (status === 'PRESENT' || status === 'P') {
+        dayCode = 'P';
+        emp.present++;
+      } else if (status === 'LATE' || status === 'L') {
+        dayCode = 'P'; // still counted as present but with late
+        emp.present++;
+      } else if (status === 'ABSENT' || status === 'A') {
+        dayCode = 'A';
+        emp.absent++;
+      } else if (status === 'ON_LEAVE' || status === 'LEAVE') {
+        if (leaveType.includes('sick')) {
+          dayCode = 'SL';
+          emp.sickLeave++;
+        } else if (leaveType.includes('emergency')) {
+          dayCode = 'EL';
+          emp.emergencyLeave++;
+        } else if (leaveType.includes('paid')) {
+          dayCode = 'PL';
+          emp.paidLeave++;
+        } else if (leaveType.includes('long')) {
+          dayCode = 'LL';
+          emp.longLeave++;
+        } else if (leaveType.includes('casual')) {
+          dayCode = 'CL';
+          emp.casualLeave++;
+        } else {
+          dayCode = 'CL';
+          emp.casualLeave++;
+        }
+      } else if (status === 'HALF_DAY') {
+        dayCode = 'HD';
+        emp.halfDay++;
+      } else if (status === 'HOLIDAY' || status === 'NATIONAL_HOLIDAY') {
+        dayCode = 'NH';
+        emp.nationalHoliday++;
+      } else if (status === 'FESTIVE_HOLIDAY') {
+        dayCode = 'FH';
+        emp.festiveHoliday++;
+      } else if (status === 'TRAINING') {
+        dayCode = 'T';
+        emp.training++;
+      } else if (status === 'WFH') {
+        dayCode = 'WFH';
+        emp.wfh++;
+        emp.present++;
+      } else {
+        dayCode = 'P';
+        emp.present++;
+      }
+
+      if (lateLogin) emp.lateLogin++;
+      if (earlyLogout) emp.earlyLogout++;
+      if ((log.wfh || '').toLowerCase() === 'yes' && status !== 'WFH') {
+        emp.wfh++;
+      }
+
+      emp.days[dayNum] = dayCode;
+    }
+
+    return { employees: Array.from(empMap.values()), daysInMonth };
+  };
+
   // Add Manual Attendance Modal state
   const [showAddModal, setShowAddModal] = useState(false);
   const [addForm, setAddForm] = useState({
@@ -261,14 +383,25 @@ export default function AttendancePage() {
       return new Date().toISOString().split('T')[0];
     }
     if (typeof val === 'number') {
-      const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+      // Excel serial to date — use UTC directly to avoid timezone shift
+      const utcDays = val - 25569;
+      const utcMs = Math.round(utcDays * 86400 * 1000);
+      const date = new Date(utcMs);
       if (!isNaN(date.getTime())) {
-        return date.toISOString().split('T')[0];
+        // Extract UTC components to avoid IST offset shifting the date back
+        const y = date.getUTCFullYear();
+        const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(date.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
       }
     }
     if (val instanceof Date) {
       if (!isNaN(val.getTime())) {
-        return val.toISOString().split('T')[0];
+        // Use local date components to avoid UTC timezone shift
+        const y = val.getFullYear();
+        const m = String(val.getMonth() + 1).padStart(2, '0');
+        const d = String(val.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
       }
     }
     const str = String(val).trim();
@@ -288,7 +421,11 @@ export default function AttendancePage() {
     }
     const parsed = new Date(str);
     if (!isNaN(parsed.getTime())) {
-      return parsed.toISOString().split('T')[0];
+      // Use local date to avoid timezone shift
+      const y = parsed.getFullYear();
+      const m = String(parsed.getMonth() + 1).padStart(2, '0');
+      const d = String(parsed.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
     }
     return new Date().toISOString().split('T')[0];
   };
@@ -584,35 +721,57 @@ export default function AttendancePage() {
           </p>
         </div>
 
-        {isAdmin && (
-          <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* View Mode Toggle */}
+          <div className="flex items-center bg-slate-100 rounded-xl p-0.5">
             <button
-              onClick={() => setShowAddModal(true)}
-              className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer transition-all"
+              onClick={() => setViewMode('day')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'day' ? 'bg-white text-orange-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
             >
-              <Clock className="w-3.5 h-3.5" />
-              Add Record Manually
+              Day View
             </button>
             <button
-              onClick={handleDownloadTemplate}
-              className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors"
+              onClick={() => setViewMode('month')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                viewMode === 'month' ? 'bg-white text-orange-700 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
             >
-              <Download className="w-3.5 h-3.5" />
-              Download Template
+              Month View
             </button>
-            <label className="px-3 py-2 rounded-xl saffron-gradient text-white text-xs font-bold shadow-md shadow-orange-500/25 flex items-center gap-1.5 cursor-pointer transition-all hover:opacity-90">
-              <Upload className="w-3.5 h-3.5" />
-              Import XLSX/CSV
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-            </label>
           </div>
-        )}
+
+          {isAdmin && (
+            <>
+              <button
+                onClick={() => setShowAddModal(true)}
+                className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold shadow-md shadow-emerald-500/20 flex items-center gap-1.5 cursor-pointer transition-all"
+              >
+                <Clock className="w-3.5 h-3.5" />
+                Add Record Manually
+              </button>
+              <button
+                onClick={handleDownloadTemplate}
+                className="px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-colors"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Download Template
+              </button>
+              <label className="px-3 py-2 rounded-xl saffron-gradient text-white text-xs font-bold shadow-md shadow-orange-500/25 flex items-center gap-1.5 cursor-pointer transition-all hover:opacity-90">
+                <Upload className="w-3.5 h-3.5" />
+                Import XLSX/CSV
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
+            </>
+          )}
+        </div>
       </div>
 
       {importError && (
@@ -640,6 +799,157 @@ export default function AttendancePage() {
           <div className="text-2xl font-black text-red-600 mt-1">{totalAbsent}</div>
         </div>
       </div>
+
+      {/* =================== MONTH VIEW =================== */}
+      {viewMode === 'month' && (() => {
+        const { employees, daysInMonth } = getMonthlyStats();
+        const [year, month] = selectedMonth.split('-').map(Number);
+        const monthName = new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+
+        return (
+          <div className="space-y-4">
+            {/* Month Selector */}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 shadow-xs">
+                <Calendar className="w-4 h-4 text-orange-600" />
+                <input
+                  type="month"
+                  value={selectedMonth}
+                  onChange={(e) => setSelectedMonth(e.target.value)}
+                  className="text-sm font-bold text-slate-700 border-none outline-none bg-transparent cursor-pointer"
+                />
+              </div>
+              <span className="text-sm font-black text-slate-800">{monthName} — Monthly Attendance Summary</span>
+            </div>
+
+            {/* Legend */}
+            <div className="flex flex-wrap gap-2 text-[10px] font-bold">
+              <span className="px-2 py-1 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200">P = Present</span>
+              <span className="px-2 py-1 rounded-md bg-red-50 text-red-700 border border-red-200">A = Absent</span>
+              <span className="px-2 py-1 rounded-md bg-amber-50 text-amber-700 border border-amber-200">Late = Late Login</span>
+              <span className="px-2 py-1 rounded-md bg-orange-50 text-orange-700 border border-orange-200">EL = Early Logout</span>
+              <span className="px-2 py-1 rounded-md bg-purple-50 text-purple-700 border border-purple-200">SL = Sick Leave</span>
+              <span className="px-2 py-1 rounded-md bg-pink-50 text-pink-700 border border-pink-200">EML = Emergency Leave</span>
+              <span className="px-2 py-1 rounded-md bg-blue-50 text-blue-700 border border-blue-200">PL = Paid Leave</span>
+              <span className="px-2 py-1 rounded-md bg-indigo-50 text-indigo-700 border border-indigo-200">CL = Casual Leave</span>
+              <span className="px-2 py-1 rounded-md bg-teal-50 text-teal-700 border border-teal-200">LL = Long Leave</span>
+              <span className="px-2 py-1 rounded-md bg-cyan-50 text-cyan-700 border border-cyan-200">NH = National Holiday</span>
+              <span className="px-2 py-1 rounded-md bg-lime-50 text-lime-700 border border-lime-200">FH = Festive Holiday</span>
+              <span className="px-2 py-1 rounded-md bg-yellow-50 text-yellow-700 border border-yellow-200">T = Training</span>
+              <span className="px-2 py-1 rounded-md bg-sky-50 text-sky-700 border border-sky-200">HD = Half Day</span>
+            </div>
+
+            {/* Monthly Summary Table */}
+            <div className="rounded-2xl bg-white border border-slate-200 overflow-hidden shadow-xs">
+              <div className="p-4 border-b border-slate-200 font-bold text-xs text-slate-900 flex items-center justify-between">
+                <span>Employee Monthly Attendance — {monthName}</span>
+                <span className="text-slate-500 font-normal">{employees.length} employees</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse text-[10px]">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-[9px] font-bold text-slate-500 uppercase">
+                      <th className="py-2.5 px-2 sticky left-0 bg-slate-50 z-10 min-w-[30px]">Sl#</th>
+                      <th className="py-2.5 px-2 sticky left-[30px] bg-slate-50 z-10 min-w-[120px]">Employee Name</th>
+                      <th className="py-2.5 px-2 min-w-[70px]">Employee ID</th>
+                      <th className="py-2.5 px-2 min-w-[60px]">Role</th>
+                      <th className="py-2.5 px-2 min-w-[80px]">Department</th>
+                      <th className="py-2.5 px-2 min-w-[80px]">Designation</th>
+                      {/* Day columns */}
+                      {Array.from({ length: daysInMonth }, (_, i) => (
+                        <th key={i + 1} className="py-2.5 px-1.5 text-center min-w-[28px]">
+                          {i + 1}-{new Date(year, month - 1, 1).toLocaleString('en-US', { month: 'short' })}
+                        </th>
+                      ))}
+                      {/* Summary columns */}
+                      <th className="py-2.5 px-2 text-center bg-emerald-50 min-w-[45px]">Present</th>
+                      <th className="py-2.5 px-2 text-center bg-red-50 min-w-[45px]">Absent</th>
+                      <th className="py-2.5 px-2 text-center bg-orange-50 min-w-[55px]">Early Logout</th>
+                      <th className="py-2.5 px-2 text-center bg-amber-50 min-w-[50px]">Late Login</th>
+                      <th className="py-2.5 px-2 text-center bg-purple-50 min-w-[55px]">Sick Leave</th>
+                      <th className="py-2.5 px-2 text-center bg-pink-50 min-w-[60px]">Emergency Leave</th>
+                      <th className="py-2.5 px-2 text-center bg-blue-50 min-w-[55px]">Paid Leave</th>
+                      <th className="py-2.5 px-2 text-center bg-teal-50 min-w-[55px]">Long Leaves</th>
+                      <th className="py-2.5 px-2 text-center bg-green-50 min-w-[60px]">Mail Received</th>
+                      <th className="py-2.5 px-2 text-center bg-rose-50 min-w-[65px]">Mail Not Received</th>
+                      <th className="py-2.5 px-2 text-center bg-indigo-50 min-w-[55px]">Casual Leave</th>
+                      <th className="py-2.5 px-2 text-center bg-violet-50 min-w-[55px]">Approved By</th>
+                      <th className="py-2.5 px-2 text-center bg-red-50 min-w-[55px]">Not Approved</th>
+                      <th className="py-2.5 px-2 text-center bg-cyan-50 min-w-[60px]">National Holiday</th>
+                      <th className="py-2.5 px-2 text-center bg-lime-50 min-w-[60px]">Festive Holiday</th>
+                      <th className="py-2.5 px-2 text-center bg-slate-100 min-w-[45px]">Holiday</th>
+                      <th className="py-2.5 px-2 text-center bg-yellow-50 min-w-[45px]">Training</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {employees.length === 0 ? (
+                      <tr>
+                        <td colSpan={daysInMonth + 21} className="py-8 px-5 text-center text-slate-400 italic text-xs">
+                          No attendance records found for {monthName}. Import or add records first.
+                        </td>
+                      </tr>
+                    ) : (
+                      employees.map((emp, idx) => (
+                        <tr key={emp.empId} className="hover:bg-orange-50/30 transition-colors">
+                          <td className="py-2 px-2 font-bold text-slate-700 sticky left-0 bg-white z-10">{idx + 1}</td>
+                          <td className="py-2 px-2 font-semibold text-slate-900 sticky left-[30px] bg-white z-10 whitespace-nowrap">{emp.empName}</td>
+                          <td className="py-2 px-2 font-mono font-bold text-slate-700">{emp.empId}</td>
+                          <td className="py-2 px-2 text-slate-600">{emp.role}</td>
+                          <td className="py-2 px-2 text-slate-600">{emp.department}</td>
+                          <td className="py-2 px-2 text-slate-600">{emp.designation}</td>
+                          {/* Day cells */}
+                          {Array.from({ length: daysInMonth }, (_, i) => {
+                            const dayCode = emp.days[i + 1] || '-';
+                            let cellColor = 'text-slate-300';
+                            if (dayCode === 'P') cellColor = 'bg-emerald-50 text-emerald-700 font-bold';
+                            else if (dayCode === 'A') cellColor = 'bg-red-50 text-red-700 font-bold';
+                            else if (dayCode === 'SL') cellColor = 'bg-purple-50 text-purple-700 font-bold';
+                            else if (dayCode === 'EL') cellColor = 'bg-pink-50 text-pink-700 font-bold';
+                            else if (dayCode === 'PL') cellColor = 'bg-blue-50 text-blue-700 font-bold';
+                            else if (dayCode === 'CL') cellColor = 'bg-indigo-50 text-indigo-700 font-bold';
+                            else if (dayCode === 'LL') cellColor = 'bg-teal-50 text-teal-700 font-bold';
+                            else if (dayCode === 'NH') cellColor = 'bg-cyan-50 text-cyan-700 font-bold';
+                            else if (dayCode === 'FH') cellColor = 'bg-lime-50 text-lime-700 font-bold';
+                            else if (dayCode === 'T') cellColor = 'bg-yellow-50 text-yellow-700 font-bold';
+                            else if (dayCode === 'HD') cellColor = 'bg-sky-50 text-sky-700 font-bold';
+                            else if (dayCode === 'WFH') cellColor = 'bg-blue-50 text-blue-700 font-bold';
+                            return (
+                              <td key={i + 1} className={`py-2 px-1 text-center text-[9px] ${cellColor}`}>
+                                {dayCode}
+                              </td>
+                            );
+                          })}
+                          {/* Summary cells */}
+                          <td className="py-2 px-2 text-center font-black text-emerald-700 bg-emerald-50/50">{emp.present}</td>
+                          <td className="py-2 px-2 text-center font-black text-red-700 bg-red-50/50">{emp.absent}</td>
+                          <td className="py-2 px-2 text-center font-black text-orange-700 bg-orange-50/50">{emp.earlyLogout}</td>
+                          <td className="py-2 px-2 text-center font-black text-amber-700 bg-amber-50/50">{emp.lateLogin}</td>
+                          <td className="py-2 px-2 text-center font-black text-purple-700 bg-purple-50/50">{emp.sickLeave}</td>
+                          <td className="py-2 px-2 text-center font-black text-pink-700 bg-pink-50/50">{emp.emergencyLeave}</td>
+                          <td className="py-2 px-2 text-center font-black text-blue-700 bg-blue-50/50">{emp.paidLeave}</td>
+                          <td className="py-2 px-2 text-center font-black text-teal-700 bg-teal-50/50">{emp.longLeave}</td>
+                          <td className="py-2 px-2 text-center font-black text-green-700 bg-green-50/50">{emp.mailReceived}</td>
+                          <td className="py-2 px-2 text-center font-black text-rose-700 bg-rose-50/50">{emp.mailNotReceived}</td>
+                          <td className="py-2 px-2 text-center font-black text-indigo-700 bg-indigo-50/50">{emp.casualLeave}</td>
+                          <td className="py-2 px-2 text-center font-bold text-violet-700 bg-violet-50/50">{emp.approvedBy}</td>
+                          <td className="py-2 px-2 text-center font-black text-red-700 bg-red-50/50">{emp.notApproved}</td>
+                          <td className="py-2 px-2 text-center font-black text-cyan-700 bg-cyan-50/50">{emp.nationalHoliday}</td>
+                          <td className="py-2 px-2 text-center font-black text-lime-700 bg-lime-50/50">{emp.festiveHoliday}</td>
+                          <td className="py-2 px-2 text-center font-black text-slate-700 bg-slate-50/50">{emp.holiday}</td>
+                          <td className="py-2 px-2 text-center font-black text-yellow-700 bg-yellow-50/50">{emp.training}</td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* =================== DAY VIEW (existing) =================== */}
+      {viewMode === 'day' && (<>
 
       {/* Real-time Clock In/Out Widget (only for non-admin employees) */}
       {!isAdmin && (
@@ -838,6 +1148,8 @@ export default function AttendancePage() {
           </table>
         </div>
       </div>
+
+      </>)}
 
       {/* Edit Record Modal */}
       {editingLog && (

@@ -206,7 +206,17 @@ export function VeenaDashboard() {
           source: String(row['Source'] || row['SOURCE'] || 'LinkedIn').trim(),
           roleApplied: String(row['Role Applied'] || row['ROLE APPLIED'] || 'Sales').trim(),
           recruiter: String(row['Recruiter'] || row['RECRUITER'] || 'Abbu Veena').trim(),
-          applicationDate: String(row['Application Date'] || row['APPLICATION DATE'] || new Date().toISOString().split('T')[0]).trim(),
+          applicationDate: (() => {
+            const rawDate = row['Application Date'] || row['APPLICATION DATE'];
+            if (!rawDate) return new Date().toISOString().split('T')[0];
+            if (rawDate instanceof Date && !isNaN(rawDate.getTime())) {
+              const y = rawDate.getFullYear();
+              const m = String(rawDate.getMonth() + 1).padStart(2, '0');
+              const d = String(rawDate.getDate()).padStart(2, '0');
+              return `${y}-${m}-${d}`;
+            }
+            return String(rawDate).trim();
+          })(),
           currentStage: String(row['Current Stage'] || row['CURRENT STAGE'] || 'Screening').trim(),
           status: String(row['Status'] || row['STATUS'] || 'Active').trim(),
           interviews: String(row['Interviews'] || row['INTERVIEWS'] || '').trim(),

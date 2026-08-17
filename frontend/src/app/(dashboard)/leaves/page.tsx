@@ -75,14 +75,22 @@ export default function LeavesPage() {
       return '';
     }
     if (typeof val === 'number') {
-      const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+      const utcDays = val - 25569;
+      const utcMs = Math.round(utcDays * 86400 * 1000);
+      const date = new Date(utcMs);
       if (!isNaN(date.getTime())) {
-        return date.toISOString().split('T')[0];
+        const y = date.getUTCFullYear();
+        const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+        const d = String(date.getUTCDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
       }
     }
     if (val instanceof Date) {
       if (!isNaN(val.getTime())) {
-        return val.toISOString().split('T')[0];
+        const y = val.getFullYear();
+        const m = String(val.getMonth() + 1).padStart(2, '0');
+        const d = String(val.getDate()).padStart(2, '0');
+        return `${y}-${m}-${d}`;
       }
     }
     const str = String(val).trim();
@@ -94,7 +102,7 @@ export default function LeavesPage() {
       const year = ddmmyyyy[3];
       return `${year}-${month}-${day}`;
     }
-    const yyyymmdd = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+    const yyyymmdd = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{4})$/);
     if (yyyymmdd) {
       const year = yyyymmdd[1];
       const month = yyyymmdd[2].padStart(2, '0');
@@ -103,7 +111,10 @@ export default function LeavesPage() {
     }
     const parsed = new Date(str);
     if (!isNaN(parsed.getTime())) {
-      return parsed.toISOString().split('T')[0];
+      const y = parsed.getFullYear();
+      const m = String(parsed.getMonth() + 1).padStart(2, '0');
+      const d = String(parsed.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
     }
     return '';
   };
