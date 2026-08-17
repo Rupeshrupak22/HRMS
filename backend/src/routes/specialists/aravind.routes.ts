@@ -82,7 +82,7 @@ router.put('/daily-reports/:id', dailyReports.update);
 router.delete('/daily-reports/:id', dailyReports.remove);
 
 // Abscond
-const abscond = crud(prisma.abscondTracker);
+const abscond = crud((prisma as any).abscondTracker);
 router.get('/abscond', abscond.getAll);
 router.post('/abscond', abscond.create);
 router.put('/abscond/:id', abscond.update);

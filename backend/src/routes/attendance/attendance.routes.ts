@@ -367,8 +367,6 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE',
             workHours,
             notes: record.remarks || null,
             source: 'IMPORT',
-            updatedBy: req.user!.email,
-            isDeleted: false,
           },
           create: {
             employeeId: employee.id,
@@ -379,7 +377,6 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE',
             workHours,
             notes: record.remarks || null,
             source: 'IMPORT',
-            createdBy: req.user!.email,
           },
         });
         imported++;
@@ -545,8 +542,6 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
               workHours,
               notes: record.remarks || existing.notes,
               source: 'ADMIN',
-              updatedBy: req.user!.email,
-              isDeleted: false,
             },
           });
           updated++;
@@ -561,7 +556,6 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
               workHours,
               notes: record.remarks || null,
               source: 'ADMIN',
-              createdBy: req.user!.email,
             },
           });
           created++;
