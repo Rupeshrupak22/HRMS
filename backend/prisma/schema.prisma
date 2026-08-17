@@ -161,6 +161,7 @@ model AttendanceRecord {
   status        String   @default("PRESENT")
   source        String   @default("WEB")
   notes         String?
+  isDeleted     Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
