@@ -119,7 +119,6 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Daily Reports', href: '/reports/all-daily', icon: ClipboardList },
     { label: 'HR Manager Report', href: '/reports/hr-manager', icon: BarChart3 },
     { label: 'Overall Report', href: '/reports/overall', icon: BarChart3 },
-    { label: 'Settings', href: '/settings', icon: Settings },
   ];
 
   // Nandini (HR Manager) - custom sidebar with team reports
