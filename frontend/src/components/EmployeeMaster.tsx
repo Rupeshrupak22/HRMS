@@ -645,7 +645,17 @@ export function EmployeeMaster() {
   };
 
   const getEmpDept = (emp: EmployeeRecord) => {
-    return emp.department || emp.departmentName || emp.dept || emp.teamName || 'General';
+    const rawDept: any = emp.department;
+    if (rawDept && typeof rawDept === 'object') {
+      return rawDept.name || rawDept.title || 'General';
+    }
+    if (typeof rawDept === 'string' && rawDept.trim() !== '' && !rawDept.includes('[object')) {
+      return rawDept.trim();
+    }
+    if (emp.departmentName && typeof emp.departmentName === 'string') return String(emp.departmentName).trim();
+    if (emp.dept && typeof emp.dept === 'string') return String(emp.dept).trim();
+    if (emp.teamName && typeof emp.teamName === 'string') return String(emp.teamName).trim();
+    return 'General';
   };
 
   const getEmpTeam = (emp: EmployeeRecord) => {
@@ -653,32 +663,58 @@ export function EmployeeMaster() {
   };
 
   const getEmpDesignation = (emp: EmployeeRecord) => {
-    return emp.designation || emp.role || emp.designationTitle || emp.jobTitle || 'Staff';
+    const rawDesig: any = emp.designation;
+    if (rawDesig && typeof rawDesig === 'object') {
+      return rawDesig.title || rawDesig.name || 'Staff';
+    }
+    if (typeof rawDesig === 'string' && rawDesig.trim() !== '' && !rawDesig.includes('[object')) {
+      return rawDesig.trim();
+    }
+    return emp.role || emp.designationTitle || emp.jobTitle || 'Staff';
   };
 
   const getEmpStatus = (emp: EmployeeRecord) => {
-    // 1. If explicit string status is present, prioritize it
+    // 1. If explicitly inactive by status string
     const raw = String(emp.status || emp.employeeStatus || '').trim().toUpperCase();
-    if (raw === 'ACTIVE' || raw === 'CONFIRMED' || raw === 'PROBATION') return 'ACTIVE';
-    if (raw === 'INACTIVE' || raw === 'TERMINATED' || raw === 'RESIGNED' || raw === 'EXITED') return 'INACTIVE';
-    if (raw.includes('LEAVE')) return 'ON_LEAVE';
-
-    // 2. Check boolean isActive
-    if (typeof emp.isActive === 'boolean') {
-      return emp.isActive ? 'ACTIVE' : 'INACTIVE';
-    }
-    if (emp.isActive === 1 || emp.isActive === '1' || String(emp.isActive).toLowerCase() === 'true') {
-      return 'ACTIVE';
-    }
-    if (emp.isActive === 0 || emp.isActive === '0' || String(emp.isActive).toLowerCase() === 'false') {
+    if (
+      raw === 'INACTIVE' ||
+      raw === 'TERMINATED' ||
+      raw === 'RESIGNED' ||
+      raw === 'EXITED' ||
+      raw.includes('INACT') ||
+      raw.includes('RESIGN') ||
+      raw.includes('EXIT')
+    ) {
       return 'INACTIVE';
     }
+    if (raw.includes('LEAVE')) return 'ON_LEAVE';
 
-    // 3. Fallback matching
-    if (raw.includes('ACT') || raw === '1' || raw === 'TRUE') return 'ACTIVE';
-    if (raw.includes('INACT') || raw.includes('RESIGN') || raw.includes('EXIT') || raw === '0') return 'INACTIVE';
+    // 2. Check boolean isActive if explicitly provided (e.g. from CRM)
+    const activeVal: any = emp.isActive;
+    if (activeVal !== undefined && activeVal !== null) {
+      if (
+        activeVal === false ||
+        activeVal === 0 ||
+        activeVal === '0' ||
+        String(activeVal).toLowerCase() === 'false'
+      ) {
+        return 'INACTIVE';
+      }
+      if (
+        activeVal === true ||
+        activeVal === 1 ||
+        activeVal === '1' ||
+        String(activeVal).toLowerCase() === 'true'
+      ) {
+        return 'ACTIVE';
+      }
+    }
 
-    // Default to ACTIVE for valid employees
+    // 3. Check status string
+    if (raw === 'ACTIVE' || raw === 'CONFIRMED' || raw === 'PROBATION' || raw.includes('ACT')) {
+      return 'ACTIVE';
+    }
+
     return 'ACTIVE';
   };
 
@@ -701,8 +737,30 @@ export function EmployeeMaster() {
     const set = new Set<string>();
     employees.forEach((e) => {
       const d = getEmpDept(e);
-      if (d && d !== 'General' && d !== '—') set.add(d);
+      if (d && d !== 'General' && d !== '—' && !d.includes('[object')) set.add(d);
     });
+
+    const standardDepts = [
+      'Engineering',
+      'Tech',
+      'Human Resources',
+      'HR',
+      'Sales',
+      'Inside Sales',
+      'Finance',
+      'Accounts',
+      'Marketing',
+      'Digital Marketing',
+      'Operations',
+      'Quality Assurance',
+      'Customer Support',
+      'Academic Counselor',
+      'Business Development',
+      'Design',
+      'Management',
+      'Legal',
+    ];
+    standardDepts.forEach((d) => set.add(d));
     return Array.from(set).sort();
   }, [employees]);
 
