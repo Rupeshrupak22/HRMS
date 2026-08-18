@@ -331,23 +331,23 @@ export default function AttendancePage() {
             }
           };
 
-          checkAndSet('present', /^(present|p)$/i);
-          checkAndSet('absent', /^(absent|a)$/i);
-          checkAndSet('earlyLogout', /^(early\s*logout|early\s*out|el)$/i);
-          checkAndSet('lateLogin', /^(late\s*login|late\s*in|ll)$/i);
-          checkAndSet('sickLeave', /^(sick\s*leave|sl)$/i);
-          checkAndSet('emergencyLeave', /^(emergency\s*leave|e_l|e\.l|emergency)$/i);
-          checkAndSet('paidLeave', /^(paid\s*leave|pl)$/i);
-          checkAndSet('longLeave', /^(long\s*leave|long\s*leaves|llv)$/i);
+          checkAndSet('present', /^(present|total\s*present|present\s*count)$/i);
+          checkAndSet('absent', /^(absent|total\s*absent|absent\s*count)$/i);
+          checkAndSet('earlyLogout', /^(early\s*logout|early\s*out|total\s*early\s*logout|el)$/i);
+          checkAndSet('lateLogin', /^(late\s*login|late\s*in|total\s*late\s*login|ll)$/i);
+          checkAndSet('sickLeave', /^(sick\s*leave|total\s*sick\s*leave|sl)$/i);
+          checkAndSet('emergencyLeave', /^(emergency\s*leave|emergency|total\s*emergency\s*leave|e_l|e\.l)$/i);
+          checkAndSet('paidLeave', /^(paid\s*leave|total\s*paid\s*leave|pl)$/i);
+          checkAndSet('longLeave', /^(long\s*leave|long\s*leaves|total\s*long\s*leave|llv)$/i);
           checkAndSet('mailReceived', /^(mail\s*received|mail\s*rec|email\s*received)$/i);
           checkAndSet('mailNotReceived', /^(mail\s*not\s*received|mail\s*not\s*rec|email\s*not\s*received)$/i);
-          checkAndSet('casualLeave', /^(casual\s*leave|cl)$/i);
+          checkAndSet('casualLeave', /^(casual\s*leave|total\s*casual\s*leave|cl)$/i);
           checkAndSet('approvedBy', /^(approved\s*by|approved|approver)$/i);
           checkAndSet('notApproved', /^(not\s*approved|unapproved)$/i);
-          checkAndSet('nationalHoliday', /^(national\s*holiday|nh)$/i);
-          checkAndSet('festiveHoliday', /^(festive\s*holiday|fh)$/i);
-          checkAndSet('holiday', /^(holiday|h)$/i);
-          checkAndSet('training', /^(training|t)$/i);
+          checkAndSet('nationalHoliday', /^(national\s*holiday|total\s*national\s*holiday|nh)$/i);
+          checkAndSet('festiveHoliday', /^(festive\s*holiday|total\s*festive\s*holiday|fh)$/i);
+          checkAndSet('holiday', /^(holiday|total\s*holiday)$/i);
+          checkAndSet('training', /^(training|total\s*training)$/i);
 
           const finalEmpCode = empId || (empName ? `EMP-${empName.replace(/\s+/g, '').slice(0, 6).toUpperCase()}` : '');
           const finalEmpName = empName || (empId ? `Employee (${empId})` : '');
@@ -372,8 +372,8 @@ export default function AttendancePage() {
                 const dateStr = `${yearStr}-${monthStr}-${paddedDay}`;
                 
                 formattedRecords.push({
-                  employeeCode: String(empId).trim(),
-                  employeeName: empName ? String(empName).trim() : `Employee (${empId})`,
+                  employeeCode: finalEmpCode,
+                  employeeName: finalEmpName,
                   department: department || undefined,
                   designation: designation || undefined,
                   role: role || undefined,
@@ -388,8 +388,8 @@ export default function AttendancePage() {
             if (!hasDays && Object.keys(summary).length > 0) {
               const dateStr = `${yearStr}-${monthStr}-01`;
               formattedRecords.push({
-                employeeCode: String(empId).trim(),
-                employeeName: empName ? String(empName).trim() : `Employee (${empId})`,
+                employeeCode: finalEmpCode,
+                employeeName: finalEmpName,
                 department: department || undefined,
                 designation: designation || undefined,
                 role: role || undefined,

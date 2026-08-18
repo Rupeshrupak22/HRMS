@@ -262,7 +262,7 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EM
         lateMinutes: r.lateMinutes,
         source: r.source,
         notes: r.notes,
-        summary: metadata.summary || (metadata.sickLeave !== undefined ? metadata : undefined),
+        summary: metadata.summary || (Object.keys(metadata).length > 0 ? metadata : undefined),
       };
     });
 
