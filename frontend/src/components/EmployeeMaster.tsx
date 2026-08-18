@@ -41,6 +41,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Pagination } from '@/components/Pagination';
+import { apiRequest } from '@/lib/api';
 
 interface EmployeeRecord {
   id?: string | number;
@@ -199,42 +200,75 @@ export function EmployeeMaster() {
     }
 
     try {
-      const endpoint = `/api/crm/employees${tokenToUse ? `?token=${encodeURIComponent(tokenToUse)}` : ''}`;
-      const res = await fetch(endpoint, {
-        method: 'GET',
-        headers,
-      });
-
-      const json = await res.json().catch(() => null);
-
-      if (!res.ok) {
-        if (res.status === 401 || json?.message?.toLowerCase().includes('session')) {
-          throw new Error(
-            json?.message ||
-              'A valid authentication session or token is required to load employee master records.'
-          );
-        }
-        throw new Error(json?.message || `Server responded with status ${res.status}: ${res.statusText}`);
-      }
-
       let list: EmployeeRecord[] = [];
       let teamList: any[] = [];
 
-      if (Array.isArray(json)) {
-        list = json;
-      } else if (json && Array.isArray(json.employees)) {
-        list = json.employees;
-        if (Array.isArray(json.teams)) teamList = json.teams;
-      } else if (json && Array.isArray(json.data)) {
-        list = json.data;
-        if (Array.isArray(json.teams)) teamList = json.teams;
-      } else if (json && json.data && Array.isArray(json.data.employees)) {
-        list = json.data.employees;
-        if (Array.isArray(json.data.teams)) teamList = json.data.teams;
-      } else if (json && typeof json === 'object') {
-        const potentialArray = Object.values(json).find((val) => Array.isArray(val));
-        if (potentialArray && Array.isArray(potentialArray)) {
-          list = potentialArray as EmployeeRecord[];
+      try {
+        const endpoint = `/api/crm/employees${tokenToUse ? `?token=${encodeURIComponent(tokenToUse)}` : ''}`;
+        const res = await fetch(endpoint, {
+          method: 'GET',
+          headers,
+        });
+
+        const json = await res.json().catch(() => null);
+
+        if (res.ok && json) {
+          if (Array.isArray(json)) {
+            list = json;
+          } else if (json && Array.isArray(json.employees)) {
+            list = json.employees;
+            if (Array.isArray(json.teams)) teamList = json.teams;
+          } else if (json && Array.isArray(json.data)) {
+            list = json.data;
+            if (Array.isArray(json.teams)) teamList = json.teams;
+          } else if (json && json.data && Array.isArray(json.data.employees)) {
+            list = json.data.employees;
+            if (Array.isArray(json.data.teams)) teamList = json.data.teams;
+          } else if (json && typeof json === 'object') {
+            const potentialArray = Object.values(json).find((val) => Array.isArray(val));
+            if (potentialArray && Array.isArray(potentialArray)) {
+              list = potentialArray as EmployeeRecord[];
+            }
+          }
+        }
+      } catch (crmErr) {
+        console.warn('CRM proxy fetch error, falling back to internal HRMS DB:', crmErr);
+      }
+
+      // Fallback to internal HRMS database if CRM list is empty or failed
+      if (list.length === 0) {
+        try {
+          const internalRes = await apiRequest('/employees');
+          const internalList = Array.isArray(internalRes)
+            ? internalRes
+            : internalRes?.data && Array.isArray(internalRes.data)
+            ? internalRes.data
+            : [];
+
+          if (internalList.length > 0) {
+            list = internalList.map((emp: any) => ({
+              id: emp.id,
+              name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || 'Employee',
+              email: emp.user?.email || emp.email || '',
+              phone: emp.phone || emp.mobileNumber || '',
+              department: emp.department?.name || (typeof emp.department === 'string' ? emp.department : 'General'),
+              designation: emp.designation?.title || (typeof emp.designation === 'string' ? emp.designation : 'Staff'),
+              role: emp.user?.role || emp.role || 'EMPLOYEE',
+              employmentType: emp.employmentType || 'FULL_TIME',
+              gender: emp.gender || 'MALE',
+              status: emp.status || 'ACTIVE',
+              employeeId: emp.employeeCode || emp.id,
+              joiningDate: emp.dateOfJoining || emp.createdAt,
+              manager: emp.manager ? `${emp.manager.firstName || ''} ${emp.manager.lastName || ''}`.trim() : '-',
+              salary: emp.salaryStructure?.netSalary ? String(emp.salaryStructure.netSalary) : '-',
+              teamId: emp.teamId || emp.team?.id,
+              teamName: emp.team?.name,
+              isTeamLead: emp.isTeamLead || false,
+              raw: emp,
+            }));
+          }
+        } catch (dbErr) {
+          console.warn('Internal DB employee fetch error:', dbErr);
         }
       }
 
