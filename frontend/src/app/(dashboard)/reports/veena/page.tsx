@@ -1,52 +1,68 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, UserPlus, UserX, Calendar, Eye, X, Download } from 'lucide-react';
+import { FileText, UserPlus, UserX, Calendar, Eye, X, Download, Target, Search, Users, ClipboardCheck } from 'lucide-react';
 import { veenaApi } from '@/lib/veena-api';
 import { apiRequest } from '@/lib/api';
 import { Pagination } from '@/components/Pagination';
 
 export default function VeenaReportPage() {
+  const [recruitment, setRecruitment] = useState<any[]>([]);
   const [onboarding, setOnboarding] = useState<any[]>([]);
   const [dropouts, setDropouts] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [filterDate, setFilterDate] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
 
   // Pagination states
+  const [pageRec, setPageRec] = useState(1);
   const [pageOnb, setPageOnb] = useState(1);
   const [pageDrop, setPageDrop] = useState(1);
   const [pageRep, setPageRep] = useState(1);
   const PAGE_SIZE = 20;
 
   useEffect(() => {
-    // 1. Onboarding Pipeline candidates
+    // 1. Recruitment Tracker candidates
+    const savedRec = typeof window !== 'undefined' ? localStorage.getItem('adyapan_recruitment_candidates') : null;
+    let recList: any[] = [];
+    try { recList = savedRec ? JSON.parse(savedRec) : []; } catch { recList = []; }
+
+    // 2. Onboarding Pipeline candidates
     veenaApi.getOnboarding().then((res) => {
       const list = Array.isArray(res) ? res : [];
       const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_onboarding_candidates') : null;
       let localList: any[] = [];
       try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
 
-      const existingNames = new Set(list.map((c: any) => (c.candidateName || '').toLowerCase().trim()));
-      const uniqueLocal = localList.filter((c: any) => !existingNames.has((c.candidateName || '').toLowerCase().trim()));
+      const existingNames = new Set(list.map((c: any) => (c.candidateName || c.name || '').toLowerCase().trim()));
+      const uniqueLocal = localList.filter((c: any) => !existingNames.has((c.candidateName || c.name || '').toLowerCase().trim()));
 
-      setOnboarding([...list, ...uniqueLocal]);
+      const combinedOnb = [...list, ...uniqueLocal];
+      setOnboarding(combinedOnb);
+
+      if (recList.length === 0) {
+        setRecruitment(combinedOnb);
+      } else {
+        setRecruitment(recList);
+      }
     }).catch(() => {
       const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_onboarding_candidates') : null;
       let localList: any[] = [];
       try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
       setOnboarding(localList);
+      setRecruitment(recList.length > 0 ? recList : localList);
     });
 
-    // 2. Dropout candidates
+    // 3. Dropout candidates
     veenaApi.getDropouts().then((res) => {
       const list = Array.isArray(res) ? res : [];
       const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_dropout_candidates') : null;
       let localList: any[] = [];
       try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
 
-      const existingNames = new Set(list.map((c: any) => (c.candidateName || '').toLowerCase().trim()));
-      const uniqueLocal = localList.filter((c: any) => !existingNames.has((c.candidateName || '').toLowerCase().trim()));
+      const existingNames = new Set(list.map((c: any) => (c.candidateName || c.name || '').toLowerCase().trim()));
+      const uniqueLocal = localList.filter((c: any) => !existingNames.has((c.candidateName || c.name || '').toLowerCase().trim()));
 
       setDropouts([...list, ...uniqueLocal]);
     }).catch(() => {
@@ -56,7 +72,7 @@ export default function VeenaReportPage() {
       setDropouts(localList);
     });
 
-    // 3. Daily reports
+    // 4. Daily reports
     apiRequest('/reports/daily').then((res) => {
       const arr = Array.isArray(res) ? res : [];
       setDailyReports(arr.filter((r: any) => 
@@ -76,17 +92,26 @@ export default function VeenaReportPage() {
     });
   }, []);
 
-  const filterByDate = (records: any[]) => {
-    if (!filterDate) return records;
+  const filterRecords = (records: any[]) => {
     return records.filter((r) => {
       const created = r.date || r.applicationDate || r.dropoutDate || (r.createdAt ? r.createdAt.split('T')[0] : '');
-      return created === filterDate;
+      const matchesDate = !filterDate || created === filterDate;
+
+      const q = searchTerm.toLowerCase().trim();
+      const name = (r.candidateName || r.name || r.employeeName || '').toLowerCase();
+      const phone = (r.phoneNumber || r.mobileNumber || r.phone || '').toLowerCase();
+      const role = (r.roleApplied || r.role || r.department || '').toLowerCase();
+      const status = (r.status || r.currentStage || '').toLowerCase();
+
+      const matchesSearch = !q || name.includes(q) || phone.includes(q) || role.includes(q) || status.includes(q);
+      return matchesDate && matchesSearch;
     });
   };
 
-  const filteredOnboarding = filterByDate(onboarding);
-  const filteredDropouts = filterByDate(dropouts);
-  const filteredDailyReports = filterByDate(dailyReports);
+  const filteredRecruitment = filterRecords(recruitment);
+  const filteredOnboarding = filterRecords(onboarding);
+  const filteredDropouts = filterRecords(dropouts);
+  const filteredDailyReports = filterRecords(dailyReports);
 
   return (
     <div className="space-y-8 max-w-[1400px] mx-auto font-sans">
@@ -95,13 +120,24 @@ export default function VeenaReportPage() {
         <div>
           <h1 className="text-xl font-black tracking-tight flex items-center gap-2.5">
             <FileText className="w-5 h-5 text-amber-400" />
-            <span>Abbu Veena&apos;s Complete Onboarding & Hiring Report</span>
+            <span>Abbu Veena&apos;s Complete Recruitment &amp; Onboarding Report</span>
           </h1>
           <p className="text-xs text-slate-300 mt-1">
-            Candidate onboarding pipeline, dropouts, recruitment conversions, and daily submissions
+            Candidate recruitment pipeline, onboarding stages, dropouts, and daily submissions
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search candidate name, phone, role..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 pr-3 py-2 bg-white/10 border border-white/20 rounded-xl text-xs text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-[220px]"
+            />
+          </div>
+
           <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 border border-white/20 shadow-xs">
             <Calendar className="w-4 h-4 text-amber-400" />
             <input
@@ -109,6 +145,7 @@ export default function VeenaReportPage() {
               value={filterDate}
               onChange={(e) => {
                 setFilterDate(e.target.value);
+                setPageRec(1);
                 setPageOnb(1);
                 setPageDrop(1);
                 setPageRep(1);
@@ -116,17 +153,19 @@ export default function VeenaReportPage() {
               className="text-xs font-bold text-white border-none outline-none bg-transparent cursor-pointer"
             />
           </div>
-          {filterDate && (
+          {(filterDate || searchTerm) && (
             <button
               onClick={() => {
                 setFilterDate('');
+                setSearchTerm('');
+                setPageRec(1);
                 setPageOnb(1);
                 setPageDrop(1);
                 setPageRep(1);
               }}
               className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition cursor-pointer"
             >
-              Clear Filter
+              Clear
             </button>
           )}
         </div>
@@ -138,10 +177,54 @@ export default function VeenaReportPage() {
         </div>
       )}
 
-      {/* Onboarding Section */}
+      {/* 1. Recruitment Tracker Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <UserPlus className="w-4 h-4 text-blue-600" /> Onboarding Pipeline ({filteredOnboarding.length})
+          <UserPlus className="w-4 h-4 text-amber-600" /> Recruitment Tracker ({filteredRecruitment.length})
+        </h2>
+        {filteredRecruitment.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No recruitment records found.</p> : (
+          <div className="rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold whitespace-nowrap">
+                  <th className="px-4 py-3">Candidate</th>
+                  <th className="px-4 py-3">Phone</th>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">College</th>
+                  <th className="px-4 py-3">Location</th>
+                  <th className="px-4 py-3">Source</th>
+                  <th className="px-4 py-3">Role</th>
+                  <th className="px-4 py-3">Recruiter</th>
+                  <th className="px-4 py-3">Stage</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Joining Date</th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">{filteredRecruitment.slice((pageRec - 1) * PAGE_SIZE, pageRec * PAGE_SIZE).map((r, idx) => (
+                  <tr key={r.id || idx} className="hover:bg-slate-50 transition whitespace-nowrap">
+                    <td className="px-4 py-2.5 font-bold text-slate-800">{r.candidateName || r.employeeName || r.name || 'Candidate'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.phoneNumber || r.mobileNumber || r.phone || '-'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.email || '-'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.college || r.collegeUniversity || '-'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.location || r.department || '-'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.source || '-'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.roleApplied || r.role || r.designation || '-'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.recruiter || 'Abbu Veena'}</td>
+                    <td className="px-4 py-2.5"><span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700">{r.currentStage || r.stage || '-'}</span></td>
+                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.status === 'Joined' || r.status === 'Selected' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{r.status || 'Active'}</span></td>
+                    <td className="px-4 py-2.5 text-slate-600 font-medium">{r.joining || r.applicationDate || '-'}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+            <Pagination currentPage={pageRec} totalItems={filteredRecruitment.length} pageSize={PAGE_SIZE} onPageChange={setPageRec} />
+          </div>
+        )}
+      </section>
+
+      {/* 2. Onboarding Pipeline Section */}
+      <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+          <Target className="w-4 h-4 text-blue-600" /> Onboarding Pipeline ({filteredOnboarding.length})
         </h2>
         {filteredOnboarding.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No onboarding records found.</p> : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
@@ -160,8 +243,8 @@ export default function VeenaReportPage() {
                   <th className="px-4 py-3">Status</th>
                   <th className="px-4 py-3">Joining Date</th>
                 </tr></thead>
-                <tbody className="divide-y divide-slate-100">{filteredOnboarding.slice((pageOnb - 1) * PAGE_SIZE, pageOnb * PAGE_SIZE).map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50 transition whitespace-nowrap">
+                <tbody className="divide-y divide-slate-100">{filteredOnboarding.slice((pageOnb - 1) * PAGE_SIZE, pageOnb * PAGE_SIZE).map((r, idx) => (
+                  <tr key={r.id || idx} className="hover:bg-slate-50 transition whitespace-nowrap">
                     <td className="px-4 py-2.5 font-bold text-slate-800">{r.candidateName || r.name || 'Candidate'}</td>
                     <td className="px-4 py-2.5 text-slate-600">{r.phoneNumber || r.mobileNumber || r.phone || '-'}</td>
                     <td className="px-4 py-2.5 text-slate-600">{r.email || '-'}</td>
@@ -182,7 +265,7 @@ export default function VeenaReportPage() {
         )}
       </section>
 
-      {/* Dropout Section */}
+      {/* 3. Dropout Tracker Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
           <UserX className="w-4 h-4 text-red-600" /> Dropout Records ({filteredDropouts.length})
@@ -198,8 +281,8 @@ export default function VeenaReportPage() {
                   <th className="px-4 py-3">Stage</th>
                   <th className="px-4 py-3">Date</th>
                 </tr></thead>
-                <tbody className="divide-y divide-slate-100">{filteredDropouts.slice((pageDrop - 1) * PAGE_SIZE, pageDrop * PAGE_SIZE).map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50 transition">
+                <tbody className="divide-y divide-slate-100">{filteredDropouts.slice((pageDrop - 1) * PAGE_SIZE, pageDrop * PAGE_SIZE).map((r, idx) => (
+                  <tr key={r.id || idx} className="hover:bg-slate-50 transition">
                     <td className="px-4 py-2.5 font-bold text-slate-800">{r.candidateName || r.name || 'Candidate'}</td>
                     <td className="px-4 py-2.5 text-slate-600">{r.role || r.department || '-'}</td>
                     <td className="px-4 py-2.5 text-rose-700 font-medium">{r.dropoutReason || r.reason || '-'}</td>
@@ -214,7 +297,7 @@ export default function VeenaReportPage() {
         )}
       </section>
 
-      {/* Daily Reports Section */}
+      {/* 4. Daily Reports Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
           <FileText className="w-4 h-4 text-amber-600" /> Daily Reports Submitted ({filteredDailyReports.length})
@@ -225,26 +308,25 @@ export default function VeenaReportPage() {
               <table className="w-full text-xs text-left">
                 <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
                   <th className="px-4 py-3">Date</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Sourced</th>
-                  <th className="px-4 py-3">Screened</th>
-                  <th className="px-4 py-3">Interviews</th>
-                  <th className="px-4 py-3">Selected</th>
-                  <th className="px-4 py-3">Joined</th>
-                  <th className="px-4 py-3 text-right">Preview</th>
+                  <th className="px-4 py-3">Employee</th>
+                  <th className="px-4 py-3">Key Hiring Performance</th>
+                  <th className="px-4 py-3">Blockers / Issues</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Action / Preview</th>
                 </tr></thead>
-                <tbody className="divide-y divide-slate-100">{filteredDailyReports.slice((pageRep - 1) * PAGE_SIZE, pageRep * PAGE_SIZE).map((r) => (
-                  <tr key={r.id} className="hover:bg-amber-50/30 transition">
-                    <td className="px-4 py-2.5 font-bold text-slate-800">{r.date}</td>
-                    <td className="px-4 py-2.5 text-slate-600">{r.role}</td>
-                    <td className="px-4 py-2.5 font-mono">{r.candidateSourced || 0}</td>
-                    <td className="px-4 py-2.5 font-mono">{r.screeningDone || 0}</td>
-                    <td className="px-4 py-2.5 font-mono">{r.interviewsTaken || 0}</td>
-                    <td className="px-4 py-2.5 font-mono font-bold text-emerald-600">{r.selected || 0}</td>
-                    <td className="px-4 py-2.5 font-mono font-bold text-blue-600">{r.joined || 0}</td>
+                <tbody className="divide-y divide-slate-100">{filteredDailyReports.slice((pageRep - 1) * PAGE_SIZE, pageRep * PAGE_SIZE).map((r, idx) => (
+                  <tr key={r.id || idx} className="hover:bg-slate-50 transition">
+                    <td className="px-4 py-2.5 font-bold text-slate-800">{r.date || r.reportDate || (r.createdAt ? r.createdAt.split('T')[0] : '-')}</td>
+                    <td className="px-4 py-2.5 font-semibold text-slate-700">{r.employeeName || 'Abbu Veena'}</td>
+                    <td className="px-4 py-2.5 text-slate-600 max-w-sm truncate" title={r.keyUpdates}>{r.keyUpdates || '-'}</td>
+                    <td className="px-4 py-2.5 text-rose-600 max-w-xs truncate" title={r.issue}>{r.issue || '-'}</td>
+                    <td className="px-4 py-2.5"><span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">APPROVED</span></td>
                     <td className="px-4 py-2.5 text-right">
-                      <button onClick={() => setSelectedReport(r)} className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center gap-1 cursor-pointer ml-auto">
-                        <Eye className="w-3 h-3 text-slate-600" /> Full Preview
+                      <button
+                        onClick={() => setSelectedReport(r)}
+                        className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                      >
+                        Preview
                       </button>
                     </td>
                   </tr>
@@ -256,46 +338,22 @@ export default function VeenaReportPage() {
         )}
       </section>
 
-      {/* Modal Preview */}
+      {/* Preview Modal */}
       {selectedReport && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-xs">
-            <div className="p-5 bg-gradient-to-r from-slate-900 to-amber-950 text-white flex items-center justify-between">
-              <div>
-                <h3 className="font-extrabold text-base flex items-center gap-2 text-white">
-                  <FileText className="w-5 h-5 text-amber-400" />
-                  Veena Daily Report Full Preview
-                </h3>
-                <p className="text-xs text-amber-200 mt-0.5">Role: {selectedReport.role} • Date: {selectedReport.date}</p>
-              </div>
-              <button onClick={() => setSelectedReport(null)} className="p-1 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer"><X className="w-5 h-5" /></button>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 border border-slate-100">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <h3 className="font-black text-slate-900 text-base">Veena Daily Work Report Details</h3>
+              <button onClick={() => setSelectedReport(null)} className="p-1 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-700 cursor-pointer"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-              <div className="grid grid-cols-3 gap-2 bg-amber-50/50 p-3.5 rounded-2xl border border-amber-200 text-center font-bold">
-                <div><span className="text-[10px] text-slate-400 uppercase block">Sourced</span>{selectedReport.candidateSourced || 0}</div>
-                <div><span className="text-[10px] text-slate-400 uppercase block">Screened</span>{selectedReport.screeningDone || 0}</div>
-                <div><span className="text-[10px] text-slate-400 uppercase block">Interviews</span>{selectedReport.interviewsTaken || 0}</div>
-                <div><span className="text-[10px] text-slate-400 uppercase block">Selected</span>{selectedReport.selected || 0}</div>
-                <div><span className="text-[10px] text-slate-400 uppercase block">Offers Sent</span>{selectedReport.offerLetterSent || 0}</div>
-                <div><span className="text-[10px] text-slate-400 uppercase block">Joined</span>{selectedReport.joined || 0}</div>
-              </div>
-              <div>
-                <label className="block font-bold text-slate-900 mb-1">Key Updates & Issues</label>
-                <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-800 whitespace-pre-wrap leading-relaxed font-medium">
-                  {selectedReport.keyUpdatesIssue || 'None reported.'}
-                </div>
-              </div>
-              {selectedReport.pendingFollowups && (
-                <div>
-                  <label className="block font-bold text-slate-900 mb-1">Pending Follow-ups</label>
-                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-700">
-                    {selectedReport.pendingFollowups}
-                  </div>
-                </div>
-              )}
-            </div>
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
-              <button onClick={() => setSelectedReport(null)} className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer">Close Preview</button>
+            <div className="space-y-3 text-xs">
+              <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500 font-medium">Date:</span><span className="font-bold text-slate-800">{selectedReport.date || selectedReport.reportDate}</span></div>
+              <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500 font-medium">Specialist:</span><span className="font-bold text-slate-800">{selectedReport.employeeName || 'Abbu Veena'}</span></div>
+              <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500 font-medium">Email:</span><span className="font-bold text-slate-800">{selectedReport.userEmail || 'veena@adyapan.com'}</span></div>
+              <div className="flex justify-between py-1 border-b border-slate-50"><span className="text-slate-500 font-medium">Role:</span><span className="font-bold text-slate-800">{selectedReport.role || 'Onboarding & Hiring Specialist'}</span></div>
+              <div className="py-2 border-b border-slate-50"><span className="text-slate-500 font-medium block mb-1">Key Performance Actions:</span><p className="p-2.5 rounded-xl bg-slate-50 text-slate-800 font-medium">{selectedReport.keyUpdates || '-'}</p></div>
+              <div className="py-2 border-b border-slate-50"><span className="text-slate-500 font-medium block mb-1">Issues / Blockers:</span><p className="p-2.5 rounded-xl bg-rose-50 text-rose-800 font-medium">{selectedReport.issue || '-'}</p></div>
+              <div className="py-2"><span className="text-slate-500 font-medium block mb-1">Remarks / Comments:</span><p className="p-2.5 rounded-xl bg-amber-50 text-amber-900 font-medium">{selectedReport.comment || '-'}</p></div>
             </div>
           </div>
         </div>
