@@ -32,20 +32,7 @@ export default function AravindReportPage() {
   useEffect(() => {
     aravindApi.getRetention().then(setRetention).catch(() => {});
     aravindApi.getResignation().then(setResignation).catch(() => {});
-    aravindApi.getAbscond().then((res) => {
-      const list = Array.isArray(res) ? res : [];
-      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_aravind_abscond') : null;
-      let localList: any[] = [];
-      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
-      const existingIds = new Set(list.map((r: any) => r.id || r._id || r.employeeId));
-      const combined = [...list, ...localList.filter((r: any) => !existingIds.has(r.id || r._id || r.employeeId))];
-      setAbscond(combined);
-    }).catch(() => {
-      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_aravind_abscond') : null;
-      let localList: any[] = [];
-      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
-      setAbscond(localList);
-    });
+    aravindApi.getAbscond().then(setAbscond).catch(() => {});
     aravindApi.getExitClearance().then(setExit).catch(() => {});
     aravindApi.getFnF().then(setFnf).catch(() => {});
     aravindApi.getComplaints().then(setComplaints).catch(() => {});

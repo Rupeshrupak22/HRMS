@@ -41,7 +41,7 @@ export function AravindDashboard() {
   useEffect(() => {
     async function load() {
       try {
-        const [retention, resignation, abscondRaw, exit, fnf, complaints, interviews, reports] = await Promise.all([
+        const [retention, resignation, abscond, exit, fnf, complaints, interviews, reports] = await Promise.all([
           aravindApi.getRetention().catch(() => []),
           aravindApi.getResignation().catch(() => []),
           aravindApi.getAbscond().catch(() => []),
@@ -52,20 +52,14 @@ export function AravindDashboard() {
           aravindApi.getDailyReports().catch(() => []),
         ]);
 
-        const savedAbscondLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_aravind_abscond') : null;
-        let localAbscond: any[] = [];
-        try { localAbscond = savedAbscondLocal ? JSON.parse(savedAbscondLocal) : []; } catch { localAbscond = []; }
-        const existingAbsIds = new Set((abscondRaw || []).map((a: any) => a.id || a._id || a.employeeId));
-        const combinedAbscond = [...(Array.isArray(abscondRaw) ? abscondRaw : []), ...localAbscond.filter((a: any) => !existingAbsIds.has(a.id || a._id || a.employeeId))];
-
         setStats({
           retentionTotal: retention.length,
           retentionOpen: retention.filter((r: any) => r.status !== 'Closed').length,
           retentionRetained: retention.filter((r: any) => r.retentionOutcome === 'Retained').length,
           resignationTotal: resignation.length,
           resignationPending: resignation.filter((r: any) => r.overall !== 'Completed').length,
-          abscondTotal: combinedAbscond.length,
-          abscondPending: combinedAbscond.length,
+          abscondTotal: abscond.length,
+          abscondPending: abscond.length,
           exitTotal: exit.length,
           exitPending: exit.filter((r: any) => r.overallClearance !== 'Completed').length,
           fnfTotal: fnf.length,
