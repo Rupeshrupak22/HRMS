@@ -108,6 +108,20 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
   ];
 
+  // Admin & Super Admin navigation (Clean Specialist Reports & Governance)
+  const adminNavItems = [
+    { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Aravind Report', href: '/reports/aravind', icon: FileText },
+    { label: 'Nitisha Report', href: '/reports/nitisha', icon: FileText },
+    { label: 'Pavitra Report', href: '/reports/pavitra', icon: FileText },
+    { label: 'Charitha Report', href: '/reports/charitha', icon: FileText },
+    { label: 'Veena Report', href: '/reports/veena', icon: FileText },
+    { label: 'Daily Reports', href: '/reports/all-daily', icon: ClipboardList },
+    { label: 'HR Manager Report', href: '/reports/hr-manager', icon: BarChart3 },
+    { label: 'Overall Report', href: '/reports/overall', icon: BarChart3 },
+    { label: 'Settings', href: '/settings', icon: Settings },
+  ];
+
   // Nandini (HR Manager) - custom sidebar with team reports
   const nandiniNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
@@ -128,7 +142,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   const isPavitra = user?.specialization === 'ATTENDANCE_LEAVE' || user?.email === 'pavitra@adyapan.com';
   const isCharitha = user?.specialization === 'SALARY_PAYROLL' || user?.email === 'charitha@adyapan.com';
   const isNandini = user?.specialization === 'HR_MANAGER_ALL' || user?.email === 'nandini@adyapan.com' || user?.email === 'nandani@adyapan.com';
-  const isSuperAdmin = user?.role === 'SUPER_ADMIN' || user?.email === 'superadmin@adyapan.com';
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN' || user?.email === 'superadmin@adyapan.com' || user?.email === 'admin@adyapan.com';
 
   const navItems = isAravind
     ? aravindNavItems
@@ -142,8 +156,8 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     ? charithaNavItems
     : isNandini
     ? nandiniNavItems
-    : isSuperAdmin
-    ? allNavItems.filter((item) => item.roles.includes('SUPER_ADMIN'))
+    : isAdmin
+    ? adminNavItems
     : allNavItems.filter((item) => item.roles.includes(user?.role || 'EMPLOYEE'));
 
   return (
