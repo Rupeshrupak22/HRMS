@@ -112,22 +112,32 @@ export default function VeenaReportPage() {
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
-                <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold whitespace-nowrap">
                   <th className="px-4 py-3">Candidate</th>
-                  <th className="px-4 py-3">Role</th>
-                  <th className="px-4 py-3">Location</th>
                   <th className="px-4 py-3">Phone</th>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">College</th>
+                  <th className="px-4 py-3">Location</th>
+                  <th className="px-4 py-3">Source</th>
+                  <th className="px-4 py-3">Role</th>
+                  <th className="px-4 py-3">Recruiter</th>
                   <th className="px-4 py-3">Stage</th>
                   <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Joining Date</th>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-100">{filteredOnboarding.slice((pageOnb - 1) * PAGE_SIZE, pageOnb * PAGE_SIZE).map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50 transition">
+                  <tr key={r.id} className="hover:bg-slate-50 transition whitespace-nowrap">
                     <td className="px-4 py-2.5 font-bold text-slate-800">{r.candidateName || r.name || 'Candidate'}</td>
-                    <td className="px-4 py-2.5 text-slate-600">{r.roleApplied || r.role || r.designation || '-'}</td>
-                    <td className="px-4 py-2.5 text-slate-600">{r.location || r.department || '-'}</td>
                     <td className="px-4 py-2.5 text-slate-600">{r.phoneNumber || r.mobileNumber || r.phone || '-'}</td>
-                    <td className="px-4 py-2.5 text-slate-600"><span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700">{r.currentStage || r.stage || '-'}</span></td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.email || '-'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.college || '-'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.location || r.department || '-'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.source || '-'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.roleApplied || r.role || r.designation || '-'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.recruiter || 'Abbu Veena'}</td>
+                    <td className="px-4 py-2.5"><span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-indigo-50 text-indigo-700">{r.currentStage || r.stage || '-'}</span></td>
                     <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.status === 'Joined' || r.status === 'Active' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'}`}>{r.status || 'Active'}</span></td>
+                    <td className="px-4 py-2.5 text-slate-600 font-medium">{r.joining || r.applicationDate || '-'}</td>
                   </tr>
                 ))}</tbody>
               </table>
