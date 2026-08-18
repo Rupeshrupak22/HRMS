@@ -171,36 +171,19 @@ export function VeenaDashboard() {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      // 1. Candidates (Onboarding / Recruitment)
+      // 1. Candidates (Onboarding / Recruitment) strictly from DB
       const res = await veenaApi.getOnboarding();
-      const list = Array.isArray(res) ? res : [];
-      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_onboarding_candidates') : null;
-      let localList: any[] = [];
-      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
+      setCandidates(Array.isArray(res) ? res : []);
 
-      const existingNames = new Set(list.map((c: any) => (c.candidateName || '').toLowerCase().trim()));
-      const uniqueLocal = localList.filter((c: any) => !existingNames.has((c.candidateName || '').toLowerCase().trim()));
-      setCandidates([...list, ...uniqueLocal]);
-
-      // 2. Dropouts
+      // 2. Dropouts strictly from DB
       try {
         const dropRes = await veenaApi.getDropouts();
-        const dropList = Array.isArray(dropRes) ? dropRes : [];
-        const savedDropLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_dropout_candidates') : null;
-        let localDropList: any[] = [];
-        try { localDropList = savedDropLocal ? JSON.parse(savedDropLocal) : []; } catch { localDropList = []; }
-
-        const existingDrop = new Set(dropList.map((c: any) => (c.candidateName || '').toLowerCase().trim()));
-        const uniqueDropLocal = localDropList.filter((c: any) => !existingDrop.has((c.candidateName || '').toLowerCase().trim()));
-        setDropouts([...dropList, ...uniqueDropLocal]);
+        setDropouts(Array.isArray(dropRes) ? dropRes : []);
       } catch {
-        const savedDropLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_dropout_candidates') : null;
-        let localDropList: any[] = [];
-        try { localDropList = savedDropLocal ? JSON.parse(savedDropLocal) : []; } catch { localDropList = []; }
-        setDropouts(localDropList);
+        setDropouts([]);
       }
 
-      // 3. Daily Reports
+      // 3. Daily Reports strictly from DB
       try {
         const repRes = await veenaApi.getDailyReports();
         setDailyReports(Array.isArray(repRes) ? repRes : []);
@@ -208,10 +191,7 @@ export function VeenaDashboard() {
         setDailyReports([]);
       }
     } catch {
-      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_onboarding_candidates') : null;
-      let localList: any[] = [];
-      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
-      setCandidates(localList);
+      setCandidates([]);
     } finally {
       setLoading(false);
     }
@@ -220,28 +200,55 @@ export function VeenaDashboard() {
   const loadCandidates = loadAllData;
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('adyapan_imported_onboarding_candidates');
+      localStorage.removeItem('adyapan_imported_dropout_candidates');
+    }
     loadAllData();
   }, []);
 
-  // Dynamic Metrics across all Veena records
+  // Dynamic Metrics across real Veena DB records
   const totalCount = candidates.length;
-  const joinedCount = candidates.filter((c) => c.status === 'Joined' || c.currentStage === 'Joined' || c.currentStage === 'Completed').length;
-  const selectedCount = candidates.filter((c) => c.status === 'Selected' || c.currentStage === 'Selection' || c.currentStage === 'Offer').length;
-  const inProgressCount = candidates.filter((c) => c.status === 'Active' || (c.status !== 'Joined' && c.status !== 'Dropped' && c.status !== 'Rejected')).length;
+  
+  const interviewCount = candidates.filter((c) => {
+    const stage = (c.currentStage || '').toLowerCase();
+    const intv = (c.interviews || '').trim().toLowerCase();
+    return stage === 'interview' || (intv && intv !== '-' && !intv.includes('not scheduled'));
+  }).length;
+
+  const offerCount = candidates.filter((c) => {
+    const stage = (c.currentStage || '').toLowerCase();
+    const status = (c.status || '').toLowerCase();
+    const off = (c.offers || '').trim();
+    return stage === 'offer' || stage === 'selection' || status === 'selected' || (off && off !== '-');
+  }).length;
+
+  const joinedCount = candidates.filter((c) => {
+    const stage = (c.currentStage || '').toLowerCase();
+    const status = (c.status || '').toLowerCase();
+    const join = (c.joining || '').trim();
+    return status === 'joined' || stage === 'joined' || stage === 'onboarding' || stage === 'completed' || (join && join !== '-');
+  }).length;
+
+  const inProgressCount = candidates.filter((c) => {
+    const status = (c.status || '').toLowerCase();
+    return status === 'active' || (!['joined', 'dropped', 'rejected'].includes(status));
+  }).length;
+
   const dropoutsCount = dropouts.length;
   const dailyReportsCount = dailyReports.length;
   const conversionRate = totalCount + dropoutsCount > 0 ? (((joinedCount) / (totalCount + dropoutsCount)) * 100).toFixed(1) : '0';
   const dropoutRate = totalCount + dropoutsCount > 0 ? (((dropoutsCount) / (totalCount + dropoutsCount)) * 100).toFixed(1) : '0';
 
   const pipelineStages = [
-    { name: 'Application', count: candidates.filter((c) => c.currentStage === 'Application').length },
-    { name: 'Screening', count: candidates.filter((c) => c.currentStage === 'Screening').length },
-    { name: 'Interview', count: candidates.filter((c) => c.currentStage === 'Interview').length },
-    { name: 'Selection', count: candidates.filter((c) => c.currentStage === 'Selection').length },
-    { name: 'Offer', count: candidates.filter((c) => c.currentStage === 'Offer').length },
-    { name: 'Joining', count: candidates.filter((c) => c.currentStage === 'Joining').length },
-    { name: 'Onboarding', count: candidates.filter((c) => c.currentStage === 'Onboarding').length },
-    { name: 'Completed', count: candidates.filter((c) => c.currentStage === 'Completed' || c.currentStage === 'Joined').length },
+    { name: 'Application', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'application').length },
+    { name: 'Screening', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'screening').length },
+    { name: 'Interview', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'interview').length },
+    { name: 'Selection', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'selection').length },
+    { name: 'Offer', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'offer').length },
+    { name: 'Joining', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'joining').length },
+    { name: 'Onboarding', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'onboarding').length },
+    { name: 'Completed', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'completed' || (c.currentStage || '').toLowerCase() === 'joined' || c.status === 'Joined').length },
   ];
 
   const [activeCardFilter, setActiveCardFilter] = useState<string | null>(null);
@@ -258,14 +265,22 @@ export function VeenaDashboard() {
     let matchesCard = true;
     if (activeCardFilter) {
       if (activeCardFilter.startsWith('stage:')) {
-        const targetStage = activeCardFilter.split(':')[1];
-        matchesCard = c.currentStage === targetStage;
+        const targetStage = activeCardFilter.split(':')[1].toLowerCase();
+        matchesCard = (c.currentStage || '').toLowerCase() === targetStage;
+      } else if (activeCardFilter === 'status:Interview') {
+        const stage = (c.currentStage || '').toLowerCase();
+        const intv = (c.interviews || '').trim().toLowerCase();
+        matchesCard = Boolean(stage === 'interview' || (intv && intv !== '-' && !intv.includes('not scheduled')));
+      } else if (activeCardFilter === 'status:Offers') {
+        const stage = (c.currentStage || '').toLowerCase();
+        const status = (c.status || '').toLowerCase();
+        const off = (c.offers || '').trim();
+        matchesCard = Boolean(stage === 'offer' || stage === 'selection' || status === 'selected' || (off && off !== '-'));
       } else if (activeCardFilter === 'status:Joined') {
-        matchesCard = c.status === 'Joined' || c.currentStage === 'Joined';
-      } else if (activeCardFilter === 'status:Selected') {
-        matchesCard = c.status === 'Selected' || c.currentStage === 'Selection';
-      } else if (activeCardFilter === 'status:InProgress') {
-        matchesCard = c.status === 'Active' || (c.status !== 'Joined' && c.status !== 'Dropped' && c.status !== 'Rejected');
+        const stage = (c.currentStage || '').toLowerCase();
+        const status = (c.status || '').toLowerCase();
+        const join = (c.joining || '').trim();
+        matchesCard = Boolean(status === 'joined' || stage === 'joined' || stage === 'onboarding' || stage === 'completed' || (join && join !== '-'));
       }
     }
 
@@ -366,31 +381,24 @@ export function VeenaDashboard() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
-  const saveLocalCandidates = (updatedList: CandidateRecord[]) => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('adyapan_imported_onboarding_candidates', JSON.stringify(updatedList));
-    }
-  };
-
   const handleConfirmImport = async () => {
     setImporting(true);
     try {
-      const createdList: CandidateRecord[] = [];
+      let count = 0;
       for (const item of importData) {
         try {
-          const created = await veenaApi.createOnboarding(item);
-          createdList.push(created);
-        } catch {
-          createdList.push({ ...item, id: `imp-${Date.now()}-${Math.random()}` });
+          await veenaApi.createOnboarding(item);
+          count++;
+        } catch (err) {
+          console.error('Failed to create candidate in DB:', item, err);
         }
       }
-      const newTotal = [...createdList, ...candidates];
-      setCandidates(newTotal);
-      saveLocalCandidates(newTotal);
+      await loadAllData();
       setShowImportModal(false);
       setImportData([]);
-      alert(`Successfully imported ${createdList.length} candidate(s)!`);
+      alert(`Successfully saved ${count} candidate(s) directly to Database!`);
     } catch {
+      await loadAllData();
       alert('Import finished.');
     } finally {
       setImporting(false);
@@ -406,27 +414,17 @@ export function VeenaDashboard() {
 
     try {
       if (editingCandidate) {
-        let updated = { ...editingCandidate, ...form };
-        try {
-          updated = await veenaApi.updateOnboarding(editingCandidate.id, form);
-        } catch {}
-        const newTotal = candidates.map((c) => c.id === editingCandidate.id ? updated : c);
-        setCandidates(newTotal);
-        saveLocalCandidates(newTotal);
-        alert('Candidate updated successfully!');
+        await veenaApi.updateOnboarding(editingCandidate.id, form);
+        alert('Candidate updated successfully in Database!');
       } else {
-        let created = { ...form, id: `cand-${Date.now()}` };
-        try {
-          created = await veenaApi.createOnboarding(form);
-        } catch {}
-        const newTotal = [created, ...candidates];
-        setCandidates(newTotal);
-        saveLocalCandidates(newTotal);
-        alert('Candidate added successfully!');
+        await veenaApi.createOnboarding(form);
+        alert('Candidate added successfully to Database!');
       }
+      await loadAllData();
       resetForm();
-    } catch {
-      alert('Action saved.');
+    } catch (e: any) {
+      alert('Error saving record: ' + (e?.message || 'Failed'));
+      await loadAllData();
       resetForm();
     }
   };
@@ -442,10 +440,10 @@ export function VeenaDashboard() {
     if (!confirm('Are you sure you want to delete this candidate?')) return;
     try {
       await veenaApi.deleteOnboarding(id);
-    } catch {}
-    const newTotal = candidates.filter((c) => c.id !== id);
-    setCandidates(newTotal);
-    saveLocalCandidates(newTotal);
+    } catch (err) {
+      console.error('Delete error:', err);
+    }
+    await loadAllData();
   };
 
   const resetForm = () => {
@@ -569,7 +567,7 @@ export function VeenaDashboard() {
 
       {/* Stat Cards Row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* TOTAL CANDIDATES */}
+        {/* 1. TOTAL CANDIDATES (Recruitment) */}
         <button
           onClick={() => setActiveCardFilter(activeCardFilter === 'all' ? null : 'all')}
           className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
@@ -577,48 +575,29 @@ export function VeenaDashboard() {
           }`}
         >
           <div>
-            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">TOTAL CANDIDATES</div>
+            <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">TOTAL RECRUITMENT</div>
             <div className="text-3xl font-black text-slate-900 mt-1">{totalCount}</div>
             <div className="text-[10px] font-bold text-emerald-600 mt-1 flex items-center gap-1">
-              <span>↗ Active pipeline</span>
+              <span>↗ Active Candidates</span>
             </div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-slate-600">
+          <div className="w-12 h-12 rounded-2xl bg-orange-50 border border-orange-200 flex items-center justify-center text-orange-600">
             <Users className="w-6 h-6" />
           </div>
         </button>
 
-        {/* JOINED & SELECTED */}
+        {/* 2. INTERVIEWS */}
         <button
-          onClick={() => setActiveCardFilter(activeCardFilter === 'status:Joined' ? null : 'status:Joined')}
+          onClick={() => setActiveCardFilter(activeCardFilter === 'status:Interview' ? null : 'status:Interview')}
           className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
-            activeCardFilter === 'status:Joined' ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-200' : 'bg-white border-emerald-200 hover:border-emerald-400'
+            activeCardFilter === 'status:Interview' ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-200' : 'bg-white border-blue-200 hover:border-blue-400'
           }`}
         >
           <div>
-            <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">JOINED &amp; OFFERS</div>
-            <div className="text-3xl font-black text-emerald-600 mt-1">{joinedCount}</div>
-            <div className="text-[10px] font-bold text-emerald-700 mt-1">
-              {selectedCount} Offers Released
-            </div>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
-            <CheckCircle2 className="w-6 h-6" />
-          </div>
-        </button>
-
-        {/* IN PROGRESS */}
-        <button
-          onClick={() => setActiveCardFilter(activeCardFilter === 'status:InProgress' ? null : 'status:InProgress')}
-          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
-            activeCardFilter === 'status:InProgress' ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-200' : 'bg-white border-blue-200 hover:border-blue-400'
-          }`}
-        >
-          <div>
-            <div className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">IN PROGRESS</div>
-            <div className="text-3xl font-black text-blue-600 mt-1">{inProgressCount}</div>
+            <div className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">INTERVIEWS</div>
+            <div className="text-3xl font-black text-blue-600 mt-1">{interviewCount}</div>
             <div className="text-[10px] font-bold text-blue-700 mt-1">
-              Screening &amp; Interviews
+              Scheduled &amp; Cleared
             </div>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
@@ -626,7 +605,45 @@ export function VeenaDashboard() {
           </div>
         </button>
 
-        {/* DROPOUTS TRACKER */}
+        {/* 3. OFFERS RELEASED */}
+        <button
+          onClick={() => setActiveCardFilter(activeCardFilter === 'status:Offers' ? null : 'status:Offers')}
+          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
+            activeCardFilter === 'status:Offers' ? 'bg-indigo-50 border-indigo-400 ring-2 ring-indigo-200' : 'bg-white border-indigo-200 hover:border-indigo-400'
+          }`}
+        >
+          <div>
+            <div className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">OFFERS RELEASED</div>
+            <div className="text-3xl font-black text-indigo-600 mt-1">{offerCount}</div>
+            <div className="text-[10px] font-bold text-indigo-700 mt-1">
+              Selected &amp; Offered
+            </div>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
+            <Award className="w-6 h-6" />
+          </div>
+        </button>
+
+        {/* 4. JOINED & ONBOARDED */}
+        <button
+          onClick={() => setActiveCardFilter(activeCardFilter === 'status:Joined' ? null : 'status:Joined')}
+          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
+            activeCardFilter === 'status:Joined' ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-200' : 'bg-white border-emerald-200 hover:border-emerald-400'
+          }`}
+        >
+          <div>
+            <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">JOINED &amp; ONBOARDED</div>
+            <div className="text-3xl font-black text-emerald-600 mt-1">{joinedCount}</div>
+            <div className="text-[10px] font-bold text-emerald-700 mt-1">
+              {conversionRate}% Conversion Rate
+            </div>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
+            <CheckCircle2 className="w-6 h-6" />
+          </div>
+        </button>
+
+        {/* 5. DROPOUT CASES */}
         <Link
           href="/dropouts"
           className="p-5 rounded-3xl border border-slate-200 hover:border-rose-400 bg-white hover:bg-rose-50/30 shadow-xs flex items-center justify-between text-left transition-all cursor-pointer group"
@@ -640,23 +657,6 @@ export function VeenaDashboard() {
           </div>
           <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 group-hover:scale-105 transition-transform">
             <UserX className="w-6 h-6" />
-          </div>
-        </Link>
-
-        {/* DAILY WORK REPORTS */}
-        <Link
-          href="/daily-reports"
-          className="p-5 rounded-3xl border border-slate-200 hover:border-amber-400 bg-white hover:bg-amber-50/30 shadow-xs flex items-center justify-between text-left transition-all cursor-pointer group"
-        >
-          <div>
-            <div className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">DAILY REPORTS</div>
-            <div className="text-3xl font-black text-amber-600 mt-1">{dailyReportsCount}</div>
-            <div className="text-[10px] font-bold text-amber-700 mt-1">
-              Submitted Work Logs
-            </div>
-          </div>
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 group-hover:scale-105 transition-transform">
-            <FileText className="w-6 h-6" />
           </div>
         </Link>
       </div>
