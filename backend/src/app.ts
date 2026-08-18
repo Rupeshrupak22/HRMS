@@ -120,83 +120,38 @@ apiRouter.use('/ai', aiRoutes);
 app.use('/api', apiRouter);
 app.use('/api/v1', apiRouter);
 
-// Disk & Memory persistent store for HR Manager Overall Reports
-const reportsFilePath = path.join(__dirname, '../data/overall_reports.json');
-
-const loadDiskReports = (): any[] => {
-  try {
-    const dataDir = path.join(__dirname, '../data');
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-    if (fs.existsSync(reportsFilePath)) {
-      const fileData = fs.readFileSync(reportsFilePath, 'utf-8');
-      const parsed = JSON.parse(fileData);
-      return Array.isArray(parsed) ? parsed : [];
-    }
-  } catch {}
-  return [];
-};
-
-const saveDiskReports = (reports: any[]) => {
-  try {
-    const dataDir = path.join(__dirname, '../data');
-    if (!fs.existsSync(dataDir)) {
-      fs.mkdirSync(dataDir, { recursive: true });
-    }
-    fs.writeFileSync(reportsFilePath, JSON.stringify(reports, null, 2), 'utf-8');
-  } catch {}
-};
-
+// Pure Database handler for HR Manager Overall Reports
 const getOverallReportsHandler = async (_req: express.Request, res: express.Response) => {
   try {
-    let dbReports: any[] = [];
-    if ((prisma as any).overallReport) {
-      dbReports = await (prisma as any).overallReport.findMany({ orderBy: { createdAt: 'desc' } });
-    }
-    const combined = [...dbReports];
-    const diskReports = loadDiskReports();
-    for (const mem of diskReports) {
-      if (!combined.some(r => r.id === mem.id || (r.reportDate === mem.reportDate && r.submittedBy === mem.submittedBy))) {
-        combined.push(mem);
-      }
-    }
-    res.json(combined);
-  } catch {
-    res.json(loadDiskReports());
+    const dbReports = await prisma.overallReport.findMany({ orderBy: { createdAt: 'desc' } });
+    return res.json(dbReports || []);
+  } catch (e: any) {
+    console.error('getOverallReportsHandler DB error:', e?.message);
+    return res.status(500).json({ error: 'Database query failed' });
   }
 };
 
 const postOverallReportHandler = async (req: express.Request, res: express.Response) => {
-  // Validate incoming report data
-  const allowedFields = ['reportDate', 'submittedBy', 'department', 'summary', 'metrics', 'status', 'notes'];
-  const sanitizedBody: Record<string, any> = {};
-  for (const key of allowedFields) {
-    if (req.body[key] !== undefined) {
-      sanitizedBody[key] = req.body[key];
-    }
-  }
-
-  const newReport: Record<string, any> = {
-    id: `ov-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-    status: 'SUBMITTED',
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    ...sanitizedBody,
-  };
-  const currentDisk = loadDiskReports();
-  const updatedDisk = [newReport, ...currentDisk.filter((r: any) => r.id !== newReport.id && r.reportDate !== newReport.reportDate)];
-  saveDiskReports(updatedDisk);
-
   try {
-    if ((prisma as any).overallReport) {
-      const dbReport = await (prisma as any).overallReport.create({ data: sanitizedBody });
-      return res.status(201).json(dbReport);
-    }
+    const payload = {
+      submittedBy: String(req.body.submittedBy || 'Nandini (HR Manager)'),
+      reportDate: String(req.body.reportDate || new Date().toISOString().split('T')[0]),
+      totalRecords: Number(req.body.totalRecords || 0),
+      totalDailyReports: Number(req.body.totalDailyReports || 0),
+      aravindSummary: req.body.aravindSummary ? String(req.body.aravindSummary) : null,
+      nitishaSummary: req.body.nitishaSummary ? String(req.body.nitishaSummary) : null,
+      veenaSummary: req.body.veenaSummary ? String(req.body.veenaSummary) : null,
+      charithaSummary: req.body.charithaSummary ? String(req.body.charithaSummary) : null,
+      pavitraSummary: req.body.pavitraSummary ? String(req.body.pavitraSummary) : null,
+      remarks: req.body.remarks ? String(req.body.remarks) : null,
+      status: String(req.body.status || 'SUBMITTED'),
+    };
+    const dbReport = await prisma.overallReport.create({ data: payload });
+    return res.status(201).json(dbReport);
   } catch (err: any) {
-    console.warn('Prisma OverallReport insert fallback to disk store:', err?.message);
+    console.error('postOverallReportHandler DB error:', err?.message);
+    return res.status(500).json({ error: err?.message || 'Database create failed' });
   }
-  return res.status(201).json(newReport);
 };
 
 // GET & POST /api/v1/overall-report — HR Manager report data (protected)
