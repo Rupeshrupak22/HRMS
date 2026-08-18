@@ -41,24 +41,31 @@ export function AravindDashboard() {
   useEffect(() => {
     async function load() {
       try {
-        const [retention, resignation, abscond, exit, fnf, complaints, interviews, reports] = await Promise.all([
-          aravindApi.getRetention(),
-          aravindApi.getResignation(),
+        const [retention, resignation, abscondRaw, exit, fnf, complaints, interviews, reports] = await Promise.all([
+          aravindApi.getRetention().catch(() => []),
+          aravindApi.getResignation().catch(() => []),
           aravindApi.getAbscond().catch(() => []),
-          aravindApi.getExitClearance(),
-          aravindApi.getFnF(),
-          aravindApi.getComplaints(),
-          aravindApi.getExitInterview(),
-          aravindApi.getDailyReports(),
+          aravindApi.getExitClearance().catch(() => []),
+          aravindApi.getFnF().catch(() => []),
+          aravindApi.getComplaints().catch(() => []),
+          aravindApi.getExitInterview().catch(() => []),
+          aravindApi.getDailyReports().catch(() => []),
         ]);
+
+        const savedAbscondLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_aravind_abscond') : null;
+        let localAbscond: any[] = [];
+        try { localAbscond = savedAbscondLocal ? JSON.parse(savedAbscondLocal) : []; } catch { localAbscond = []; }
+        const existingAbsIds = new Set((abscondRaw || []).map((a: any) => a.id || a._id || a.employeeId));
+        const combinedAbscond = [...(Array.isArray(abscondRaw) ? abscondRaw : []), ...localAbscond.filter((a: any) => !existingAbsIds.has(a.id || a._id || a.employeeId))];
+
         setStats({
           retentionTotal: retention.length,
           retentionOpen: retention.filter((r: any) => r.status !== 'Closed').length,
           retentionRetained: retention.filter((r: any) => r.retentionOutcome === 'Retained').length,
           resignationTotal: resignation.length,
           resignationPending: resignation.filter((r: any) => r.overall !== 'Completed').length,
-          abscondTotal: abscond.length,
-          abscondPending: abscond.filter((r: any) => r.status !== 'Terminated - Absconded' && r.status !== 'Rejoined / Recovered').length,
+          abscondTotal: combinedAbscond.length,
+          abscondPending: combinedAbscond.length,
           exitTotal: exit.length,
           exitPending: exit.filter((r: any) => r.overallClearance !== 'Completed').length,
           fnfTotal: fnf.length,
@@ -76,7 +83,7 @@ export function AravindDashboard() {
   const cards = [
     { label: 'Retention Cases', value: stats.retentionTotal, sub: `${stats.retentionOpen} Open · ${stats.retentionRetained} Retained`, icon: ShieldAlert, color: 'amber', href: '/retention' },
     { label: 'Active Resignations', value: stats.resignationTotal, sub: `${stats.resignationPending} In Progress`, icon: UserX, color: 'red', href: '/resignation' },
-    { label: 'Abscond Cases', value: stats.abscondTotal, sub: `${stats.abscondPending} Under Notice`, icon: UserMinus, color: 'rose', href: '/abscond' },
+    { label: 'Abscond Cases', value: stats.abscondTotal, sub: `${stats.abscondTotal} Recorded Cases`, icon: UserMinus, color: 'rose', href: '/abscond' },
     { label: 'Exit Clearances', value: stats.exitTotal, sub: `${stats.exitPending} Pending`, icon: LogOut, color: 'blue', href: '/exit' },
     { label: 'F&F Settlements', value: stats.fnfTotal, sub: `${stats.fnfPending} Payment Pending`, icon: CreditCard, color: 'emerald', href: '/fnf' },
     { label: 'Employee Complaints', value: stats.complaintsTotal, sub: `${stats.complaintsOpen} Open`, icon: MessageSquareWarning, color: 'purple', href: '/employee-complaints' },

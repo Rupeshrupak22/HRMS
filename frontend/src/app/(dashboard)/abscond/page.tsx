@@ -41,12 +41,29 @@ export default function AbscondPage() {
     manager: '',
   });
 
+  const saveLocalRecords = (list: AbscondRecord[]) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('adyapan_aravind_abscond', JSON.stringify(list));
+    }
+  };
+
   const loadData = async () => {
     try {
       const data = await aravindApi.getAbscond();
-      setRecords(Array.isArray(data) ? data : []);
+      const list = Array.isArray(data) ? data : [];
+      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_aravind_abscond') : null;
+      let localList: any[] = [];
+      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
+
+      const existingIds = new Set(list.map((r: any) => r.id || r._id || r.employeeId));
+      const uniqueLocal = localList.filter((r: any) => !existingIds.has(r.id || r._id || r.employeeId));
+      const combined = [...list, ...uniqueLocal];
+      setRecords(combined);
     } catch {
-      setRecords([]);
+      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_aravind_abscond') : null;
+      let localList: any[] = [];
+      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
+      setRecords(localList);
     }
   };
 
@@ -81,18 +98,32 @@ export default function AbscondPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this abscond case?')) return;
-    await aravindApi.deleteAbscond(id);
-    setRecords(records.filter((r) => (r.id || r._id) !== id));
+    try {
+      await aravindApi.deleteAbscond(id);
+    } catch {}
+    const newTotal = records.filter((r) => (r.id || r._id) !== id);
+    setRecords(newTotal);
+    saveLocalRecords(newTotal);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-      const updated = await aravindApi.updateAbscond(editingId, form);
-      setRecords(records.map((r) => ((r.id || r._id) === editingId ? { ...r, ...updated, ...form } : r)));
+      let updated: any = { id: editingId, ...form };
+      try {
+        updated = await aravindApi.updateAbscond(editingId, form);
+      } catch {}
+      const newTotal = records.map((r) => ((r.id || r._id) === editingId ? { ...r, ...updated, ...form } : r));
+      setRecords(newTotal);
+      saveLocalRecords(newTotal);
     } else {
-      const created = await aravindApi.createAbscond(form);
-      setRecords([created, ...records]);
+      let created: any = { id: `abs-${Date.now()}`, ...form };
+      try {
+        created = await aravindApi.createAbscond(form);
+      } catch {}
+      const newTotal = [created, ...records];
+      setRecords(newTotal);
+      saveLocalRecords(newTotal);
     }
     resetForm();
   };

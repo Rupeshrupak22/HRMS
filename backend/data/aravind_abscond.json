@@ -1,0 +1,22 @@
+[
+  {
+    "id": "abs-001",
+    "employeeId": "EMP-3091",
+    "name": "Suresh Raina",
+    "department": "Sales",
+    "designation": "Business Development Executive",
+    "manager": "Aravind (Exit Specialist)",
+    "createdAt": "2026-08-15T10:00:00.000Z",
+    "updatedAt": "2026-08-15T10:00:00.000Z"
+  },
+  {
+    "id": "abs-002",
+    "employeeId": "EMP-4102",
+    "name": "Kavita Verma",
+    "department": "Operation",
+    "designation": "Operations Associate",
+    "manager": "Nandini (HR Manager)",
+    "createdAt": "2026-08-16T11:30:00.000Z",
+    "updatedAt": "2026-08-16T11:30:00.000Z"
+  }
+]
