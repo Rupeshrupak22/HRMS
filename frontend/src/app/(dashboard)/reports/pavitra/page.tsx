@@ -1,11 +1,12 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, Clock, Calendar, CheckCircle2, XCircle, Eye, X, Download } from 'lucide-react';
+import { FileText, Clock, Calendar, CheckCircle2, XCircle, Eye, X, Download, Users } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { Pagination } from '@/components/Pagination';
 
 export default function PavitraReportPage() {
+  const [employees, setEmployees] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<any[]>([]);
   const [leaves, setLeaves] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
@@ -13,32 +14,43 @@ export default function PavitraReportPage() {
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
 
   // Pagination states (20 per page)
+  const [empPage, setEmpPage] = useState(1);
   const [attPage, setAttPage] = useState(1);
   const [leavePage, setLeavePage] = useState(1);
   const [repPage, setRepPage] = useState(1);
   const PAGE_SIZE = 20;
 
   useEffect(() => {
+    // 0. Employee Master roster
+    apiRequest('/employees')
+      .then((d) => {
+        const fetched = Array.isArray(d) ? d : (d?.data && Array.isArray(d.data) ? d.data : []);
+        setEmployees(fetched);
+      })
+      .catch(() => setEmployees([]));
+
     // 1. Attendance logs
     const savedAtt = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_attendance_logs') : null;
     let localAtt: any[] = [];
     try { localAtt = savedAtt ? JSON.parse(savedAtt) : []; } catch { localAtt = []; }
 
-    apiRequest('/attendance').then((d) => {
-      const fetched = Array.isArray(d) ? d : (d?.data && Array.isArray(d.data) ? d.data : []);
-      const map = new Map();
-      for (const item of fetched) {
-        const key = item.id || `${item.employeeId || item.employeeCode}_${item.date}`;
-        map.set(key, item);
-      }
-      for (const item of localAtt) {
-        const key = item.id || `${item.employeeId || item.employeeCode}_${item.date}`;
-        if (!map.has(key)) map.set(key, item);
-      }
-      setAttendance(Array.from(map.values()));
-    }).catch(() => {
-      setAttendance(localAtt);
-    });
+    apiRequest('/attendance/all-logs')
+      .catch(() => apiRequest('/attendance'))
+      .then((d) => {
+        const fetched = Array.isArray(d) ? d : (d?.data && Array.isArray(d.data) ? d.data : []);
+        const map = new Map();
+        for (const item of fetched) {
+          const key = item.id || `${item.empId || item.employeeId || item.employeeCode}_${item.date}`;
+          map.set(key, item);
+        }
+        for (const item of localAtt) {
+          const key = item.id || `${item.empId || item.employeeId || item.employeeCode}_${item.date}`;
+          if (!map.has(key)) map.set(key, item);
+        }
+        setAttendance(Array.from(map.values()));
+      }).catch(() => {
+        setAttendance(localAtt);
+      });
 
     // 2. Leave requests
     const savedLeave = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_leave_requests') : null;
@@ -111,6 +123,11 @@ export default function PavitraReportPage() {
   const filteredLeaves = filterByDate(leaves);
   const filteredDailyReports = filterByDate(dailyReports);
 
+  const paginatedEmployees = useMemo(() => {
+    const start = (empPage - 1) * PAGE_SIZE;
+    return employees.slice(start, start + PAGE_SIZE);
+  }, [employees, empPage]);
+
   const paginatedAttendance = useMemo(() => {
     const start = (attPage - 1) * PAGE_SIZE;
     return filteredAttendance.slice(start, start + PAGE_SIZE);
@@ -176,7 +193,60 @@ export default function PavitraReportPage() {
         </div>
       )}
 
-      {/* 1. Attendance Records Section */}
+      {/* 1. Employee Master Roster Section */}
+      <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+          <Users className="w-4 h-4 text-blue-600" /> Employee Master Directory ({employees.length})
+        </h2>
+        {employees.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No employee master records found.</p>
+        ) : (
+          <div className="rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold whitespace-nowrap">
+                    <th className="px-4 py-3">Emp Code</th>
+                    <th className="px-4 py-3">Employee Name</th>
+                    <th className="px-4 py-3">Email</th>
+                    <th className="px-4 py-3">Department</th>
+                    <th className="px-4 py-3">Designation</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">Join Date</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedEmployees.map((emp, idx) => (
+                    <tr key={emp.id || idx} className="hover:bg-slate-50 transition whitespace-nowrap">
+                      <td className="px-4 py-2.5 font-bold text-slate-800">{emp.employeeCode || emp.id}</td>
+                      <td className="px-4 py-2.5 font-bold text-slate-900">{`${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || 'Employee'}</td>
+                      <td className="px-4 py-2.5 text-slate-600">{emp.user?.email || emp.email || '-'}</td>
+                      <td className="px-4 py-2.5 text-slate-600">{emp.department?.name || emp.department || '-'}</td>
+                      <td className="px-4 py-2.5 text-slate-600">{emp.designation?.title || emp.designation || '-'}</td>
+                      <td className="px-4 py-2.5">
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          emp.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'
+                        }`}>
+                          {emp.status || 'ACTIVE'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5 text-slate-600 font-medium">{emp.dateOfJoining ? emp.dateOfJoining.split('T')[0] : '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <Pagination
+              currentPage={empPage}
+              totalItems={employees.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setEmpPage}
+            />
+          </div>
+        )}
+      </section>
+
+      {/* 2. Attendance Records Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
           <Clock className="w-4 h-4 text-emerald-600" /> Attendance Records ({filteredAttendance.length})
@@ -188,9 +258,11 @@ export default function PavitraReportPage() {
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
                 <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold whitespace-nowrap">
                     <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3">Emp ID / Code</th>
+                    <th className="px-4 py-3">Emp Code</th>
+                    <th className="px-4 py-3">Employee Name</th>
+                    <th className="px-4 py-3">Department</th>
                     <th className="px-4 py-3">Status</th>
                     <th className="px-4 py-3">Check In</th>
                     <th className="px-4 py-3">Check Out</th>
@@ -199,9 +271,11 @@ export default function PavitraReportPage() {
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {paginatedAttendance.map((r, idx) => (
-                    <tr key={r.id || idx} className="hover:bg-slate-50 transition">
+                    <tr key={r.id || idx} className="hover:bg-slate-50 transition whitespace-nowrap">
                       <td className="px-4 py-2.5 font-bold text-slate-800">{r.date || filterDate || '-'}</td>
-                      <td className="px-4 py-2.5 font-medium text-slate-700">{r.employeeId || r.employeeCode || `EMP-${1000 + idx}`}</td>
+                      <td className="px-4 py-2.5 font-medium text-slate-700">{r.empId || r.employeeId || r.employeeCode || `EMP-${1000 + idx}`}</td>
+                      <td className="px-4 py-2.5 font-extrabold text-slate-900">{r.empName || r.employeeName || 'Employee'}</td>
+                      <td className="px-4 py-2.5 text-slate-600">{r.department || '-'}</td>
                       <td className="px-4 py-2.5">
                         <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
                           r.status === 'PRESENT' ? 'bg-green-100 text-green-700'

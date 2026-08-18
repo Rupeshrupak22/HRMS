@@ -59,7 +59,6 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
 
   const allNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
-    { label: 'Employee Master', href: '/employee-master', icon: Users, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'] },
     { label: 'Aravind Report', href: '/reports/aravind', icon: FileText, roles: ['SUPER_ADMIN', 'HR_ADMIN'] },
     { label: 'Nitisha Report', href: '/reports/nitisha', icon: FileText, roles: ['SUPER_ADMIN', 'HR_ADMIN'] },
     { label: 'Pavitra Report', href: '/reports/pavitra', icon: FileText, roles: ['SUPER_ADMIN', 'HR_ADMIN'] },
@@ -110,7 +109,6 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   // Nandini (HR Manager) - custom sidebar with team reports
   const nandiniNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { label: 'Employee Master', href: '/employee-master', icon: Users },
     { label: 'Aravind Report', href: '/reports/aravind', icon: FileText },
     { label: 'Nitisha Report', href: '/reports/nitisha', icon: FileText },
     { label: 'Pavitra Report', href: '/reports/pavitra', icon: FileText },
