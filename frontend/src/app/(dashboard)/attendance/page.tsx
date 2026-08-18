@@ -861,6 +861,14 @@ export default function AttendancePage() {
                         else if (s === 'OVERTIME' || s === 'OT') { color = 'bg-blue-100 text-blue-800 font-bold'; label = 'OT'; }
                         else if (s === 'WORK_FROM_HOME' || s === 'WFH') { color = 'bg-teal-100 text-teal-800 font-bold'; label = 'WFH'; }
                         else if (s === 'HALF_DAY' || s === 'HD') { color = 'bg-pink-100 text-pink-800 font-bold'; label = 'HD'; }
+                        else if (s === 'EARLY_LOGOUT' || s === 'EL') { color = 'bg-yellow-100 text-yellow-800 font-bold'; label = 'EL'; }
+                        else if (s === 'LATE_LOGIN' || s === 'LL') { color = 'bg-yellow-100 text-yellow-800 font-bold'; label = 'LL'; }
+                        else if (s === 'EMERGENCY_LEAVE' || s === 'E_L') { color = 'bg-rose-100 text-rose-800 font-bold'; label = 'E_L'; }
+                        else if (s === 'PAID_LEAVE' || s === 'PL') { color = 'bg-indigo-100 text-indigo-800 font-bold'; label = 'PL'; }
+                        else if (s === 'LONG_LEAVE' || s === 'LLV') { color = 'bg-purple-100 text-purple-800 font-bold'; label = 'LLV'; }
+                        else if (s === 'NATIONAL_HOLIDAY' || s === 'NH') { color = 'bg-cyan-100 text-cyan-800 font-bold'; label = 'NH'; }
+                        else if (s === 'FESTIVE_HOLIDAY' || s === 'FH') { color = 'bg-lime-100 text-lime-800 font-bold'; label = 'FH'; }
+                        else if (s === 'TRAINING' || s === 'T') { color = 'bg-violet-100 text-violet-800 font-bold'; label = 'T'; }
 
                         return (
                           <td key={i} className="p-1 border-l border-slate-50">
@@ -1094,8 +1102,16 @@ export default function AttendancePage() {
                     else if (currentVal === 'HALF_DAY') badgeColor = 'bg-sky-50 border-sky-300 text-sky-700 font-bold';
                     else if (currentVal === 'CASUAL_LEAVE') badgeColor = 'bg-indigo-50 border-indigo-300 text-indigo-700 font-bold';
                     else if (currentVal === 'SICK_LEAVE') badgeColor = 'bg-purple-50 border-purple-300 text-purple-700 font-bold';
+                    else if (currentVal === 'EMERGENCY_LEAVE') badgeColor = 'bg-rose-50 border-rose-300 text-rose-700 font-bold';
+                    else if (currentVal === 'LONG_LEAVE') badgeColor = 'bg-pink-50 border-pink-300 text-pink-700 font-bold';
+                    else if (currentVal === 'PAID_LEAVE') badgeColor = 'bg-blue-50 border-blue-300 text-blue-700 font-bold';
+                    else if (currentVal === 'EARLY_LOGOUT') badgeColor = 'bg-yellow-50 border-yellow-300 text-yellow-700 font-bold';
+                    else if (currentVal === 'LATE_LOGIN') badgeColor = 'bg-orange-50 border-orange-300 text-orange-700 font-bold';
                     else if (currentVal === 'HOLIDAY' || currentVal === 'NATIONAL_HOLIDAY' || currentVal === 'FESTIVE_HOLIDAY') badgeColor = 'bg-amber-50 border-amber-300 text-amber-700 font-bold';
-                    else if (currentVal === 'WEEKLY_OFF') badgeColor = 'bg-blue-50 border-blue-300 text-blue-700 font-bold';
+                    else if (currentVal === 'WEEKLY_OFF') badgeColor = 'bg-slate-100 border-slate-300 text-slate-700 font-bold';
+                    else if (currentVal === 'TRAINING') badgeColor = 'bg-violet-50 border-violet-300 text-violet-700 font-bold';
+                    else if (currentVal === 'OVERTIME') badgeColor = 'bg-cyan-50 border-cyan-300 text-cyan-700 font-bold';
+                    else if (currentVal === 'WORK_FROM_HOME') badgeColor = 'bg-teal-50 border-teal-300 text-teal-700 font-bold';
                     else if (currentVal) badgeColor = 'bg-violet-50 border-violet-300 text-violet-700 font-bold';
 
                     return (
@@ -1104,7 +1120,7 @@ export default function AttendancePage() {
                           <label className="text-[10px] font-black uppercase">Day {i + 1}</label>
                           {currentVal && (
                             <span className="text-[9px] font-black opacity-70">
-                              {currentVal === 'PRESENT' ? 'P' : currentVal === 'ABSENT' ? 'A' : currentVal === 'HALF_DAY' ? 'HD' : currentVal === 'CASUAL_LEAVE' ? 'CL' : currentVal === 'SICK_LEAVE' ? 'SL' : currentVal === 'HOLIDAY' ? 'H' : currentVal.slice(0, 3)}
+                              {currentVal === 'PRESENT' ? 'P' : currentVal === 'ABSENT' ? 'A' : currentVal === 'HALF_DAY' ? 'HD' : currentVal === 'CASUAL_LEAVE' ? 'CL' : currentVal === 'SICK_LEAVE' ? 'SL' : currentVal === 'EMERGENCY_LEAVE' ? 'E_L' : currentVal === 'LONG_LEAVE' ? 'LLV' : currentVal === 'PAID_LEAVE' ? 'PL' : currentVal === 'EARLY_LOGOUT' ? 'EL' : currentVal === 'LATE_LOGIN' ? 'LL' : currentVal === 'HOLIDAY' ? 'H' : currentVal === 'NATIONAL_HOLIDAY' ? 'NH' : currentVal === 'FESTIVE_HOLIDAY' ? 'FH' : currentVal === 'WEEKLY_OFF' ? 'WO' : currentVal === 'TRAINING' ? 'T' : currentVal === 'OVERTIME' ? 'OT' : currentVal === 'WORK_FROM_HOME' ? 'WFH' : currentVal.slice(0, 3)}
                             </span>
                           )}
                         </div>
@@ -1131,6 +1147,9 @@ export default function AttendancePage() {
                           <option value="NATIONAL_HOLIDAY">NH (National Holiday)</option>
                           <option value="FESTIVE_HOLIDAY">FH (Festive Holiday)</option>
                           <option value="TRAINING">T (Training)</option>
+                          <option value="LOP">LOP (Loss of pay)</option>
+                          <option value="PL">PL (Personal Leave)</option>
+                          <option value="Other">OR (Reason)</option>
                         </select>
                       </div>
                     );
