@@ -1,13 +1,14 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, TrendingUp, ShieldAlert, Users, Calendar, Eye, X, Download } from 'lucide-react';
+import { FileText, TrendingUp, ShieldAlert, Users, Calendar, Eye, X, Download, AlertCircle } from 'lucide-react';
 import { nitishaApi } from '@/lib/nitisha-api';
 import { apiRequest } from '@/lib/api';
 import { Pagination } from '@/components/Pagination';
 
 export default function NitishaReportPage() {
   const [performances, setPerformances] = useState<any[]>([]);
+  const [issues, setIssues] = useState<any[]>([]);
   const [discipline, setDiscipline] = useState<any[]>([]);
   const [relations, setRelations] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
@@ -16,6 +17,7 @@ export default function NitishaReportPage() {
 
   // Pagination states
   const [pagePerf, setPagePerf] = useState(1);
+  const [pageIssues, setPageIssues] = useState(1);
   const [pageDisc, setPageDisc] = useState(1);
   const [pageRel, setPageRel] = useState(1);
   const [pageRep, setPageRep] = useState(1);
@@ -23,6 +25,7 @@ export default function NitishaReportPage() {
 
   useEffect(() => {
     nitishaApi.getPerformances().then(setPerformances).catch(() => {});
+    nitishaApi.getIssues().then(setIssues).catch(() => {});
     nitishaApi.getDiscipline().then(setDiscipline).catch(() => {});
     nitishaApi.getRelations().then(setRelations).catch(() => {});
     
@@ -55,6 +58,7 @@ export default function NitishaReportPage() {
   };
 
   const filteredPerformances = filterByDate(performances);
+  const filteredIssues = filterByDate(issues);
   const filteredDiscipline = filterByDate(discipline);
   const filteredRelations = filterByDate(relations);
   const filteredDailyReports = filterByDate(dailyReports);
@@ -124,23 +128,76 @@ export default function NitishaReportPage() {
                   <th className="px-4 py-3">Emp ID</th>
                   <th className="px-4 py-3">Name</th>
                   <th className="px-4 py-3">Department</th>
-                  <th className="px-4 py-3">Rating</th>
-                  <th className="px-4 py-3">PIP Status</th>
-                  <th className="px-4 py-3">Review Date</th>
+                  <th className="px-4 py-3">Daily Rev</th>
+                  <th className="px-4 py-3">Weekly Rev</th>
+                  <th className="px-4 py-3">Monthly Rev</th>
+                  <th className="px-4 py-3">PIP Case</th>
                 </tr></thead>
                 <tbody className="divide-y divide-slate-100">{filteredPerformances.slice((pagePerf - 1) * PAGE_SIZE, pagePerf * PAGE_SIZE).map((r) => (
-                  <tr key={r.id} className="hover:bg-slate-50 transition">
+                  <tr key={r.id || r._id} className="hover:bg-slate-50 transition">
                     <td className="px-4 py-2.5 font-bold text-slate-800">{r.employeeId}</td>
-                    <td className="px-4 py-2.5 font-semibold text-slate-700">{r.name}</td>
-                    <td className="px-4 py-2.5 text-slate-600">{r.department}</td>
-                    <td className="px-4 py-2.5 font-mono text-slate-700">{r.rating || '-'}</td>
-                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.pipStatus === 'Active' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700'}`}>{r.pipStatus || 'None'}</span></td>
-                    <td className="px-4 py-2.5 text-slate-600">{r.reviewDate || '-'}</td>
+                    <td className="px-4 py-2.5 font-semibold text-slate-700">{r.employeeName || r.name}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        r.department === 'Sales' ? 'bg-blue-100 text-blue-700' :
+                        r.department === 'Tech' ? 'bg-purple-100 text-purple-700' :
+                        r.department === 'Operation' ? 'bg-amber-100 text-amber-700' :
+                        'bg-emerald-100 text-emerald-700'
+                      }`}>
+                        {r.department || '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-2.5 font-mono text-slate-700">{r.dailyRevenue || '—'}</td>
+                    <td className="px-4 py-2.5 font-mono text-slate-700">{r.weeklyRevenue || '—'}</td>
+                    <td className="px-4 py-2.5 font-mono text-slate-700">{r.monthlyRevenue || '—'}</td>
+                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.pipCase === 'Yes' || r.pipStatus === 'Active' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{r.pipCase || r.pipStatus || 'No'}</span></td>
                   </tr>
                 ))}</tbody>
               </table>
             </div>
             <Pagination currentPage={pagePerf} totalItems={filteredPerformances.length} pageSize={PAGE_SIZE} onPageChange={setPagePerf} />
+          </div>
+        )}
+      </section>
+
+      {/* Employee Issues Section */}
+      <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+          <AlertCircle className="w-4 h-4 text-orange-600" /> Employee Issues & Explanations ({filteredIssues.length})
+        </h2>
+        {filteredIssues.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No employee issues recorded.</p> : (
+          <div className="rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                  <th className="px-4 py-3">Emp ID</th>
+                  <th className="px-4 py-3">Employee Name</th>
+                  <th className="px-4 py-3">Issue</th>
+                  <th className="px-4 py-3">Emp Explanation</th>
+                  <th className="px-4 py-3">Fact Finding</th>
+                  <th className="px-4 py-3">Manager Explanation</th>
+                  <th className="px-4 py-3">HR Explanation</th>
+                  <th className="px-4 py-3">Status</th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">{filteredIssues.slice((pageIssues - 1) * PAGE_SIZE, pageIssues * PAGE_SIZE).map((r) => (
+                  <tr key={r.id || r._id} className="hover:bg-slate-50 transition">
+                    <td className="px-4 py-2.5 font-bold text-slate-800">{r.employeeId}</td>
+                    <td className="px-4 py-2.5 font-semibold text-slate-700">{r.employeeName}</td>
+                    <td className="px-4 py-2.5 text-slate-800">{r.employeeIssue}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.employeeExplanation || '—'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.factFinding || '—'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.managerExplanation || '—'}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.myExplanation || '—'}</td>
+                    <td className="px-4 py-2.5">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.status === 'RESOLVED' || r.status === 'CLOSED' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+                        {r.status || 'OPEN'}
+                      </span>
+                    </td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+            <Pagination currentPage={pageIssues} totalItems={filteredIssues.length} pageSize={PAGE_SIZE} onPageChange={setPageIssues} />
           </div>
         )}
       </section>

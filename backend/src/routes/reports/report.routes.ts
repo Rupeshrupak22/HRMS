@@ -1,4 +1,6 @@
 import { Router, Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { authenticate, authorize } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { z } from 'zod';
@@ -7,6 +9,18 @@ import { AuthRequest } from '../../types';
 
 const router = Router();
 router.use(authenticate);
+
+function getDiskStore(filename: string): any[] {
+  const dataDir = path.join(__dirname, '../../../data');
+  const filePath = path.join(dataDir, filename);
+  try {
+    if (fs.existsSync(filePath)) {
+      const raw = fs.readFileSync(filePath, 'utf-8');
+      return JSON.parse(raw);
+    }
+  } catch {}
+  return [];
+}
 
 const createReportSchema = z.object({
   employeeName: z.string().optional(),
@@ -176,6 +190,46 @@ router.get('/daily', async (req: AuthRequest, res: Response, next) => {
               keyUpdates: `Issues: ${nr.employeeIssue}, Engagement: ${nr.employeeEngagement}, Discipline: ${nr.disciplineCases}`,
               issue: nr.employeeIssue || '-',
               comment: `PIP Case: ${nr.pipCase} (${nr.pipReason || 'None'}). Low: ${nr.performanceLow}, Med: ${nr.performanceMedium}, High: ${nr.performanceHigh}`,
+              numScreened: 0,
+              numInterviews: 0,
+              numOffersSent: 0,
+              numJoined: 0,
+              numDropouts: 0,
+              status: 'APPROVED',
+              sendStatus: 'SENT',
+              sentToEmail: 'nandini@adyapan.com',
+              reviewedByEmail: null,
+              createdByEmail: nr.createdByEmail || 'nitisha@adyapan.com',
+              createdAt: nr.createdAt,
+              updatedAt: nr.updatedAt,
+            } as any);
+        // Also check disk store for Nitisha daily reports
+        const diskNitisha = getDiskStore('nitisha_daily_reports.json');
+        for (const nr of diskNitisha) {
+          const dateStr = nr.date || (nr.createdAt ? nr.createdAt.split('T')[0] : '');
+          if (req.query.date && dateStr !== String(req.query.date)) continue;
+
+          const key = `nitisha@adyapan.com_${dateStr}_${(nr.employeeIssue || '').slice(0, 20)}`;
+          if (!existingKeys.has(key)) {
+            existingKeys.add(key);
+            combinedReports.push({
+              id: nr.id,
+              employeeName: 'Nitisha',
+              userEmail: nr.createdByEmail || 'nitisha@adyapan.com',
+              date: dateStr,
+              role: 'Discipline & POSH Specialist',
+              candidateSource: null,
+              screeningCompleted: null,
+              interviewTakenBy: null,
+              selectionStatus: null,
+              offerLetterSent: null,
+              offerLetterAccepted: null,
+              joiningConfirmation: null,
+              joinedOnboarded: null,
+              pendingFollowups: null,
+              keyUpdates: `Issues: ${nr.employeeIssue || 'None'}, Engagement: ${nr.employeeEngagement || 'None'}, Discipline: ${nr.disciplineCases || 'None'}`,
+              issue: nr.employeeIssue || '-',
+              comment: `PIP Case: ${nr.pipCase || 'No'}. Low: ${nr.performanceLow || 0}, Med: ${nr.performanceMedium || 0}, High: ${nr.performanceHigh || 0}`,
               numScreened: 0,
               numInterviews: 0,
               numOffersSent: 0,
