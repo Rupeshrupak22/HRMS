@@ -19,59 +19,53 @@ interface DailyReportRecord {
   keyActions: string;
 }
 
-const initialData: DailyReportRecord[] = [
-  {
-    id: '1',
-    reportDate: '2026-08-10',
-    resignationReceived: 1,
-    retentionCases: 2,
-    employeeRetained: 1,
-    exitClearanceCompleted: 1,
-    fnfCompleted: 1,
-    fnfPending: 1,
-    openComplaints: 1,
-    closedComplaints: 0,
-    managerConfirmationPending: 1,
-    keyActions: 'Processed Ishan F&F, initiated retention talk with Priya',
-  },
-  {
-    id: '2',
-    reportDate: '2026-08-09',
-    resignationReceived: 0,
-    retentionCases: 1,
-    employeeRetained: 0,
-    exitClearanceCompleted: 0,
-    fnfCompleted: 0,
-    fnfPending: 2,
-    openComplaints: 2,
-    closedComplaints: 1,
-    managerConfirmationPending: 0,
-    keyActions: 'Closed Suresh complaint, followed up on Ramesh clearances',
-  },
-];
-
 export function AravindDailyReport() {
   const [records, setRecords] = useState<DailyReportRecord[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<any>({
-    reportDate: '', resignationReceived: '', retentionCases: '',
-    employeeRetained: '', exitClearanceCompleted: '', fnfCompleted: '',
-    fnfPending: '', openComplaints: '', closedComplaints: '',
-    managerConfirmationPending: '', keyActions: '',
+    reportDate: new Date().toISOString().split('T')[0],
+    resignationReceived: 0,
+    retentionCases: 0,
+    employeeRetained: 0,
+    exitClearanceCompleted: 0,
+    fnfCompleted: 0,
+    fnfPending: 0,
+    openComplaints: 0,
+    closedComplaints: 0,
+    managerConfirmationPending: 0,
+    keyActions: '',
   });
 
+  const loadReports = async () => {
+    try {
+      const data = await aravindApi.getDailyReports();
+      setRecords(Array.isArray(data) ? data : []);
+    } catch {
+      setRecords([]);
+    }
+  };
+
   const resetForm = () => {
-    setForm({ reportDate: '', resignationReceived: '', retentionCases: '',
-      employeeRetained: '', exitClearanceCompleted: '', fnfCompleted: '',
-      fnfPending: '', openComplaints: '', closedComplaints: '',
-      managerConfirmationPending: '', keyActions: '' });
+    setForm({
+      reportDate: new Date().toISOString().split('T')[0],
+      resignationReceived: 0,
+      retentionCases: 0,
+      employeeRetained: 0,
+      exitClearanceCompleted: 0,
+      fnfCompleted: 0,
+      fnfPending: 0,
+      openComplaints: 0,
+      closedComplaints: 0,
+      managerConfirmationPending: 0,
+      keyActions: '',
+    });
     setEditingId(null);
     setShowForm(false);
   };
 
   useEffect(() => {
-    aravindApi.getDailyReports().then(setRecords).catch(() => {});
+    loadReports();
   }, []);
 
   const handleEdit = (record: DailyReportRecord) => {
@@ -82,19 +76,40 @@ export function AravindDailyReport() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Are you sure you want to delete this record?')) return;
-    await aravindApi.deleteDailyReport(id);
-    setRecords(records.filter((r) => r.id !== id));
+    if (!confirm('Are you sure you want to delete this daily report?')) return;
+    try {
+      await aravindApi.deleteDailyReport(id);
+    } catch (e) {
+      console.error('Delete report error:', e);
+    }
+    await loadReports();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingId) {
-      const updated = await aravindApi.updateDailyReport(editingId, form);
-      setRecords(records.map((r) => r.id === editingId ? updated : r));
-    } else {
-      const created = await aravindApi.createDailyReport(form);
-      setRecords([created, ...records]);
+    const payload = {
+      reportDate: form.reportDate || new Date().toISOString().split('T')[0],
+      resignationReceived: parseInt(String(form.resignationReceived || 0), 10) || 0,
+      retentionCases: parseInt(String(form.retentionCases || 0), 10) || 0,
+      employeeRetained: parseInt(String(form.employeeRetained || 0), 10) || 0,
+      exitClearanceCompleted: parseInt(String(form.exitClearanceCompleted || 0), 10) || 0,
+      fnfCompleted: parseInt(String(form.fnfCompleted || 0), 10) || 0,
+      fnfPending: parseInt(String(form.fnfPending || 0), 10) || 0,
+      openComplaints: parseInt(String(form.openComplaints || 0), 10) || 0,
+      closedComplaints: parseInt(String(form.closedComplaints || 0), 10) || 0,
+      managerConfirmationPending: parseInt(String(form.managerConfirmationPending || 0), 10) || 0,
+      keyActions: String(form.keyActions || '').trim(),
+    };
+
+    try {
+      if (editingId) {
+        await aravindApi.updateDailyReport(editingId, payload);
+      } else {
+        await aravindApi.createDailyReport(payload);
+      }
+      await loadReports();
+    } catch (err: any) {
+      console.error('Failed to submit daily report:', err);
     }
     resetForm();
   };

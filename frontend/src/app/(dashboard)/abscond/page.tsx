@@ -9,9 +9,13 @@ import {
   Trash2,
   Search,
   Download,
+  Upload,
   AlertOctagon,
   Users,
+  RotateCw,
+  FileSpreadsheet,
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { aravindApi } from '@/lib/aravind-api';
 import { Pagination } from '@/components/Pagination';
 
@@ -25,6 +29,20 @@ interface AbscondRecord {
   manager: string;
 }
 
+function findRowValue(row: Record<string, any>, aliases: string[]): any {
+  const keys = Object.keys(row);
+  for (const alias of aliases) {
+    const cleanAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const k of keys) {
+      const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanKey === cleanAlias) {
+        return row[k];
+      }
+    }
+  }
+  return undefined;
+}
+
 export default function AbscondPage() {
   const [records, setRecords] = useState<AbscondRecord[]>([]);
   const [showForm, setShowForm] = useState(false);
@@ -32,6 +50,12 @@ export default function AbscondPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
+
+  // Import state
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importData, setImportData] = useState<any[]>([]);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState<Omit<AbscondRecord, 'id' | '_id'>>({
     employeeId: '',
@@ -51,8 +75,98 @@ export default function AbscondPage() {
   };
 
   useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('adyapan_aravind_abscond');
+    }
     loadData();
   }, []);
+
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      {
+        'Emp ID': 'ADP0123',
+        'Name': 'Suresh Raina',
+        'Department': 'Sales',
+        'Designation': 'Business Development Executive',
+        'Manager': 'Aravind (Exit Specialist)',
+      },
+      {
+        'Emp ID': 'ADP0456',
+        'Name': 'Kavita Verma',
+        'Department': 'Operation',
+        'Designation': 'Operations Associate',
+        'Manager': 'Nandini (HR Manager)',
+      },
+    ];
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Abscond Cases');
+    XLSX.writeFile(wb, 'Abscond_Cases_Template.xlsx');
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: 'array' });
+        const wsName = wb.SheetNames[0];
+        const ws = wb.Sheets[wsName];
+        const jsonData: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (!jsonData || jsonData.length === 0) {
+          alert('File is empty or has no rows.');
+          return;
+        }
+
+        const formatted = jsonData.map((row, idx) => ({
+          employeeId: String(findRowValue(row, ['Emp ID', 'Employee ID', 'Employee Code', 'emp_id', 'ID', 'Id']) || `EMP-${Date.now().toString().slice(-4)}${idx}`).trim(),
+          name: String(findRowValue(row, ['Name', 'Employee Name', 'Candidate Name', 'name', 'Employee']) || '').trim(),
+          department: String(findRowValue(row, ['Department', 'Dept', 'department', 'DEPT']) || 'Sales').trim(),
+          designation: String(findRowValue(row, ['Designation', 'Role', 'Position', 'designation']) || 'Executive').trim(),
+          manager: String(findRowValue(row, ['Manager', 'Reporting Manager', 'manager', 'Manager Name']) || 'Aravind (Exit Specialist)').trim(),
+        })).filter(r => r.name || r.employeeId);
+
+        if (formatted.length === 0) {
+          alert('No valid records found in uploaded file.');
+          return;
+        }
+
+        setImportData(formatted);
+        setShowImportModal(true);
+      } catch {
+        alert('Failed to parse Excel file. Please upload a valid .xlsx or .csv file.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleConfirmImport = async () => {
+    setImporting(true);
+    try {
+      let count = 0;
+      for (const item of importData) {
+        try {
+          await aravindApi.createAbscond(item);
+          count++;
+        } catch (err) {
+          console.error('Failed to import item:', item, err);
+        }
+      }
+      await loadData();
+      setShowImportModal(false);
+      setImportData([]);
+      alert(`Successfully saved ${count} abscond case(s) directly to Database!`);
+    } catch {
+      await loadData();
+      alert('Import completed.');
+    } finally {
+      setImporting(false);
+    }
+  };
 
   const resetForm = () => {
     setForm({
@@ -81,18 +195,25 @@ export default function AbscondPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this abscond case?')) return;
-    await aravindApi.deleteAbscond(id);
-    setRecords(records.filter((r) => (r.id || r._id) !== id));
+    try {
+      await aravindApi.deleteAbscond(id);
+    } catch (e: any) {
+      console.error('Delete error:', e);
+    }
+    await loadData();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editingId) {
-      const updated = await aravindApi.updateAbscond(editingId, form);
-      setRecords(records.map((r) => ((r.id || r._id) === editingId ? { ...r, ...updated, ...form } : r)));
-    } else {
-      const created = await aravindApi.createAbscond(form);
-      setRecords([created, ...records]);
+    try {
+      if (editingId) {
+        await aravindApi.updateAbscond(editingId, form);
+      } else {
+        await aravindApi.createAbscond(form);
+      }
+      await loadData();
+    } catch (e: any) {
+      console.error('Save error:', e);
     }
     resetForm();
   };
@@ -163,9 +284,37 @@ export default function AbscondPage() {
                 setSearchTerm(e.target.value);
                 setPage(1);
               }}
-              className="pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-xs min-w-[260px]"
+              className="pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-rose-500 shadow-xs min-w-[240px]"
             />
           </div>
+
+          <button
+            onClick={loadData}
+            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition shadow-xs cursor-pointer"
+            title="Refresh List"
+          >
+            <RotateCw className="w-4 h-4" />
+          </button>
+
+          <label className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold transition shadow-xs cursor-pointer" title="Import XLSX / CSV">
+            <Upload className="w-3.5 h-3.5 text-rose-500" />
+            <span>Import XLSX/CSV</span>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleFileUpload}
+              className="hidden"
+            />
+          </label>
+
+          <button
+            onClick={handleDownloadTemplate}
+            className="p-2 rounded-xl bg-white border border-slate-200 text-slate-600 hover:bg-slate-50 transition shadow-xs cursor-pointer"
+            title="Download Excel Template"
+          >
+            <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+          </button>
 
           <button
             onClick={handleExportCSV}
@@ -343,6 +492,74 @@ export default function AbscondPage() {
           onPageChange={setPage}
         />
       </div>
+
+      {/* Import Preview Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4">
+          <div className="bg-white rounded-3xl p-6 max-w-2xl w-full shadow-2xl space-y-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-800">Preview Imported Abscond Cases</h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Found {importData.length} records ready to import directly into Database
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowImportModal(false); setImportData([]); }}
+                className="p-1 rounded-xl hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="overflow-y-auto flex-1 border border-slate-100 rounded-2xl">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 border-b border-slate-100 text-slate-600 font-bold sticky top-0">
+                  <tr>
+                    <th className="px-4 py-2.5">Emp ID</th>
+                    <th className="px-4 py-2.5">Name</th>
+                    <th className="px-4 py-2.5">Department</th>
+                    <th className="px-4 py-2.5">Designation</th>
+                    <th className="px-4 py-2.5">Manager</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {importData.slice(0, 15).map((row, i) => (
+                    <tr key={i} className="hover:bg-slate-50">
+                      <td className="px-4 py-2 font-mono font-bold text-rose-700">{row.employeeId}</td>
+                      <td className="px-4 py-2 font-semibold text-slate-800">{row.name}</td>
+                      <td className="px-4 py-2 text-slate-600">{row.department}</td>
+                      <td className="px-4 py-2 text-slate-600">{row.designation}</td>
+                      <td className="px-4 py-2 font-medium text-slate-700">{row.manager}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {importData.length > 15 && (
+                <div className="p-3 bg-slate-50 text-center text-xs text-slate-500 font-medium">
+                  ...and {importData.length - 15} more records
+                </div>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                onClick={() => { setShowImportModal(false); setImportData([]); }}
+                className="px-4 py-2 rounded-xl border border-slate-200 text-xs font-semibold text-slate-600 hover:bg-slate-50 transition cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmImport}
+                disabled={importing}
+                className="px-5 py-2 rounded-xl bg-rose-500 hover:bg-rose-600 text-white text-xs font-bold transition shadow-sm cursor-pointer disabled:opacity-50"
+              >
+                {importing ? 'Importing...' : `Confirm & Save ${importData.length} Cases`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

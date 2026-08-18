@@ -198,8 +198,8 @@ export default function OnboardingPage() {
     ];
     const ws = XLSX.utils.json_to_sheet(templateData);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Onboarding Candidates');
-    XLSX.writeFile(wb, 'Onboarding_Candidates_Template.xlsx');
+    XLSX.utils.book_append_sheet(wb, ws, 'Recruitment Candidates');
+    XLSX.writeFile(wb, 'Recruitment_Candidates_Template.xlsx');
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -254,6 +254,12 @@ export default function OnboardingPage() {
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
+  const saveLocalRecords = (list: OnboardingRecord[]) => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('adyapan_imported_onboarding_candidates', JSON.stringify(list));
+    }
+  };
+
   const handleConfirmImport = async () => {
     setImporting(true);
     try {
@@ -263,10 +269,12 @@ export default function OnboardingPage() {
           const res = await veenaApi.createOnboarding(item);
           createdRecords.push(res);
         } catch {
-          createdRecords.push({ ...item, id: `imp-onb-${Date.now()}-${Math.random()}` });
+          createdRecords.push({ ...item, id: `imp-onb-${Date.now()}-${Math.random().toString(36).substring(2, 6)}` });
         }
       }
-      setRecords((prev) => [...createdRecords, ...prev]);
+      const newTotal = [...createdRecords, ...records];
+      setRecords(newTotal);
+      saveLocalRecords(newTotal);
       setShowImportModal(false);
       setImportData([]);
       alert(`Successfully imported ${createdRecords.length} candidates!`);
@@ -295,17 +303,29 @@ export default function OnboardingPage() {
     try {
       await veenaApi.deleteOnboarding(id);
     } catch {}
-    setRecords(records.filter((r) => r.id !== id));
+    const newTotal = records.filter((r) => r.id !== id);
+    setRecords(newTotal);
+    saveLocalRecords(newTotal);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-      const updated = await veenaApi.updateOnboarding(editingId, form);
-      setRecords(records.map((r) => r.id === editingId ? updated : r));
+      let updated: OnboardingRecord = { id: editingId, ...form };
+      try {
+        updated = await veenaApi.updateOnboarding(editingId, form);
+      } catch {}
+      const newTotal = records.map((r) => r.id === editingId ? { ...r, ...updated, ...form } : r);
+      setRecords(newTotal);
+      saveLocalRecords(newTotal);
     } else {
-      const created = await veenaApi.createOnboarding(form);
-      setRecords([created, ...records]);
+      let created: OnboardingRecord = { id: `onb-${Date.now()}`, ...form };
+      try {
+        created = await veenaApi.createOnboarding(form);
+      } catch {}
+      const newTotal = [created, ...records];
+      setRecords(newTotal);
+      saveLocalRecords(newTotal);
     }
     resetForm();
   };
@@ -316,10 +336,10 @@ export default function OnboardingPage() {
         <div>
           <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
             <UserPlus className="w-5 h-5 text-orange-500" />
-            <span>Recruitment & Onboarding Tracker</span>
+            <span>Recruitment Tracker</span>
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Track candidates through the hiring pipeline from sourcing to onboarding
+            Track candidates through the recruitment pipeline with Excel import and stage tracking
           </p>
         </div>
 
@@ -544,8 +564,8 @@ export default function OnboardingPage() {
               </tr>
             </thead>
             <tbody>
-              {paginatedRecords.map((r) => (
-                <tr key={r.id} className="border-b border-slate-100 hover:bg-orange-50/30">
+              {paginatedRecords.map((r, idx) => (
+                <tr key={r.id || idx} className="border-b border-slate-100 hover:bg-orange-50/30">
                   <td className="px-4 py-3 font-semibold text-slate-800">{r.candidateName}</td>
                   <td className="px-4 py-3 text-slate-700">{r.phoneNumber}</td>
                   <td className="px-4 py-3 text-slate-700">{r.email}</td>
