@@ -203,6 +203,9 @@ router.get('/daily', async (req: AuthRequest, res: Response, next) => {
               createdAt: nr.createdAt,
               updatedAt: nr.updatedAt,
             } as any);
+          }
+        }
+
         // Also check disk store for Nitisha daily reports
         const diskNitisha = getDiskStore('nitisha_daily_reports.json');
         for (const nr of diskNitisha) {
@@ -242,6 +245,98 @@ router.get('/daily', async (req: AuthRequest, res: Response, next) => {
               createdByEmail: nr.createdByEmail || 'nitisha@adyapan.com',
               createdAt: nr.createdAt,
               updatedAt: nr.updatedAt,
+            } as any);
+          }
+        }
+      }
+
+      // Aravind Daily Reports
+      if (isManagerOrAdmin || userEmail === 'aravind@adyapan.com') {
+        const aravindDbReports = await prisma.aravindDailyReport.findMany({
+          orderBy: { createdAt: 'desc' },
+        }).catch(() => []);
+
+        for (const rawAr of aravindDbReports) {
+          const ar = rawAr as any;
+          const dateStr = ar.reportDate || ar.date || (ar.createdAt ? ar.createdAt.toISOString().split('T')[0] : '');
+          if (req.query.date && dateStr !== String(req.query.date)) continue;
+
+          const key = `aravind@adyapan.com_${dateStr}_${(ar.keyActions || ar.keyPerformanceIssues || ar.keyUpdates || '').slice(0, 20)}`;
+          if (!existingKeys.has(key)) {
+            existingKeys.add(key);
+            combinedReports.push({
+              id: ar.id,
+              employeeName: 'Aravind',
+              userEmail: ar.createdByEmail || 'aravind@adyapan.com',
+              date: dateStr,
+              role: 'Exit & Resignation Specialist',
+              candidateSource: null,
+              screeningCompleted: null,
+              interviewTakenBy: null,
+              selectionStatus: null,
+              offerLetterSent: null,
+              offerLetterAccepted: null,
+              joiningConfirmation: null,
+              joinedOnboarded: null,
+              pendingFollowups: null,
+              keyUpdates: ar.keyActions || `Resignations: ${ar.resignationReceived || ar.activeResignations || 0}, Retained: ${ar.employeeRetained || ar.retentionSuccess || 0}, F&F: ${ar.fnfCleared || 0}`,
+              issue: ar.keyPerformanceIssues || ar.blockers || '-',
+              comment: ar.comment || `FnF Pending: ${ar.fnfPending || 0}`,
+              numScreened: 0,
+              numInterviews: 0,
+              numOffersSent: 0,
+              numJoined: 0,
+              numDropouts: 0,
+              status: 'APPROVED',
+              sendStatus: 'SENT',
+              sentToEmail: 'nandini@adyapan.com',
+              reviewedByEmail: null,
+              createdByEmail: ar.createdByEmail || 'aravind@adyapan.com',
+              createdAt: ar.createdAt,
+              updatedAt: ar.updatedAt,
+            } as any);
+          }
+        }
+
+        // Check disk store for Aravind daily reports
+        const diskAravind = getDiskStore('aravind_daily_reports.json');
+        for (const ar of diskAravind) {
+          const dateStr = ar.date || (ar.createdAt ? ar.createdAt.split('T')[0] : '');
+          if (req.query.date && dateStr !== String(req.query.date)) continue;
+
+          const key = `aravind@adyapan.com_${dateStr}_${(ar.keyPerformanceIssues || ar.keyUpdates || '').slice(0, 20)}`;
+          if (!existingKeys.has(key)) {
+            existingKeys.add(key);
+            combinedReports.push({
+              id: ar.id,
+              employeeName: 'Aravind',
+              userEmail: ar.createdByEmail || 'aravind@adyapan.com',
+              date: dateStr,
+              role: 'Exit & Resignation Specialist',
+              candidateSource: null,
+              screeningCompleted: null,
+              interviewTakenBy: null,
+              selectionStatus: null,
+              offerLetterSent: null,
+              offerLetterAccepted: null,
+              joiningConfirmation: null,
+              joinedOnboarded: null,
+              pendingFollowups: null,
+              keyUpdates: `Resignations: ${ar.activeResignations || 0}, Retained: ${ar.retentionSuccess || 0}, Exits: ${ar.exitInterviews || 0}, F&F: ${ar.fnfCleared || 0}`,
+              issue: ar.keyPerformanceIssues || ar.blockers || '-',
+              comment: ar.comment || `FnF Pending: ${ar.fnfPending || 0}`,
+              numScreened: 0,
+              numInterviews: 0,
+              numOffersSent: 0,
+              numJoined: 0,
+              numDropouts: 0,
+              status: 'APPROVED',
+              sendStatus: 'SENT',
+              sentToEmail: 'nandini@adyapan.com',
+              reviewedByEmail: null,
+              createdByEmail: ar.createdByEmail || 'aravind@adyapan.com',
+              createdAt: ar.createdAt,
+              updatedAt: ar.updatedAt,
             } as any);
           }
         }

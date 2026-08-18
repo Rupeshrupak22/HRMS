@@ -24,10 +24,7 @@ const loginLimiter = rateLimit({
   message: { success: false, message: 'Too many login attempts. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
-  // Trust proxy headers on Render
-  keyGenerator: (req) => {
-    return (req.headers['x-forwarded-for'] as string)?.split(',')[0]?.trim() || req.ip || 'unknown';
-  },
+  validate: false,
 });
 
 // POST /api/auth/login

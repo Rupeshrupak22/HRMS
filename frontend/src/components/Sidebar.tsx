@@ -24,6 +24,7 @@ import {
   MessageSquareWarning,
   ClipboardList,
   UserX,
+  UserMinus,
   AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
@@ -52,6 +53,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Retention', href: '/retention', icon: ShieldAlert },
     { label: 'Resignation', href: '/resignation', icon: UserX },
+    { label: 'Abscond', href: '/abscond', icon: UserMinus },
     { label: 'Exit', href: '/exit', icon: LogOut },
     { label: 'F&F', href: '/fnf', icon: CreditCard },
     { label: 'Employee Complaints', href: '/employee-complaints', icon: MessageSquareWarning },
