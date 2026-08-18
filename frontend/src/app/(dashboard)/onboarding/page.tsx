@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useRef } from 'react';
-import { UserPlus, Plus, X, Pencil, Trash2, Upload, Download, FileSpreadsheet } from 'lucide-react';
+import { UserPlus, Plus, X, Pencil, Trash2, Upload, Download, FileSpreadsheet, Search, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { veenaApi } from '@/lib/veena-api';
 import { Pagination } from '@/components/Pagination';
@@ -116,13 +116,39 @@ export default function OnboardingPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importData, setImportData] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [stageFilter, setStageFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
 
+  const filteredRecords = React.useMemo(() => {
+    return records.filter((r) => {
+      const q = searchTerm.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        (r.candidateName || '').toLowerCase().includes(q) ||
+        (r.email || '').toLowerCase().includes(q) ||
+        (r.phoneNumber || '').includes(q) ||
+        (r.college || '').toLowerCase().includes(q) ||
+        (r.location || '').toLowerCase().includes(q) ||
+        (r.roleApplied || '').toLowerCase().includes(q) ||
+        (r.recruiter || '').toLowerCase().includes(q);
+
+      const matchesStage = !stageFilter || r.currentStage === stageFilter;
+      const matchesStatus = !statusFilter || r.status === statusFilter;
+      return matchesSearch && matchesStage && matchesStatus;
+    });
+  }, [records, searchTerm, stageFilter, statusFilter]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, stageFilter, statusFilter]);
+
   const paginatedRecords = React.useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
-    return records.slice(start, start + PAGE_SIZE);
-  }, [records, page]);
+    return filteredRecords.slice(start, start + PAGE_SIZE);
+  }, [filteredRecords, page]);
 
   const [form, setForm] = useState<Omit<OnboardingRecord, 'id'>>({
     candidateName: '',
@@ -326,6 +352,62 @@ export default function OnboardingPage() {
         </div>
       </div>
 
+      {/* Search & Filter Bar */}
+      <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-3">
+        <div className="flex items-center gap-2 flex-1 max-w-md">
+          <div className="relative w-full">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search candidate name, phone, college, role..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="w-full bg-slate-50 text-xs text-slate-900 placeholder-slate-400 pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-500 font-medium"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <select
+            value={stageFilter}
+            onChange={(e) => setStageFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:border-orange-500 cursor-pointer"
+          >
+            <option value="">All Stages</option>
+            <option value="Screening">Screening</option>
+            <option value="Interview">Interview</option>
+            <option value="Selection">Selection</option>
+            <option value="Offer">Offer</option>
+            <option value="Joining">Joining</option>
+            <option value="Onboarding">Onboarding</option>
+            <option value="Joined">Joined</option>
+            <option value="Dropout">Dropout</option>
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value)}
+            className="px-3 py-2 rounded-xl bg-slate-50 border border-slate-200 text-xs font-semibold text-slate-700 focus:outline-none focus:border-orange-500 cursor-pointer"
+          >
+            <option value="">All Status</option>
+            <option value="Active">Active</option>
+            <option value="Selected">Selected</option>
+            <option value="Rejected">Rejected</option>
+            <option value="Joined">Joined</option>
+            <option value="Dropped">Dropped</option>
+          </select>
+
+          {(searchTerm || stageFilter || statusFilter) && (
+            <button
+              onClick={() => { setSearchTerm(''); setStageFilter(''); setStatusFilter(''); }}
+              className="px-3 py-2 text-xs text-orange-600 hover:text-orange-700 font-bold underline cursor-pointer"
+            >
+              Reset
+            </button>
+          )}
+        </div>
+      </div>
+
       {showForm && (
         <form onSubmit={handleSubmit} className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-4">
           <h2 className="text-sm font-bold text-slate-800">{editingId ? 'Edit Candidate' : 'New Candidate'}</h2>
@@ -507,7 +589,7 @@ export default function OnboardingPage() {
 
         <Pagination
           currentPage={page}
-          totalItems={records.length}
+          totalItems={filteredRecords.length}
           pageSize={PAGE_SIZE}
           onPageChange={setPage}
         />

@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { veenaApi } from '@/lib/veena-api';
+import { Pagination } from '@/components/Pagination';
 
 interface CandidateRecord {
   id: string;
@@ -232,6 +233,18 @@ export function VeenaDashboard() {
     const matchesStatus = !statusFilter || c.status === statusFilter;
     return matchesSearch && matchesCard && matchesStage && matchesStatus;
   });
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, stageFilter, statusFilter, activeCardFilter]);
+
+  const paginatedCandidates = React.useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredCandidates.slice(start, start + PAGE_SIZE);
+  }, [filteredCandidates, page]);
 
   const handleDownloadTemplate = () => {
     const templateData = [
@@ -657,7 +670,7 @@ export function VeenaDashboard() {
                   </td>
                 </tr>
               ) : (
-                filteredCandidates.map((c) => (
+                paginatedCandidates.map((c) => (
                   <tr key={c.id} className="hover:bg-orange-50/20 transition-colors">
                     <td className="py-3 px-4 font-extrabold text-slate-900 whitespace-nowrap">{c.candidateName}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.phoneNumber || '-'}</td>
@@ -717,6 +730,13 @@ export function VeenaDashboard() {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={page}
+          totalItems={filteredCandidates.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Manual Add / Edit Candidate Popup Modal */}
