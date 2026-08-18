@@ -14,7 +14,7 @@ export default function AravindReportPage() {
   const [complaints, setComplaints] = useState<any[]>([]);
   const [interviews, setInterviews] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filterDate, setFilterDate] = useState('');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
 
   // Pagination states

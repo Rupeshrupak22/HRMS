@@ -10,7 +10,7 @@ import { Pagination } from '@/components/Pagination';
 export default function CharithaReportPage() {
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [payrollRecords, setPayrollRecords] = useState<any[]>([]);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filterDate, setFilterDate] = useState('');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
 
   // Pagination states

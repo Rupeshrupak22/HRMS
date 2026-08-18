@@ -10,7 +10,7 @@ export default function VeenaReportPage() {
   const [onboarding, setOnboarding] = useState<any[]>([]);
   const [dropouts, setDropouts] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filterDate, setFilterDate] = useState('');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
 
   // Pagination states
@@ -20,8 +20,43 @@ export default function VeenaReportPage() {
   const PAGE_SIZE = 20;
 
   useEffect(() => {
-    veenaApi.getOnboarding().then(setOnboarding).catch(() => {});
-    veenaApi.getDropouts().then(setDropouts).catch(() => {});
+    // 1. Onboarding Pipeline candidates
+    veenaApi.getOnboarding().then((res) => {
+      const list = Array.isArray(res) ? res : [];
+      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_onboarding_candidates') : null;
+      let localList: any[] = [];
+      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
+
+      const existingNames = new Set(list.map((c: any) => (c.candidateName || '').toLowerCase().trim()));
+      const uniqueLocal = localList.filter((c: any) => !existingNames.has((c.candidateName || '').toLowerCase().trim()));
+
+      setOnboarding([...list, ...uniqueLocal]);
+    }).catch(() => {
+      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_onboarding_candidates') : null;
+      let localList: any[] = [];
+      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
+      setOnboarding(localList);
+    });
+
+    // 2. Dropout candidates
+    veenaApi.getDropouts().then((res) => {
+      const list = Array.isArray(res) ? res : [];
+      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_dropout_candidates') : null;
+      let localList: any[] = [];
+      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
+
+      const existingNames = new Set(list.map((c: any) => (c.candidateName || '').toLowerCase().trim()));
+      const uniqueLocal = localList.filter((c: any) => !existingNames.has((c.candidateName || '').toLowerCase().trim()));
+
+      setDropouts([...list, ...uniqueLocal]);
+    }).catch(() => {
+      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_dropout_candidates') : null;
+      let localList: any[] = [];
+      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
+      setDropouts(localList);
+    });
+
+    // 3. Daily reports
     apiRequest('/reports/daily').then((res) => {
       const arr = Array.isArray(res) ? res : [];
       setDailyReports(arr.filter((r: any) => 

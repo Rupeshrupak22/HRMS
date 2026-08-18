@@ -11,7 +11,7 @@ export default function NitishaReportPage() {
   const [discipline, setDiscipline] = useState<any[]>([]);
   const [relations, setRelations] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
-  const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
+  const [filterDate, setFilterDate] = useState('');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
 
   // Pagination states
