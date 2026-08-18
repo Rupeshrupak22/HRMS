@@ -219,7 +219,6 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EM
     if (startDate) where.date = { ...where.date, gte: new Date(startDate) };
     if (endDate) where.date = { ...where.date, lte: new Date(endDate) };
     if (status) where.status = status;
-    where.isDeleted = false;
 
     const records = await prisma.attendanceRecord.findMany({
       where,
@@ -238,21 +237,34 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EM
       orderBy: { date: 'desc' },
     });
 
-    const formatted = records.map((r) => ({
-      id: r.id,
-      empId: r.employee?.employeeCode || r.employeeId || 'EMP-000',
-      empName: r.employee ? `${r.employee.firstName || ''} ${r.employee.lastName || ''}`.trim() : 'Employee',
-      role: r.employee?.user?.role || 'EMPLOYEE',
-      department: r.employee?.department?.name || '-',
-      designation: r.employee?.designation?.title || '-',
-      date: r.date.toISOString().split('T')[0],
-      checkInTime: r.checkInTime ? r.checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
-      checkOutTime: r.checkOutTime ? r.checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
-      workHours: r.workHours,
-      status: r.status,
-      lateMinutes: r.lateMinutes,
-      source: r.source,
-    }));
+    const formatted = records.map((r) => {
+      let metadata: any = {};
+      if (r.notes) {
+        try {
+          if (r.notes.startsWith('{') && r.notes.endsWith('}')) {
+            metadata = JSON.parse(r.notes);
+          }
+        } catch {}
+      }
+
+      return {
+        id: r.id,
+        empId: r.employee?.employeeCode || r.employeeId || 'EMP-000',
+        empName: r.employee ? `${r.employee.firstName || ''} ${r.employee.lastName || ''}`.trim() : 'Employee',
+        role: metadata.role || r.employee?.user?.role || 'EMPLOYEE',
+        department: metadata.department || r.employee?.department?.name || '-',
+        designation: metadata.designation || r.employee?.designation?.title || '-',
+        date: r.date.toISOString().split('T')[0],
+        checkInTime: r.checkInTime ? r.checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
+        checkOutTime: r.checkOutTime ? r.checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
+        workHours: r.workHours,
+        status: r.status,
+        lateMinutes: r.lateMinutes,
+        source: r.source,
+        notes: r.notes,
+        summary: metadata.summary || (metadata.sickLeave !== undefined ? metadata : undefined),
+      };
+    });
 
     res.json({ success: true, data: formatted });
   } catch (err) {
@@ -276,6 +288,9 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE',
       try {
         const empCode = String(record.employeeCode || '').trim();
         const empName = String(record.employeeName || '').trim();
+        const department = record.department ? String(record.department).trim() : '';
+        const designation = record.designation ? String(record.designation).trim() : '';
+        const role = record.role ? String(record.role).trim() : '';
 
         // 1. Find employee by code (exact, trimmed, or uppercase)
         let employee = await prisma.employee.findFirst({
@@ -301,7 +316,7 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE',
           });
         }
 
-        // 3. Fallback: create placeholder employee if missing
+        // 3. Auto provision employee with exact employeeCode if missing
         if (!employee && empCode) {
           const email = `${empCode.toLowerCase().replace(/[^a-z0-9]/g, '') || 'emp'}@adyapan.com`;
           let user = await prisma.user.findUnique({ where: { email } });
@@ -310,7 +325,7 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE',
               data: {
                 email,
                 passwordHash: '$2b$10$dummyhashplaceholderforattendancerecordcreation',
-                role: 'EMPLOYEE',
+                role: role || 'EMPLOYEE',
               },
             });
           }
@@ -328,6 +343,47 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE',
         if (!employee) {
           skipped++;
           continue;
+        }
+
+        // 4. Update employee department / designation if passed in Excel
+        const updateData: any = {};
+        if (department && department !== '-') {
+          let dept = await prisma.department.findFirst({ where: { name: { equals: department, mode: 'insensitive' } } });
+          if (!dept) {
+            dept = await prisma.department.create({
+              data: {
+                name: department,
+                code: (department.slice(0, 4).toUpperCase() || 'DEPT') + Math.floor(Math.random() * 100),
+              },
+            });
+          }
+          updateData.departmentId = dept.id;
+        }
+
+        if (designation && designation !== '-') {
+          let desig = await prisma.designation.findFirst({ where: { title: { equals: designation, mode: 'insensitive' } } });
+          if (!desig) {
+            desig = await prisma.designation.create({
+              data: {
+                title: designation,
+                code: (designation.slice(0, 4).toUpperCase() || 'DESIG') + Math.floor(Math.random() * 100),
+              },
+            });
+          }
+          updateData.designationId = desig.id;
+        }
+
+        if (empName && (!employee.firstName || employee.firstName === 'Employee')) {
+          const names = empName.split(' ');
+          updateData.firstName = names[0] || employee.firstName;
+          updateData.lastName = names.slice(1).join(' ') || employee.lastName;
+        }
+
+        if (Object.keys(updateData).length > 0) {
+          await prisma.employee.update({
+            where: { id: employee.id },
+            data: updateData,
+          });
         }
 
         let dateObj: Date;
@@ -358,6 +414,18 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE',
           ? Math.round(((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)) * 100) / 100
           : 0;
 
+        // Build metadata notes
+        let notesToStore: string | null = record.remarks || null;
+        if (record.summary || department || designation || role) {
+          notesToStore = JSON.stringify({
+            ...(record.summary || {}),
+            department: department || undefined,
+            designation: designation || undefined,
+            role: role || undefined,
+            remarks: record.remarks || undefined,
+          });
+        }
+
         await prisma.attendanceRecord.upsert({
           where: { employeeId_date: { employeeId: employee.id, date: dateObj } },
           update: {
@@ -365,7 +433,7 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE',
             checkInTime,
             checkOutTime,
             workHours,
-            notes: record.remarks || null,
+            notes: notesToStore,
             source: 'IMPORT',
           },
           create: {
@@ -375,7 +443,7 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE',
             checkInTime,
             checkOutTime,
             workHours,
-            notes: record.remarks || null,
+            notes: notesToStore,
             source: 'IMPORT',
           },
         });

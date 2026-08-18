@@ -1,11 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
-import { Download, Upload, Search, Edit3, Trash2, X, AlertTriangle, Plus, Loader2 } from 'lucide-react';
+import { Download, Upload, Search, Edit3, Trash2, X, AlertTriangle, Plus, Loader2, ArrowUpDown, ArrowUp, ArrowDown, Filter } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import UploadProgressModal from '@/components/UploadProgressModal';
+import { Pagination } from '@/components/Pagination';
 
 export default function AttendancePage() {
   const { user } = useAuth();
@@ -16,6 +17,10 @@ export default function AttendancePage() {
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDepartment, setSelectedDepartment] = useState('ALL');
+  const [sortBy, setSortBy] = useState<'EMP_ID_ASC' | 'EMP_ID_DESC' | 'NAME_ASC' | 'NAME_DESC' | 'DEPT_ASC'>('EMP_ID_ASC');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [showImportModal, setShowImportModal] = useState(false);
@@ -34,7 +39,7 @@ export default function AttendancePage() {
   const [showUploadProgress, setShowUploadProgress] = useState(false);
 
   const isPavitra = user?.specialization === 'ATTENDANCE_LEAVE' || user?.email === 'pavitra@adyapan.com';
-  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN' || user?.role === 'HR_EXECUTIVE' || isPavitra;
+  const isAdmin = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN' || user?.role === 'HR_EXECUTIVE' || user?.role === 'DEPARTMENT_HEAD' || user?.role === 'TEAM_LEADER' || (user?.role as any) === 'ADMIN' || (user?.role as any) === 'SPECIALIST' || isPavitra;
 
   const fetchAttendanceData = async () => {
     setLoading(true);
@@ -72,59 +77,172 @@ export default function AttendancePage() {
         empMap.set(key, {
           empId: key,
           empName: log.empName,
-          role: log.role || '-',
-          department: log.department || '-',
-          designation: log.designation || '-',
+          role: log.role && log.role !== '-' ? log.role : '-',
+          department: log.department && log.department !== '-' ? log.department : '-',
+          designation: log.designation && log.designation !== '-' ? log.designation : '-',
           days: {} as Record<number, string>,
-          present: 0,
-          absent: 0,
-          earlyLogout: 0,
-          lateLogin: 0,
-          sickLeave: 0,
-          emergencyLeave: 0,
-          paidLeave: 0,
-          longLeave: 0,
-          mailReceived: 0,
-          mailNotReceived: 0,
-          casualLeave: 0,
-          approvedBy: '-',
-          notApproved: 0,
-          nationalHoliday: 0,
-          festiveHoliday: 0,
-          holiday: 0,
-          training: 0,
+          customSummary: {} as Record<string, any>,
+          presentCount: 0,
+          absentCount: 0,
+          earlyLogoutCount: 0,
+          lateLoginCount: 0,
+          sickLeaveCount: 0,
+          emergencyLeaveCount: 0,
+          paidLeaveCount: 0,
+          longLeaveCount: 0,
+          mailReceivedCount: 0,
+          mailNotReceivedCount: 0,
+          casualLeaveCount: 0,
+          approvedByVal: '-',
+          notApprovedCount: 0,
+          nationalHolidayCount: 0,
+          festiveHolidayCount: 0,
+          holidayCount: 0,
+          trainingCount: 0,
           wo: 0, ot: 0, wfh: 0, hd: 0
         });
       }
       const emp = empMap.get(key)!;
-      const day = parseInt(log.date.split('-')[2], 10);
-      emp.days[day] = log.status;
+      
+      let meta: any = log.summary || {};
+      if (log.notes && typeof log.notes === 'string' && log.notes.trim().startsWith('{')) {
+        try {
+          meta = { ...meta, ...JSON.parse(log.notes) };
+        } catch {}
+      }
 
-      if (log.status === 'PRESENT' || log.status === 'P') emp.present++;
-      else if (log.status === 'ABSENT' || log.status === 'A') emp.absent++;
-      else if (log.status === 'CASUAL_LEAVE' || log.status === 'CL') emp.casualLeave++;
-      else if (log.status === 'SICK_LEAVE' || log.status === 'SL') emp.sickLeave++;
-      else if (log.status === 'HOLIDAY' || log.status === 'H') emp.holiday++;
-      else if (log.status === 'WEEKLY_OFF' || log.status === 'WO') emp.wo++;
-      else if (log.status === 'OVERTIME' || log.status === 'OT') emp.ot++;
-      else if (log.status === 'WORK_FROM_HOME' || log.status === 'WFH') emp.wfh++;
-      else if (log.status === 'HALF_DAY' || log.status === 'HD') emp.hd++;
-      else if (log.status === 'EARLY_LOGOUT') emp.earlyLogout++;
-      else if (log.status === 'LATE_LOGIN') emp.lateLogin++;
-      else if (log.status === 'EMERGENCY_LEAVE') emp.emergencyLeave++;
-      else if (log.status === 'PAID_LEAVE') emp.paidLeave++;
-      else if (log.status === 'LONG_LEAVE') emp.longLeave++;
-      else if (log.status === 'NATIONAL_HOLIDAY') emp.nationalHoliday++;
-      else if (log.status === 'FESTIVE_HOLIDAY') emp.festiveHoliday++;
-      else if (log.status === 'TRAINING') emp.training++;
+      if (log.department && log.department !== '-' && (!emp.department || emp.department === '-')) {
+        emp.department = log.department;
+      }
+      if (log.designation && log.designation !== '-' && (!emp.designation || emp.designation === '-')) {
+        emp.designation = log.designation;
+      }
+      if (log.role && log.role !== '-' && (!emp.role || emp.role === '-')) {
+        emp.role = log.role;
+      }
+
+      if (meta.department && meta.department !== '-') emp.department = meta.department;
+      if (meta.designation && meta.designation !== '-') emp.designation = meta.designation;
+      if (meta.role && meta.role !== '-') emp.role = meta.role;
+
+      if (meta && typeof meta === 'object') {
+        emp.customSummary = { ...emp.customSummary, ...meta };
+      }
+
+      if (log.date) {
+        const day = parseInt(log.date.split('-')[2], 10);
+        if (!isNaN(day)) {
+          emp.days[day] = log.status;
+          if (log.status === 'PRESENT') emp.presentCount++;
+          else if (log.status === 'ABSENT') emp.absentCount++;
+          else if (log.status === 'EARLY_LOGOUT') emp.earlyLogoutCount++;
+          else if (log.status === 'LATE_LOGIN') emp.lateLoginCount++;
+          else if (log.status === 'SICK_LEAVE') emp.sickLeaveCount++;
+          else if (log.status === 'EMERGENCY_LEAVE') emp.emergencyLeaveCount++;
+          else if (log.status === 'PAID_LEAVE') emp.paidLeaveCount++;
+          else if (log.status === 'LONG_LEAVE') emp.longLeaveCount++;
+          else if (log.status === 'CASUAL_LEAVE') emp.casualLeaveCount++;
+          else if (log.status === 'NATIONAL_HOLIDAY') emp.nationalHolidayCount++;
+          else if (log.status === 'FESTIVE_HOLIDAY') emp.festiveHolidayCount++;
+          else if (log.status === 'HOLIDAY') emp.holidayCount++;
+          else if (log.status === 'TRAINING') emp.trainingCount++;
+          else if (log.status === 'WEEKLY_OFF') emp.wo++;
+          else if (log.status === 'OVERTIME') emp.ot++;
+          else if (log.status === 'WORK_FROM_HOME') emp.wfh++;
+          else if (log.status === 'HALF_DAY') emp.hd++;
+        }
+      }
     }
     return Array.from(empMap.values());
   };
 
-  const allEmployees = getMonthlyStats();
-  const filteredEmployees = allEmployees.filter(emp => {
-    return emp.empName.toLowerCase().includes(searchTerm.toLowerCase()) || emp.empId.toLowerCase().includes(searchTerm.toLowerCase());
-  });
+  const allEmployees = useMemo(() => {
+    return getMonthlyStats().map(emp => {
+      const cs = emp.customSummary || {};
+      const resolveSummaryVal = (customVal: any, autoCount: number) => {
+        if (customVal !== undefined && customVal !== null && String(customVal).trim() !== '') {
+          return customVal;
+        }
+        return autoCount;
+      };
+
+      return {
+        ...emp,
+        present: resolveSummaryVal(cs.present, emp.presentCount),
+        absent: resolveSummaryVal(cs.absent, emp.absentCount),
+        earlyLogout: resolveSummaryVal(cs.earlyLogout, emp.earlyLogoutCount),
+        lateLogin: resolveSummaryVal(cs.lateLogin, emp.lateLoginCount),
+        sickLeave: resolveSummaryVal(cs.sickLeave, emp.sickLeaveCount),
+        emergencyLeave: resolveSummaryVal(cs.emergencyLeave, emp.emergencyLeaveCount),
+        paidLeave: resolveSummaryVal(cs.paidLeave, emp.paidLeaveCount),
+        longLeave: resolveSummaryVal(cs.longLeave, emp.longLeaveCount),
+        mailReceived: resolveSummaryVal(cs.mailReceived, emp.mailReceivedCount),
+        mailNotReceived: resolveSummaryVal(cs.mailNotReceived, emp.mailNotReceivedCount),
+        casualLeave: resolveSummaryVal(cs.casualLeave, emp.casualLeaveCount),
+        approvedBy: cs.approvedBy !== undefined && String(cs.approvedBy).trim() !== '' ? cs.approvedBy : emp.approvedByVal,
+        notApproved: resolveSummaryVal(cs.notApproved, emp.notApprovedCount),
+        nationalHoliday: resolveSummaryVal(cs.nationalHoliday, emp.nationalHolidayCount),
+        festiveHoliday: resolveSummaryVal(cs.festiveHoliday, emp.festiveHolidayCount),
+        holiday: resolveSummaryVal(cs.holiday, emp.holidayCount),
+        training: resolveSummaryVal(cs.training, emp.trainingCount),
+      };
+    });
+  }, [allLogs, daysInMonth]);
+
+  const departments = useMemo(() => {
+    const set = new Set<string>();
+    allEmployees.forEach(emp => {
+      if (emp.department && emp.department !== '-' && emp.department.trim() !== '') {
+        set.add(emp.department);
+      }
+    });
+    return Array.from(set).sort();
+  }, [allEmployees]);
+
+  const filteredEmployees = useMemo(() => {
+    return allEmployees
+      .filter(emp => {
+        const q = searchTerm.toLowerCase().trim();
+        const matchesSearch =
+          !q ||
+          emp.empName.toLowerCase().includes(q) ||
+          emp.empId.toLowerCase().includes(q) ||
+          (emp.role || '').toLowerCase().includes(q) ||
+          (emp.department || '').toLowerCase().includes(q) ||
+          (emp.designation || '').toLowerCase().includes(q);
+
+        const matchesDept =
+          selectedDepartment === 'ALL' || emp.department === selectedDepartment;
+
+        return matchesSearch && matchesDept;
+      })
+      .sort((a, b) => {
+        if (sortBy === 'NAME_ASC') {
+          return (a.empName || '').localeCompare(b.empName || '', undefined, { sensitivity: 'base' });
+        }
+        if (sortBy === 'NAME_DESC') {
+          return (b.empName || '').localeCompare(a.empName || '', undefined, { sensitivity: 'base' });
+        }
+        if (sortBy === 'EMP_ID_DESC') {
+          return (b.empId || '').localeCompare(a.empId || '', undefined, { numeric: true, sensitivity: 'base' });
+        }
+        if (sortBy === 'DEPT_ASC') {
+          const deptComp = (a.department || '').localeCompare(b.department || '');
+          if (deptComp !== 0) return deptComp;
+          return (a.empId || '').localeCompare(b.empId || '', undefined, { numeric: true, sensitivity: 'base' });
+        }
+        return (a.empId || '').localeCompare(b.empId || '', undefined, { numeric: true, sensitivity: 'base' });
+      });
+  }, [allEmployees, searchTerm, selectedDepartment, sortBy]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [selectedMonth, searchTerm, selectedDepartment, sortBy]);
+
+  const paginatedEmployees = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredEmployees.slice(start, start + PAGE_SIZE);
+  }, [filteredEmployees, page]);
 
   const downloadTemplate = () => {
     const headers = ['Sl#', 'Employee Name', 'Employee ID', 'Role', 'Department', 'Designation'];
@@ -155,13 +273,26 @@ export default function AttendancePage() {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(sheet) as any[];
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as any[];
 
         const codeMap: Record<string, string> = {
-          'P': 'PRESENT', 'A': 'ABSENT', 'CL': 'CASUAL_LEAVE', 'SL': 'SICK_LEAVE', 
-          'H': 'HOLIDAY', 'WO': 'WEEKLY_OFF', 'OT': 'OVERTIME', 'WFH': 'WORK_FROM_HOME', 'HD': 'HALF_DAY',
-          'EL': 'EARLY_LOGOUT', 'LL': 'LATE_LOGIN', 'E_L': 'EMERGENCY_LEAVE', 'PL': 'PAID_LEAVE',
-          'LLV': 'LONG_LEAVE', 'NH': 'NATIONAL_HOLIDAY', 'FH': 'FESTIVE_HOLIDAY', 'T': 'TRAINING'
+          'P': 'PRESENT', 'PRESENT': 'PRESENT',
+          'A': 'ABSENT', 'ABSENT': 'ABSENT',
+          'CL': 'CASUAL_LEAVE', 'CASUAL LEAVE': 'CASUAL_LEAVE', 'CASUAL_LEAVE': 'CASUAL_LEAVE',
+          'SL': 'SICK_LEAVE', 'SICK LEAVE': 'SICK_LEAVE', 'SICK_LEAVE': 'SICK_LEAVE',
+          'H': 'HOLIDAY', 'HOLIDAY': 'HOLIDAY',
+          'WO': 'WEEKLY_OFF', 'WEEKLY OFF': 'WEEKLY_OFF', 'WEEKLY_OFF': 'WEEKLY_OFF', 'OFF': 'WEEKLY_OFF',
+          'OT': 'OVERTIME', 'OVERTIME': 'OVERTIME',
+          'WFH': 'WORK_FROM_HOME', 'WORK FROM HOME': 'WORK_FROM_HOME', 'WORK_FROM_HOME': 'WORK_FROM_HOME',
+          'HD': 'HALF_DAY', 'HALF DAY': 'HALF_DAY', 'HALF_DAY': 'HALF_DAY', 'HALF-DAY': 'HALF_DAY',
+          'EL': 'EARLY_LOGOUT', 'EARLY LOGOUT': 'EARLY_LOGOUT', 'EARLY_LOGOUT': 'EARLY_LOGOUT',
+          'LL': 'LATE_LOGIN', 'LATE LOGIN': 'LATE_LOGIN', 'LATE_LOGIN': 'LATE_LOGIN',
+          'E_L': 'EMERGENCY_LEAVE', 'EMERGENCY LEAVE': 'EMERGENCY_LEAVE', 'EMERGENCY_LEAVE': 'EMERGENCY_LEAVE',
+          'PL': 'PAID_LEAVE', 'PAID LEAVE': 'PAID_LEAVE', 'PAID_LEAVE': 'PAID_LEAVE',
+          'LLV': 'LONG_LEAVE', 'LONG LEAVE': 'LONG_LEAVE', 'LONG_LEAVE': 'LONG_LEAVE',
+          'NH': 'NATIONAL_HOLIDAY', 'NATIONAL HOLIDAY': 'NATIONAL_HOLIDAY', 'NATIONAL_HOLIDAY': 'NATIONAL_HOLIDAY',
+          'FH': 'FESTIVE_HOLIDAY', 'FESTIVE HOLIDAY': 'FESTIVE_HOLIDAY', 'FESTIVE_HOLIDAY': 'FESTIVE_HOLIDAY',
+          'T': 'TRAINING', 'TRAINING': 'TRAINING'
         };
 
         const formattedRecords: any[] = [];
@@ -169,22 +300,66 @@ export default function AttendancePage() {
         for (const row of jsonData) {
           const keys = Object.keys(row);
           
-          // Find employee ID flexibly
-          const empIdKey = keys.find(k => /^(employee\s*id|emp\s*id|id|employee\s*code|emp\s*code)$/i.test(k.trim()));
-          const empId = empIdKey ? row[empIdKey] : (row['Employee ID'] || row['ID'] || row['Emp ID']);
+          const empIdKey = keys.find(k => /^(employee\s*id|emp\s*id|id|employee\s*code|emp\s*code|code|emp_id|employee_id)$/i.test(k.trim().replace(/\u00a0/g, ' ')));
+          const rawEmpId = empIdKey ? row[empIdKey] : (row['Employee ID'] || row['ID'] || row['Emp ID'] || row['Employee Code'] || row['Emp Code'] || row['empId']);
 
-          // Find employee Name flexibly
-          const empNameKey = keys.find(k => /^(employee\s*name|emp\s*name|name|staff\s*name)$/i.test(k.trim()));
-          const empName = empNameKey ? row[empNameKey] : (row['Employee Name'] || row['Name'] || row['Emp Name']);
+          const empNameKey = keys.find(k => /^(employee\s*name|emp\s*name|name|staff\s*name|full\s*name|employee|staff)$/i.test(k.trim().replace(/\u00a0/g, ' ')));
+          const rawEmpName = empNameKey ? row[empNameKey] : (row['Employee Name'] || row['Name'] || row['Emp Name']);
 
-          if (empId) {
+          const empId = rawEmpId !== undefined && rawEmpId !== null && String(rawEmpId).trim() !== '' ? String(rawEmpId).trim() : '';
+          const empName = rawEmpName !== undefined && rawEmpName !== null && String(rawEmpName).trim() !== '' ? String(rawEmpName).trim() : '';
+
+          const deptKey = keys.find(k => /^(department|dept|dept\s*name|department\s*name)$/i.test(k.trim().replace(/\u00a0/g, ' ')));
+          const department = deptKey ? String(row[deptKey] ?? '').trim() : (row['Department'] || row['Dept'] || '');
+
+          const desigKey = keys.find(k => /^(designation|desig|designation\s*title|title|position)$/i.test(k.trim().replace(/\u00a0/g, ' ')));
+          const designation = desigKey ? String(row[desigKey] ?? '').trim() : (row['Designation'] || row['Desig'] || '');
+
+          const roleKey = keys.find(k => /^(role|user\s*role)$/i.test(k.trim().replace(/\u00a0/g, ' ')));
+          const role = roleKey ? String(row[roleKey] ?? '').trim() : (row['Role'] || '');
+
+          const findVal = (regex: RegExp) => {
+            const matchedKey = keys.find(k => regex.test(k.trim().replace(/\u00a0/g, ' ')));
+            return matchedKey !== undefined ? row[matchedKey] : undefined;
+          };
+
+          const summary: Record<string, any> = {};
+          const checkAndSet = (prop: string, regex: RegExp) => {
+            const v = findVal(regex);
+            if (v !== undefined && v !== null && String(v).trim() !== '') {
+              summary[prop] = v;
+            }
+          };
+
+          checkAndSet('present', /^(present|p)$/i);
+          checkAndSet('absent', /^(absent|a)$/i);
+          checkAndSet('earlyLogout', /^(early\s*logout|early\s*out|el)$/i);
+          checkAndSet('lateLogin', /^(late\s*login|late\s*in|ll)$/i);
+          checkAndSet('sickLeave', /^(sick\s*leave|sl)$/i);
+          checkAndSet('emergencyLeave', /^(emergency\s*leave|e_l|e\.l|emergency)$/i);
+          checkAndSet('paidLeave', /^(paid\s*leave|pl)$/i);
+          checkAndSet('longLeave', /^(long\s*leave|long\s*leaves|llv)$/i);
+          checkAndSet('mailReceived', /^(mail\s*received|mail\s*rec|email\s*received)$/i);
+          checkAndSet('mailNotReceived', /^(mail\s*not\s*received|mail\s*not\s*rec|email\s*not\s*received)$/i);
+          checkAndSet('casualLeave', /^(casual\s*leave|cl)$/i);
+          checkAndSet('approvedBy', /^(approved\s*by|approved|approver)$/i);
+          checkAndSet('notApproved', /^(not\s*approved|unapproved)$/i);
+          checkAndSet('nationalHoliday', /^(national\s*holiday|nh)$/i);
+          checkAndSet('festiveHoliday', /^(festive\s*holiday|fh)$/i);
+          checkAndSet('holiday', /^(holiday|h)$/i);
+          checkAndSet('training', /^(training|t)$/i);
+
+          const finalEmpCode = empId || (empName ? `EMP-${empName.replace(/\s+/g, '').slice(0, 6).toUpperCase()}` : '');
+          const finalEmpName = empName || (empId ? `Employee (${empId})` : '');
+
+          if (finalEmpCode) {
+            let hasDays = false;
             for (let i = 1; i <= daysInMonth; i++) {
               const dayStr = String(i);
               const paddedDay = String(i).padStart(2, '0');
               
-              // Match column: "1", "01", "1-Aug", "1/8", etc.
               const dayKey = keys.find(k => {
-                const cleanK = k.trim();
+                const cleanK = k.trim().replace(/\u00a0/g, ' ');
                 return cleanK === dayStr || 
                        cleanK === paddedDay || 
                        new RegExp(`^0?${i}[\\s\\-\\/]`, 'i').test(cleanK);
@@ -192,16 +367,36 @@ export default function AttendancePage() {
 
               const rawVal = dayKey ? String(row[dayKey] ?? '').trim().toUpperCase() : '';
               if (rawVal && rawVal !== '-' && rawVal !== 'UNDEFINED' && rawVal !== 'NULL') {
+                hasDays = true;
                 const fullStatus = codeMap[rawVal] || rawVal;
                 const dateStr = `${yearStr}-${monthStr}-${paddedDay}`;
                 
                 formattedRecords.push({
                   employeeCode: String(empId).trim(),
                   employeeName: empName ? String(empName).trim() : `Employee (${empId})`,
+                  department: department || undefined,
+                  designation: designation || undefined,
+                  role: role || undefined,
                   date: dateStr,
-                  status: fullStatus
+                  status: fullStatus,
+                  summary: Object.keys(summary).length > 0 ? summary : undefined,
                 });
               }
+            }
+
+            // If a row had employee details and summary columns but no day numbers
+            if (!hasDays && Object.keys(summary).length > 0) {
+              const dateStr = `${yearStr}-${monthStr}-01`;
+              formattedRecords.push({
+                employeeCode: String(empId).trim(),
+                employeeName: empName ? String(empName).trim() : `Employee (${empId})`,
+                department: department || undefined,
+                designation: designation || undefined,
+                role: role || undefined,
+                date: dateStr,
+                status: 'PRESENT',
+                summary,
+              });
             }
           }
         }
@@ -256,6 +451,29 @@ export default function AttendancePage() {
   const handleSaveEdit = async () => {
     setSaving(true);
     try {
+      const summaryPayload: Record<string, any> = {
+        present: editForm.present,
+        absent: editForm.absent,
+        earlyLogout: editForm.earlyLogout,
+        lateLogin: editForm.lateLogin,
+        sickLeave: editForm.sickLeave,
+        emergencyLeave: editForm.emergencyLeave,
+        paidLeave: editForm.paidLeave,
+        longLeave: editForm.longLeave,
+        mailReceived: editForm.mailReceived,
+        mailNotReceived: editForm.mailNotReceived,
+        casualLeave: editForm.casualLeave,
+        approvedBy: editForm.approvedBy,
+        notApproved: editForm.notApproved,
+        nationalHoliday: editForm.nationalHoliday,
+        festiveHoliday: editForm.festiveHoliday,
+        holiday: editForm.holiday,
+        training: editForm.training,
+        department: editForm.department,
+        designation: editForm.designation,
+        role: editForm.role,
+      };
+
       const records = [];
       for (let i = 1; i <= daysInMonth; i++) {
         if (editForm[i]) {
@@ -263,7 +481,7 @@ export default function AttendancePage() {
           records.push({ 
             date: dateStr, 
             status: editForm[i],
-            remarks: editForm.approvedBy ? `Approved By: ${editForm.approvedBy}` : undefined
+            remarks: JSON.stringify(summaryPayload),
           });
         }
       }
@@ -412,27 +630,95 @@ export default function AttendancePage() {
         </div>
 
 
-        {/* Filters */}
-        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center justify-between">
-          <div className="flex gap-4">
-            <input 
-              type="month" 
-              value={selectedMonth} 
-              onChange={e => setSelectedMonth(e.target.value)}
-              className="px-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm font-semibold text-slate-700"
-            />
+        {/* Filters & Sorting */}
+        <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-wrap gap-3 items-center justify-between">
+          <div className="flex flex-wrap items-center gap-3">
+            {/* Month Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Month:</span>
+              <input 
+                type="month" 
+                value={selectedMonth} 
+                onChange={e => setSelectedMonth(e.target.value)}
+                className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold text-slate-700 cursor-pointer"
+              />
+            </div>
+
+            {/* Department Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Department:</span>
+              <select
+                value={selectedDepartment}
+                onChange={e => setSelectedDepartment(e.target.value)}
+                className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold text-slate-700 cursor-pointer"
+              >
+                <option value="ALL">All Departments ({departments.length})</option>
+                {departments.map(dept => (
+                  <option key={dept} value={dept}>{dept}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Sort Filter */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Sort:</span>
+              <select
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value as any)}
+                className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold text-slate-700 cursor-pointer"
+              >
+                <option value="EMP_ID_ASC">Employee ID (Default)</option>
+                <option value="NAME_ASC">Employee Name (A to Z)</option>
+                <option value="NAME_DESC">Employee Name (Z to A)</option>
+                <option value="DEPT_ASC">Department Wise</option>
+              </select>
+            </div>
           </div>
-          <div className="flex-1 max-w-md relative">
-            <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+
+          {/* Search Box */}
+          <div className="flex-1 min-w-[240px] max-w-md relative">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
             <input 
               type="text" 
-              placeholder="Search by Employee ID or Name..." 
+              placeholder="Search by Employee ID, Name, Role, Department..." 
               value={searchTerm}
               onChange={e => setSearchTerm(e.target.value)}
-              className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+              className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800 placeholder:text-slate-400"
             />
+            {searchTerm && (
+              <button 
+                onClick={() => setSearchTerm('')} 
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
           </div>
         </div>
+
+        {/* Status Bar for Active Filters */}
+        {(selectedDepartment !== 'ALL' || sortBy !== 'EMP_ID_ASC' || searchTerm) && (
+          <div className="flex items-center justify-between text-xs text-slate-500 px-1 -mt-2">
+            <span>
+              Showing <strong className="text-slate-800">{filteredEmployees.length}</strong> of{' '}
+              <strong className="text-slate-800">{allEmployees.length}</strong> employees
+              {selectedDepartment !== 'ALL' && <span> • Department: <strong>{selectedDepartment}</strong></span>}
+              {sortBy === 'NAME_ASC' && <span> • Sorted: <strong>Alphabetical (A-Z)</strong></span>}
+              {sortBy === 'NAME_DESC' && <span> • Sorted: <strong>Alphabetical (Z-A)</strong></span>}
+              {sortBy === 'DEPT_ASC' && <span> • Sorted: <strong>Department</strong></span>}
+            </span>
+            <button
+              onClick={() => {
+                setSelectedDepartment('ALL');
+                setSortBy('EMP_ID_ASC');
+                setSearchTerm('');
+              }}
+              className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold underline cursor-pointer"
+            >
+              Reset Filters
+            </button>
+          </div>
+        )}
 
         {/* Main Monthly Grid */}
         <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
@@ -441,10 +727,53 @@ export default function AttendancePage() {
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-[9px] font-bold text-slate-500 uppercase">
                   <th className="py-2.5 px-2 sticky left-0 bg-slate-50 z-20 min-w-[30px]">Sl#</th>
-                  <th className="py-2.5 px-2 sticky left-[30px] bg-slate-50 z-20 min-w-[120px]">Employee Name</th>
-                  <th className="py-2.5 px-2 min-w-[70px]">Employee ID</th>
+                  <th 
+                    className="py-2.5 px-2 sticky left-[30px] bg-slate-50 z-20 min-w-[120px] cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                    onClick={() => setSortBy(sortBy === 'NAME_ASC' ? 'NAME_DESC' : 'NAME_ASC')}
+                    title="Click to sort by Employee Name (A-Z / Z-A)"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Employee Name</span>
+                      {sortBy === 'NAME_ASC' ? (
+                        <ArrowUp className="w-3 h-3 text-indigo-600" />
+                      ) : sortBy === 'NAME_DESC' ? (
+                        <ArrowDown className="w-3 h-3 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                      )}
+                    </div>
+                  </th>
+                  <th 
+                    className="py-2.5 px-2 min-w-[70px] cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                    onClick={() => setSortBy(sortBy === 'EMP_ID_ASC' ? 'EMP_ID_DESC' : 'EMP_ID_ASC')}
+                    title="Click to sort by Employee ID"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Employee ID</span>
+                      {sortBy === 'EMP_ID_ASC' ? (
+                        <ArrowUp className="w-3 h-3 text-indigo-600" />
+                      ) : sortBy === 'EMP_ID_DESC' ? (
+                        <ArrowDown className="w-3 h-3 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                      )}
+                    </div>
+                  </th>
                   <th className="py-2.5 px-2 min-w-[60px]">Role</th>
-                  <th className="py-2.5 px-2 min-w-[80px]">Department</th>
+                  <th 
+                    className="py-2.5 px-2 min-w-[80px] cursor-pointer hover:bg-slate-100 transition-colors select-none"
+                    onClick={() => setSortBy('DEPT_ASC')}
+                    title="Click to sort by Department"
+                  >
+                    <div className="flex items-center gap-1">
+                      <span>Department</span>
+                      {sortBy === 'DEPT_ASC' ? (
+                        <ArrowUp className="w-3 h-3 text-indigo-600" />
+                      ) : (
+                        <ArrowUpDown className="w-3 h-3 text-slate-400" />
+                      )}
+                    </div>
+                  </th>
                   <th className="py-2.5 px-2 min-w-[80px]">Designation</th>
                   {Array.from({ length: daysInMonth }, (_, i) => (
                     <th key={i + 1} className="py-2.5 px-1.5 text-center min-w-[28px]">
@@ -477,9 +806,11 @@ export default function AttendancePage() {
                 ) : filteredEmployees.length === 0 ? (
                   <tr><td colSpan={daysInMonth + 7} className="text-center p-8 text-slate-400">No records found for {selectedMonth}.</td></tr>
                 ) : (
-                  filteredEmployees.map((emp, index) => (
+                  paginatedEmployees.map((emp, index) => {
+                    const slNo = (page - 1) * PAGE_SIZE + index + 1;
+                    return (
                     <tr key={emp.empId} className="hover:bg-slate-50/50">
-                      <td className="p-2 font-mono text-slate-500 sticky left-0 bg-white z-10 border-r border-slate-50 text-center">{index + 1}</td>
+                      <td className="p-2 font-mono text-slate-500 sticky left-0 bg-white z-10 border-r border-slate-50 text-center">{slNo}</td>
                       <td className="p-2 font-semibold text-slate-800 sticky left-[30px] bg-white z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.05)] cursor-pointer hover:text-indigo-600 transition-colors whitespace-nowrap" onClick={() => setReportEmployee(emp)}>{emp.empName}</td>
                       <td className="p-2 font-mono text-slate-500 bg-white">{emp.empId}</td>
                       <td className="p-2 text-slate-600 bg-white">{emp.role}</td>
@@ -533,11 +864,19 @@ export default function AttendancePage() {
                         )}
                       </td>
                     </tr>
-                  ))
+                    );
+                  })
                 )}
               </tbody>
             </table>
           </div>
+
+          <Pagination
+            currentPage={page}
+            totalItems={filteredEmployees.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
         </div>
 
         {/* Edit / Add Modal with Full Fields */}

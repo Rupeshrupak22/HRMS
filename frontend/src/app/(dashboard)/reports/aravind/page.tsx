@@ -1,9 +1,10 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { FileText, ShieldAlert, UserX, LogOut, CreditCard, MessageSquareWarning, ClipboardList, Calendar, Eye, X } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { FileText, ShieldAlert, UserX, LogOut, CreditCard, MessageSquareWarning, ClipboardList, Calendar, Eye, X, Download } from 'lucide-react';
 import { aravindApi } from '@/lib/aravind-api';
 import { apiRequest } from '@/lib/api';
+import { Pagination } from '@/components/Pagination';
 
 export default function AravindReportPage() {
   const [retention, setRetention] = useState<any[]>([]);
@@ -15,6 +16,16 @@ export default function AravindReportPage() {
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
+
+  // Pagination states
+  const [pageRet, setPageRet] = useState(1);
+  const [pageRes, setPageRes] = useState(1);
+  const [pageExit, setPageExit] = useState(1);
+  const [pageFnf, setPageFnf] = useState(1);
+  const [pageComp, setPageComp] = useState(1);
+  const [pageIntv, setPageIntv] = useState(1);
+  const [pageRep, setPageRep] = useState(1);
+  const PAGE_SIZE = 20;
 
   useEffect(() => {
     aravindApi.getRetention().then(setRetention).catch(() => {});
@@ -45,7 +56,7 @@ export default function AravindReportPage() {
   const filterByDate = (records: any[]) => {
     if (!filterDate) return records;
     return records.filter((r) => {
-      const created = r.createdAt ? r.createdAt.split('T')[0] : '';
+      const created = r.date || r.reportDate || r.dateOfResignation || (r.createdAt ? r.createdAt.split('T')[0] : '');
       return created === filterDate;
     });
   };
@@ -57,29 +68,37 @@ export default function AravindReportPage() {
   const filteredComplaints = filterByDate(complaints);
   const filteredInterviews = filterByDate(interviews);
   const filteredDailyReports = filterDate
-    ? dailyReports.filter((r) => r.reportDate === filterDate || (r.createdAt && r.createdAt.split('T')[0] === filterDate))
+    ? dailyReports.filter((r) => r.reportDate === filterDate || r.date === filterDate || (r.createdAt && r.createdAt.split('T')[0] === filterDate))
     : dailyReports;
 
   return (
-    <div className="space-y-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <div className="space-y-8 max-w-[1400px] mx-auto font-sans">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-3xl text-white shadow-xl">
         <div>
-          <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <FileText className="w-5 h-5 text-orange-500" />
-            <span>Aravind&apos;s Complete Report</span>
+          <h1 className="text-xl font-black tracking-tight flex items-center gap-2.5">
+            <FileText className="w-5 h-5 text-sky-400" />
+            <span>Aravind&apos;s Complete Exit & Resignation Report</span>
           </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Exit & Resignation specialist — all sections data
+          <p className="text-xs text-slate-300 mt-1">
+            Exit & Resignation specialist — comprehensive operations & daily logs
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white border border-slate-200 shadow-xs">
-            <Calendar className="w-4 h-4 text-orange-500" />
-            <input type="date" value={filterDate} onChange={(e) => setFilterDate(e.target.value)}
-              className="text-sm font-semibold text-slate-700 border-none outline-none bg-transparent cursor-pointer" />
+          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 border border-white/20 shadow-xs">
+            <Calendar className="w-4 h-4 text-sky-400" />
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="text-xs font-bold text-white border-none outline-none bg-transparent cursor-pointer"
+            />
           </div>
           {filterDate && (
-            <button onClick={() => setFilterDate('')} className="px-3 py-2 rounded-xl bg-slate-100 text-xs font-bold text-slate-600 hover:bg-slate-200 cursor-pointer">
+            <button
+              onClick={() => setFilterDate('')}
+              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition cursor-pointer"
+            >
               Clear Filter
             </button>
           )}
@@ -87,272 +106,159 @@ export default function AravindReportPage() {
       </div>
 
       {filterDate && (
-        <div className="px-4 py-2 rounded-xl bg-orange-50 border border-orange-200 text-xs font-semibold text-orange-700">
+        <div className="px-4 py-2.5 rounded-2xl bg-sky-50 border border-sky-200 text-xs font-bold text-sky-800">
           Showing records for: {filterDate}
         </div>
       )}
 
       {/* Retention Section */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-2">
-          <ShieldAlert className="w-4 h-4 text-amber-600" /> Retention ({filteredRetention.length})
+      <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+          <ShieldAlert className="w-4 h-4 text-amber-600" /> Retention Cases ({filteredRetention.length})
         </h2>
-        {filteredRetention.length === 0 ? <p className="text-xs text-slate-400">No records</p> : (
-          <div className="rounded-xl bg-white border border-slate-200 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Emp ID</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Name</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Department</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Reason</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Outcome</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Status</th>
-              </tr></thead>
-              <tbody>{filteredRetention.map((r) => (
-                <tr key={r.id} className="border-b border-slate-100">
-                  <td className="px-3 py-2">{r.employeeId}</td>
-                  <td className="px-3 py-2">{r.name}</td>
-                  <td className="px-3 py-2">{r.department}</td>
-                  <td className="px-3 py-2">{r.reason}</td>
-                  <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.retentionOutcome === 'Retained' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{r.retentionOutcome}</span></td>
-                  <td className="px-3 py-2">{r.status}</td>
-                </tr>
-              ))}</tbody>
-            </table>
+        {filteredRetention.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No retention records found.</p> : (
+          <div className="rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                  <th className="px-4 py-3">Emp ID</th>
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Department</th>
+                  <th className="px-4 py-3">Reason</th>
+                  <th className="px-4 py-3">Outcome</th>
+                  <th className="px-4 py-3">Status</th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">{filteredRetention.slice((pageRet - 1) * PAGE_SIZE, pageRet * PAGE_SIZE).map((r) => (
+                  <tr key={r.id} className="hover:bg-slate-50 transition">
+                    <td className="px-4 py-2.5 font-bold text-slate-800">{r.employeeId}</td>
+                    <td className="px-4 py-2.5 font-semibold text-slate-700">{r.name}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.department}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.reason}</td>
+                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.retentionOutcome === 'Retained' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{r.retentionOutcome}</span></td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.status}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+            <Pagination currentPage={pageRet} totalItems={filteredRetention.length} pageSize={PAGE_SIZE} onPageChange={setPageRet} />
           </div>
         )}
       </section>
 
       {/* Resignation Section */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-2">
-          <UserX className="w-4 h-4 text-red-600" /> Resignation ({filteredResignation.length})
+      <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+          <UserX className="w-4 h-4 text-red-600" /> Resignations ({filteredResignation.length})
         </h2>
-        {filteredResignation.length === 0 ? <p className="text-xs text-slate-400">No records</p> : (
-          <div className="rounded-xl bg-white border border-slate-200 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Emp ID</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Name</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Department</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Date</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Notice Period</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Overall</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">LWD</th>
-              </tr></thead>
-              <tbody>{filteredResignation.map((r) => (
-                <tr key={r.id} className="border-b border-slate-100">
-                  <td className="px-3 py-2">{r.employeeId}</td>
-                  <td className="px-3 py-2">{r.name}</td>
-                  <td className="px-3 py-2">{r.department}</td>
-                  <td className="px-3 py-2">{r.dateOfResignation}</td>
-                  <td className="px-3 py-2">{r.noticePeriod}</td>
-                  <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.overall === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{r.overall}</span></td>
-                  <td className="px-3 py-2">{r.lwd}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {/* Exit Clearance Section */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-2">
-          <LogOut className="w-4 h-4 text-blue-600" /> Exit Clearance ({filteredExit.length})
-        </h2>
-        {filteredExit.length === 0 ? <p className="text-xs text-slate-400">No records</p> : (
-          <div className="rounded-xl bg-white border border-slate-200 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Emp ID</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Name</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Manager</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">IT</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Admin</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Finance</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">HR</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Overall</th>
-              </tr></thead>
-              <tbody>{filteredExit.map((r) => (
-                <tr key={r.id} className="border-b border-slate-100">
-                  <td className="px-3 py-2">{r.employeeId}</td>
-                  <td className="px-3 py-2">{r.name}</td>
-                  <td className="px-3 py-2">{r.managerClearance}</td>
-                  <td className="px-3 py-2">{r.itClearance}</td>
-                  <td className="px-3 py-2">{r.adminClearance}</td>
-                  <td className="px-3 py-2">{r.financeClearance}</td>
-                  <td className="px-3 py-2">{r.hrClearance}</td>
-                  <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.overallClearance === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{r.overallClearance}</span></td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {/* F&F Section */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-2">
-          <CreditCard className="w-4 h-4 text-emerald-600" /> F&F Settlements ({filteredFnf.length})
-        </h2>
-        {filteredFnf.length === 0 ? <p className="text-xs text-slate-400">No records</p> : (
-          <div className="rounded-xl bg-white border border-slate-200 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Emp ID</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Name</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Amount</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Payment Status</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Payment Date</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Pending</th>
-              </tr></thead>
-              <tbody>{filteredFnf.map((r) => (
-                <tr key={r.id} className="border-b border-slate-100">
-                  <td className="px-3 py-2">{r.employeeId}</td>
-                  <td className="px-3 py-2">{r.name}</td>
-                  <td className="px-3 py-2 font-semibold">{r.fnfAmount}</td>
-                  <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.paymentStatus === 'Processed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{r.paymentStatus}</span></td>
-                  <td className="px-3 py-2">{r.paymentDate}</td>
-                  <td className="px-3 py-2">{r.pending}</td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {/* Complaints Section */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-2">
-          <MessageSquareWarning className="w-4 h-4 text-purple-600" /> Employee Complaints ({filteredComplaints.length})
-        </h2>
-        {filteredComplaints.length === 0 ? <p className="text-xs text-slate-400">No records</p> : (
-          <div className="rounded-xl bg-white border border-slate-200 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Emp ID</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Name</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Category</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Summary</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Status</th>
-              </tr></thead>
-              <tbody>{filteredComplaints.map((r) => (
-                <tr key={r.id} className="border-b border-slate-100">
-                  <td className="px-3 py-2">{r.employeeId}</td>
-                  <td className="px-3 py-2">{r.name}</td>
-                  <td className="px-3 py-2"><span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-700">{r.category}</span></td>
-                  <td className="px-3 py-2 max-w-[200px] truncate">{r.complaintSummary}</td>
-                  <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.status === 'Resolved' || r.status === 'Closed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>{r.status}</span></td>
-                </tr>
-              ))}</tbody>
-            </table>
-          </div>
-        )}
-      </section>
-
-      {/* Exit Interview Section */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-2">
-          <ClipboardList className="w-4 h-4 text-sky-600" /> Exit Interviews ({filteredInterviews.length})
-        </h2>
-        {filteredInterviews.length === 0 ? <p className="text-xs text-slate-400">No records</p> : (
-          <div className="rounded-xl bg-white border border-slate-200 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Emp ID</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Name</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Reason</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Interview Date</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Rehire</th>
-              </tr></thead>
-              <tbody>{filteredInterviews.map((r) => (
-                <tr key={r.id} className="border-b border-slate-100">
-                  <td className="px-3 py-2">{r.employeeId}</td>
-                  <td className="px-3 py-2">{r.name}</td>
-                  <td className="px-3 py-2">{r.reason}</td>
-                  <td className="px-3 py-2">{r.interviewDate}</td>
-                  <td className="px-3 py-2"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.rehireEligibility === 'Yes' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{r.rehireEligibility}</span></td>
-                </tr>
-              ))}</tbody>
-            </table>
+        {filteredResignation.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No resignation records found.</p> : (
+          <div className="rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                  <th className="px-4 py-3">Emp ID</th>
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Department</th>
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Notice Period</th>
+                  <th className="px-4 py-3">Overall</th>
+                  <th className="px-4 py-3">LWD</th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">{filteredResignation.slice((pageRes - 1) * PAGE_SIZE, pageRes * PAGE_SIZE).map((r) => (
+                  <tr key={r.id} className="hover:bg-slate-50 transition">
+                    <td className="px-4 py-2.5 font-bold text-slate-800">{r.employeeId}</td>
+                    <td className="px-4 py-2.5 font-semibold text-slate-700">{r.name}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.department}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.dateOfResignation}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.noticePeriod}</td>
+                    <td className="px-4 py-2.5"><span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.overall === 'Completed' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>{r.overall}</span></td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.lwd}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+            <Pagination currentPage={pageRes} totalItems={filteredResignation.length} pageSize={PAGE_SIZE} onPageChange={setPageRes} />
           </div>
         )}
       </section>
 
       {/* Daily Reports Section */}
-      <section className="space-y-3">
-        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-200 pb-2">
-          <FileText className="w-4 h-4 text-slate-600" /> Daily Reports ({filteredDailyReports.length})
+      <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+          <FileText className="w-4 h-4 text-sky-600" /> Daily Reports Submitted ({filteredDailyReports.length})
         </h2>
-        {filteredDailyReports.length === 0 ? <p className="text-xs text-slate-400">No reports submitted yet</p> : (
-          <div className="rounded-xl bg-white border border-slate-200 overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead><tr className="bg-slate-50 border-b border-slate-200">
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Date</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Resignations</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Retention</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Retained</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Exit Done</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">F&F Done</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">F&F Pending</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Key Actions</th>
-                <th className="px-3 py-2 text-left font-bold text-slate-600">Preview</th>
-              </tr></thead>
-              <tbody>{filteredDailyReports.map((r) => (
-                <tr key={r.id} className="border-b border-slate-100 hover:bg-orange-50/30">
-                  <td className="px-3 py-2 font-semibold">{r.reportDate}</td>
-                  <td className="px-3 py-2">{r.resignationReceived}</td>
-                  <td className="px-3 py-2">{r.retentionCases}</td>
-                  <td className="px-3 py-2">{r.employeeRetained}</td>
-                  <td className="px-3 py-2">{r.exitClearanceCompleted}</td>
-                  <td className="px-3 py-2">{r.fnfCompleted}</td>
-                  <td className="px-3 py-2">{r.fnfPending}</td>
-                  <td className="px-3 py-2 max-w-[200px] truncate">{r.keyActions || 'View details'}</td>
-                  <td className="px-3 py-2 text-right">
-                    <button onClick={() => setSelectedReport(r)} className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center gap-1 cursor-pointer ml-auto">
-                      <Eye className="w-3 h-3 text-slate-600" /> Full Preview
-                    </button>
-                  </td>
-                </tr>
-              ))}</tbody>
-            </table>
+        {filteredDailyReports.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No daily reports submitted yet</p> : (
+          <div className="rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                  <th className="px-4 py-3">Date</th>
+                  <th className="px-4 py-3">Employee</th>
+                  <th className="px-4 py-3">Key Performance Actions</th>
+                  <th className="px-4 py-3">Blockers / Issues</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Action / Preview</th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">{filteredDailyReports.slice((pageRep - 1) * PAGE_SIZE, pageRep * PAGE_SIZE).map((r) => (
+                  <tr key={r.id} className="hover:bg-sky-50/30 transition">
+                    <td className="px-4 py-2.5 font-bold text-slate-800">{r.date || r.reportDate || r.createdAt?.split('T')[0]}</td>
+                    <td className="px-4 py-2.5 font-semibold text-slate-700">{r.employeeName || 'Aravind'}</td>
+                    <td className="px-4 py-2.5 text-slate-700 max-w-[280px] truncate">{r.keyUpdates || r.keyActions || r.tasksCompleted || 'Exit clearance operations'}</td>
+                    <td className="px-4 py-2.5 text-slate-500 max-w-[150px] truncate">{r.issue || r.blockers || 'None'}</td>
+                    <td className="px-4 py-2.5"><span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">{r.status || 'SUBMITTED'}</span></td>
+                    <td className="px-4 py-2.5 text-right">
+                      <button onClick={() => setSelectedReport(r)} className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center gap-1 cursor-pointer ml-auto">
+                        <Eye className="w-3 h-3 text-slate-600" /> Full Preview
+                      </button>
+                    </td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+            <Pagination currentPage={pageRep} totalItems={filteredDailyReports.length} pageSize={PAGE_SIZE} onPageChange={setPageRep} />
           </div>
         )}
       </section>
 
-      {/* Full Report Preview Modal */}
+      {/* Modal Preview */}
       {selectedReport && (
-        <div className="fixed inset-0 z-50 overflow-y-auto bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-white rounded-3xl shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between bg-orange-600 text-white">
-              <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5" />
-                <div>
-                  <h3 className="text-sm font-black">Aravind Daily Report Preview</h3>
-                  <p className="text-[10px] text-orange-100">Aravind Madhesh Kumar — {selectedReport.reportDate}</p>
-                </div>
-              </div>
-              <button onClick={() => setSelectedReport(null)} className="p-1 rounded-lg bg-white/10 hover:bg-white/20 text-white cursor-pointer"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="p-6 space-y-4 max-h-[70vh] overflow-y-auto text-xs">
+        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl max-w-xl w-full shadow-2xl border border-slate-200 overflow-hidden animate-in fade-in zoom-in-95 duration-200 text-xs">
+            <div className="p-5 bg-gradient-to-r from-slate-900 to-sky-950 text-white flex items-center justify-between">
               <div>
-                <label className="block font-bold text-slate-900 mb-1">Key Actions & Performance Details</label>
-                <div className="p-4 rounded-2xl bg-orange-50/50 border border-orange-200 text-slate-800 font-medium whitespace-pre-wrap leading-relaxed">
-                  {selectedReport.keyActions || 'No key actions provided.'}
+                <h3 className="font-extrabold text-base flex items-center gap-2 text-white">
+                  <FileText className="w-5 h-5 text-sky-400" />
+                  Daily Report Full Preview
+                </h3>
+                <p className="text-xs text-sky-200 mt-0.5">{selectedReport.employeeName || 'Aravind'} • {selectedReport.date || selectedReport.reportDate || selectedReport.createdAt?.split('T')[0]}</p>
+              </div>
+              <button onClick={() => setSelectedReport(null)} className="p-1 text-slate-400 hover:text-white rounded-xl hover:bg-slate-800 transition cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
+              <div>
+                <label className="block font-bold text-slate-900 mb-1">Key Performance Summary</label>
+                <div className="p-3 bg-sky-50/50 rounded-xl border border-sky-200 text-slate-800 whitespace-pre-wrap leading-relaxed font-medium">
+                  {selectedReport.keyUpdates || selectedReport.keyActions || selectedReport.tasksCompleted || 'No updates logged.'}
                 </div>
               </div>
-              {selectedReport.issuesComments && (
+              {selectedReport.issue && (
                 <div>
-                  <label className="block font-bold text-slate-900 mb-1">Issues & Comments</label>
-                  <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-700 font-medium whitespace-pre-wrap">
-                    {selectedReport.issuesComments}
+                  <label className="block font-bold text-slate-900 mb-1">Issues / Blockers</label>
+                  <div className="p-3 bg-rose-50 rounded-xl border border-rose-200 text-rose-800 font-medium">
+                    {selectedReport.issue}
+                  </div>
+                </div>
+              )}
+              {selectedReport.comment && (
+                <div>
+                  <label className="block font-bold text-slate-900 mb-1">Remarks & Notes</label>
+                  <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-700">
+                    {selectedReport.comment}
                   </div>
                 </div>
               )}
             </div>
-            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
-              <button onClick={() => setSelectedReport(null)} className="px-4 py-2 rounded-xl bg-white border border-slate-200 text-xs font-bold text-slate-700 hover:bg-slate-100 cursor-pointer">Close Preview</button>
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+              <button onClick={() => setSelectedReport(null)} className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer">Close Preview</button>
             </div>
           </div>
         </div>

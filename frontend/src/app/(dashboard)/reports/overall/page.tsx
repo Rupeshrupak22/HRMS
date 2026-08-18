@@ -7,6 +7,7 @@ import { nitishaApi } from '@/lib/nitisha-api';
 import { veenaApi } from '@/lib/veena-api';
 import { apiRequest } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
+import { Pagination } from '@/components/Pagination';
 
 export default function OverallReportPage() {
   const { user } = useAuth();
@@ -17,6 +18,8 @@ export default function OverallReportPage() {
   const [submitting, setSubmitting] = useState(false);
   const [remarks, setRemarks] = useState('');
   const [selectedSpecialist, setSelectedSpecialist] = useState<any | null>(null);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
 
   // Only allow HR_ADMIN/SUPER_ADMIN/Nandini to view
   const canView = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN' || user?.specialization === 'HR_MANAGER_ALL' || user?.email === 'superadmin@adyapan.com' || user?.email === 'nandini@adyapan.com' || user?.email === 'nandani@adyapan.com';
@@ -367,9 +370,9 @@ export default function OverallReportPage() {
       {/* Previously Submitted Reports */}
       {submittedReports.length > 0 && (
         <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-sm space-y-3">
-          <h2 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3">Previously Submitted Reports</h2>
+          <h2 className="text-sm font-bold text-slate-900 border-b border-slate-100 pb-3">Previously Submitted Reports ({submittedReports.length})</h2>
           <div className="space-y-2">
-            {submittedReports.map((r) => (
+            {submittedReports.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE).map((r) => (
               <div key={r.id} className="p-3 rounded-xl bg-slate-50 border border-slate-200 flex items-center justify-between text-xs">
                 <div>
                   <span className="font-bold text-slate-800">{r.reportDate}</span>
@@ -380,6 +383,12 @@ export default function OverallReportPage() {
               </div>
             ))}
           </div>
+          <Pagination
+            currentPage={page}
+            totalItems={submittedReports.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
         </div>
       )}
 

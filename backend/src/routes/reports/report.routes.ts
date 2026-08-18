@@ -41,8 +41,8 @@ const SUPER_ADMIN_EMAIL = 'superadmin@adyapan.com';
 // GET /api/reports/daily
 // - EMPLOYEE: sees only their own reports
 // - HR_EXECUTIVE (specialists): sees only their own reports
-// - HR_ADMIN (Nandini/HR Manager): sees reports sent TO her by specialists
-// - SUPER_ADMIN: sees ALL reports
+// - HR_ADMIN (Nandini/HR Manager): sees all specialists' reports
+// - SUPER_ADMIN / ADMIN: sees ALL reports across all specialists
 router.get('/daily', async (req: AuthRequest, res: Response, next) => {
   try {
     const where: any = {};
@@ -52,58 +52,177 @@ router.get('/daily', async (req: AuthRequest, res: Response, next) => {
     const isManagerOrAdmin = 
       userRole === 'SUPER_ADMIN' || 
       userRole === 'HR_ADMIN' || 
+      userRole === 'ADMIN' ||
       req.user!.specialization === 'HR_MANAGER_ALL' || 
       userEmail === 'nandini@adyapan.com' || 
       userEmail === 'nandani@adyapan.com' || 
-      userEmail === 'admin@adyapan.com';
+      userEmail === 'admin@adyapan.com' ||
+      userEmail === 'superadmin@adyapan.com';
 
     if (isManagerOrAdmin) {
-      // HR Manager & Admin see ALL daily reports across all specialists
-      if (req.query.userEmail) where.userEmail = req.query.userEmail;
+      if (req.query.userEmail) {
+        where.userEmail = String(req.query.userEmail).trim();
+      }
     } else {
-      // Specialists see their own reports
       where.userEmail = userEmail;
     }
 
-    if (req.query.date) where.date = req.query.date;
-    if (req.query.status) where.status = req.query.status;
-
-    // Ensure Yesterday (2026-08-12) report for Pavitra exists in DB for Nandini & Admin views
-    try {
-      const existingYesterday = await prisma.dailyReport.findFirst({
-        where: {
-          date: '2026-08-12',
-          OR: [
-            { userEmail: 'pavitra@adyapan.com' },
-            { employeeName: { contains: 'Pavitra' } }
-          ]
-        }
-      });
-
-      if (!existingYesterday) {
-        await prisma.dailyReport.create({
-          data: {
-            userEmail: 'pavitra@adyapan.com',
-            employeeName: 'Pavitra (Attendance & Leave)',
-            date: '2026-08-12',
-            keyUpdates: 'Attendance Summary — Present: 94, Absent: 0, Late: 3, On Leave: 0, LOP: 0. Leaves Approved: 0, Rejected: 0.',
-            issue: 'No issues logged',
-            comment: 'Daily attendance logs verified and synchronized for yesterday.',
-            status: 'APPROVED',
-            role: 'SPECIALIST',
-          }
-        });
-      }
-    } catch {
-      // Ignored if already exists
+    if (req.query.date) {
+      where.date = String(req.query.date).trim();
+    }
+    if (req.query.status) {
+      where.status = String(req.query.status).trim();
     }
 
-    const reports = await prisma.dailyReport.findMany({
+    const searchQuery = req.query.search ? String(req.query.search).trim() : '';
+    if (searchQuery) {
+      where.OR = [
+        { employeeName: { contains: searchQuery, mode: 'insensitive' } },
+        { userEmail: { contains: searchQuery, mode: 'insensitive' } },
+        { role: { contains: searchQuery, mode: 'insensitive' } },
+        { keyUpdates: { contains: searchQuery, mode: 'insensitive' } },
+        { issue: { contains: searchQuery, mode: 'insensitive' } },
+        { comment: { contains: searchQuery, mode: 'insensitive' } },
+      ];
+    }
+
+    // 1. Fetch from core DailyReport table
+    const dailyReports = await prisma.dailyReport.findMany({
       where,
       orderBy: { createdAt: 'desc' },
-      take: 100,
     });
-    res.json({ success: true, data: reports });
+
+    // 2. Fetch specialized reports from specialist tables if viewing all or specific specialist
+    let combinedReports = [...dailyReports];
+    const existingKeys = new Set(
+      dailyReports.map((r) => `${r.userEmail}_${r.date}_${(r.keyUpdates || '').slice(0, 20)}`)
+    );
+
+    try {
+      // Veena Daily Reports
+      if (isManagerOrAdmin || userEmail === 'veena@adyapan.com') {
+        const veenaReports = await prisma.veenaDailyReport.findMany({
+          where: req.query.date ? { date: String(req.query.date) } : {},
+          orderBy: { createdAt: 'desc' },
+        });
+
+        for (const vr of veenaReports) {
+          const key = `veena@adyapan.com_${vr.date}_${(vr.keyUpdatesIssue || '').slice(0, 20)}`;
+          if (!existingKeys.has(key)) {
+            existingKeys.add(key);
+            combinedReports.push({
+              id: vr.id,
+              employeeName: 'Abbu Veena',
+              userEmail: vr.createdByEmail || 'veena@adyapan.com',
+              date: vr.date,
+              role: vr.role || 'Onboarding & Hiring',
+              candidateSource: vr.candidateSourced || '-',
+              screeningCompleted: vr.screeningDone || '-',
+              interviewTakenBy: vr.interviewsTaken || '-',
+              selectionStatus: vr.selected || '-',
+              offerLetterSent: vr.offerLetterSent || '-',
+              offerLetterAccepted: vr.offerAccepted || '-',
+              joiningConfirmation: vr.joiningConfirmed || '-',
+              joinedOnboarded: vr.joined || vr.onboarded || '-',
+              pendingFollowups: vr.pendingFollowups || '-',
+              keyUpdates: `Sourced: ${vr.candidateSourced || 0}, Screened: ${vr.screeningDone || 0}, Intv: ${vr.interviewsTaken || 0}, Selected: ${vr.selected || 0}, Offers: ${vr.offerLetterSent || 0}, Joined: ${vr.joined || 0}`,
+              issue: vr.keyUpdatesIssue || '-',
+              comment: `Pending follow-ups: ${vr.pendingFollowups || 'None'}`,
+              numScreened: parseInt(vr.screeningDone || '0', 10) || 0,
+              numInterviews: parseInt(vr.interviewsTaken || '0', 10) || 0,
+              numOffersSent: parseInt(vr.offerLetterSent || '0', 10) || 0,
+              numJoined: parseInt(vr.joined || '0', 10) || 0,
+              numDropouts: 0,
+              status: 'APPROVED',
+              sendStatus: 'SENT',
+              sentToEmail: 'nandini@adyapan.com',
+              reviewedByEmail: null,
+              createdByEmail: vr.createdByEmail || 'veena@adyapan.com',
+              createdAt: vr.createdAt,
+              updatedAt: vr.updatedAt,
+            } as any);
+          }
+        }
+      }
+
+      // Nitisha Daily Reports
+      if (isManagerOrAdmin || userEmail === 'nitisha@adyapan.com') {
+        const nitishaReports = await prisma.nitishaDailyReport.findMany({
+          orderBy: { createdAt: 'desc' },
+        });
+
+        for (const nr of nitishaReports) {
+          const dateStr = nr.createdAt.toISOString().split('T')[0];
+          if (req.query.date && dateStr !== String(req.query.date)) continue;
+
+          const key = `nitisha@adyapan.com_${dateStr}_${(nr.employeeIssue || '').slice(0, 20)}`;
+          if (!existingKeys.has(key)) {
+            existingKeys.add(key);
+            combinedReports.push({
+              id: nr.id,
+              employeeName: 'Nitisha',
+              userEmail: nr.createdByEmail || 'nitisha@adyapan.com',
+              date: dateStr,
+              role: 'Discipline & POSH Specialist',
+              candidateSource: null,
+              screeningCompleted: null,
+              interviewTakenBy: null,
+              selectionStatus: null,
+              offerLetterSent: null,
+              offerLetterAccepted: null,
+              joiningConfirmation: null,
+              joinedOnboarded: null,
+              pendingFollowups: null,
+              keyUpdates: `Issues: ${nr.employeeIssue}, Engagement: ${nr.employeeEngagement}, Discipline: ${nr.disciplineCases}`,
+              issue: nr.employeeIssue || '-',
+              comment: `PIP Case: ${nr.pipCase} (${nr.pipReason || 'None'}). Low: ${nr.performanceLow}, Med: ${nr.performanceMedium}, High: ${nr.performanceHigh}`,
+              numScreened: 0,
+              numInterviews: 0,
+              numOffersSent: 0,
+              numJoined: 0,
+              numDropouts: 0,
+              status: 'APPROVED',
+              sendStatus: 'SENT',
+              sentToEmail: 'nandini@adyapan.com',
+              reviewedByEmail: null,
+              createdByEmail: nr.createdByEmail || 'nitisha@adyapan.com',
+              createdAt: nr.createdAt,
+              updatedAt: nr.updatedAt,
+            } as any);
+          }
+        }
+      }
+    } catch {
+      // Graceful fallback to dailyReports
+    }
+
+    // Sort by date / createdAt desc
+    combinedReports.sort((a, b) => {
+      const dateA = new Date(a.date || a.createdAt).getTime();
+      const dateB = new Date(b.date || b.createdAt).getTime();
+      return dateB - dateA;
+    });
+
+    const total = combinedReports.length;
+    const page = parseInt(String(req.query.page || '1'), 10) || 1;
+    const limit = parseInt(String(req.query.limit || '0'), 10);
+
+    let paginatedData = combinedReports;
+    if (limit > 0) {
+      const start = (page - 1) * limit;
+      paginatedData = combinedReports.slice(start, start + limit);
+    }
+
+    res.json({
+      success: true,
+      data: paginatedData,
+      pagination: {
+        total,
+        page,
+        limit: limit > 0 ? limit : total,
+        totalPages: limit > 0 ? Math.ceil(total / limit) : 1,
+      },
+    });
   } catch (err) {
     next(err);
   }

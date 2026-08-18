@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { UserPlus, Plus, X, Pencil, Trash2, Upload, Download, FileSpreadsheet } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { veenaApi } from '@/lib/veena-api';
+import { Pagination } from '@/components/Pagination';
 
 interface OnboardingRecord {
   id: string;
@@ -115,6 +116,13 @@ export default function OnboardingPage() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [importData, setImportData] = useState<any[]>([]);
   const [importing, setImporting] = useState(false);
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
+
+  const paginatedRecords = React.useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return records.slice(start, start + PAGE_SIZE);
+  }, [records, page]);
 
   const [form, setForm] = useState<Omit<OnboardingRecord, 'id'>>({
     candidateName: '',
@@ -454,7 +462,7 @@ export default function OnboardingPage() {
               </tr>
             </thead>
             <tbody>
-              {records.map((r) => (
+              {paginatedRecords.map((r) => (
                 <tr key={r.id} className="border-b border-slate-100 hover:bg-orange-50/30">
                   <td className="px-4 py-3 font-semibold text-slate-800">{r.candidateName}</td>
                   <td className="px-4 py-3 text-slate-700">{r.phoneNumber}</td>
@@ -496,6 +504,13 @@ export default function OnboardingPage() {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={page}
+          totalItems={records.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* XLSX Import Preview Modal */}

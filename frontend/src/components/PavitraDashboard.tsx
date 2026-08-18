@@ -397,7 +397,17 @@ export function PavitraDashboard() {
       {/* Operations Quick Links */}
       <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs">
         <h3 className="text-sm font-bold text-slate-900 mb-3">Pavitra&apos;s Quick Operations Hub</h3>
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-5 gap-3">
+          <Link href="/employee-master" className="p-3 rounded-xl border border-slate-200 hover:border-indigo-300 hover:bg-indigo-50/50 transition-all flex items-center gap-3">
+            <div className="w-8 h-8 rounded-lg bg-indigo-100 text-indigo-600 flex items-center justify-center">
+              <Users className="w-4 h-4" />
+            </div>
+            <div>
+              <div className="text-xs font-bold text-slate-800">Employee Master</div>
+              <div className="text-[10px] text-slate-500">Master Directory</div>
+            </div>
+          </Link>
+
           <Link href="/employees" className="p-3 rounded-xl border border-slate-200 hover:border-orange-300 hover:bg-orange-50/50 transition-all flex items-center gap-3">
             <div className="w-8 h-8 rounded-lg bg-blue-100 text-blue-600 flex items-center justify-center">
               <Users className="w-4 h-4" />

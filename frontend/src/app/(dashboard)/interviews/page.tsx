@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { veenaApi } from '@/lib/veena-api';
+import { Pagination } from '@/components/Pagination';
 
 interface CandidateRecord {
   id: string;
@@ -35,6 +36,87 @@ interface CandidateRecord {
   joining: string;
   onboarding: string;
   offerRemarks: string;
+}
+
+function formatExcelDate(val: any): string {
+  if (val === null || val === undefined || val === '' || val === '-') return '-';
+  
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return '-';
+    const adjusted = new Date(val.getTime() + 60 * 1000);
+    const y = adjusted.getFullYear();
+    const m = String(adjusted.getMonth() + 1).padStart(2, '0');
+    const d = String(adjusted.getDate()).padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  if (typeof val === 'number') {
+    const utcDays = val - 25569;
+    const utcMs = Math.round(utcDays * 86400 * 1000);
+    const date = new Date(utcMs + 60 * 1000);
+    if (!isNaN(date.getTime())) {
+      const y = date.getUTCFullYear();
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  const str = String(val).trim();
+  if (!str || str === '-') return '-';
+
+  if (str.includes('GMT') || str.includes('India Standard Time') || (str.includes('T') && str.length > 15)) {
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      const adjusted = new Date(parsed.getTime() + 60 * 1000);
+      const y = adjusted.getFullYear();
+      const m = String(adjusted.getMonth() + 1).padStart(2, '0');
+      const d = String(adjusted.getDate()).padStart(2, '0');
+      return `${y}-${m}-${d}`;
+    }
+  }
+
+  const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  if (ddmmyyyy) {
+    const d = ddmmyyyy[1].padStart(2, '0');
+    const m = ddmmyyyy[2].padStart(2, '0');
+    const y = ddmmyyyy[3];
+    return `${y}-${m}-${d}`;
+  }
+
+  const yyyymmdd = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (yyyymmdd) {
+    const y = yyyymmdd[1];
+    const m = yyyymmdd[2].padStart(2, '0');
+    const d = yyyymmdd[3].padStart(2, '0');
+    return `${y}-${m}-${d}`;
+  }
+
+  const monthNameMatch = str.match(/^(\d{1,2})[-\s/](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-\s/](\d{2,4})/i);
+  if (monthNameMatch) {
+    const months: Record<string, string> = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
+    const d = monthNameMatch[1].padStart(2, '0');
+    const m = months[monthNameMatch[2].toLowerCase().slice(0, 3)] || '01';
+    let y = monthNameMatch[3];
+    if (y.length === 2) y = '20' + y;
+    return `${y}-${m}-${d}`;
+  }
+
+  return str;
+}
+
+function findRowValue(row: Record<string, any>, aliases: string[]): any {
+  const keys = Object.keys(row);
+  for (const alias of aliases) {
+    const cleanAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const k of keys) {
+      const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanKey === cleanAlias) {
+        return row[k];
+      }
+    }
+  }
+  return undefined;
 }
 
 export default function InterviewsPage() {
@@ -115,6 +197,18 @@ export default function InterviewsPage() {
     return matchesSearch && matchesStage && matchesStatus;
   });
 
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, stageFilter, statusFilter]);
+
+  const paginatedCandidates = React.useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredCandidates.slice(start, start + PAGE_SIZE);
+  }, [filteredCandidates, page]);
+
   // Template Download
   const handleDownloadTemplate = () => {
     const templateData = [
@@ -163,33 +257,23 @@ export default function InterviewsPage() {
         }
 
         const formatted = jsonData.map((row) => ({
-          candidateName: String(row['Candidate Name'] || row['EMPLOYEE NAME'] || row['Name'] || '').trim(),
-          phoneNumber: String(row['Mobile Number'] || row['MOBILE NUMBER'] || row['Phone'] || '').trim(),
-          email: String(row['Email'] || row['EMAIL'] || '').trim(),
-          college: String(row['College/University'] || row['COLLEGE/UNIVERSITY'] || row['College'] || '').trim(),
-          location: String(row['Location'] || row['LOCATION'] || '').trim(),
-          source: String(row['Source'] || row['SOURCE'] || 'LinkedIn').trim(),
-          roleApplied: String(row['Role Applied'] || row['ROLE APPLIED'] || 'Sales').trim(),
-          recruiter: String(row['Recruiter'] || row['RECRUITER'] || 'Abbu Veena').trim(),
-          applicationDate: (() => {
-            const rawDate = row['Application Date'] || row['APPLICATION DATE'];
-            if (!rawDate) return new Date().toISOString().split('T')[0];
-            if (rawDate instanceof Date && !isNaN(rawDate.getTime())) {
-              const y = rawDate.getFullYear();
-              const m = String(rawDate.getMonth() + 1).padStart(2, '0');
-              const d = String(rawDate.getDate()).padStart(2, '0');
-              return `${y}-${m}-${d}`;
-            }
-            return String(rawDate).trim();
-          })(),
-          currentStage: String(row['Current Stage'] || row['CURRENT STAGE'] || 'Screening').trim(),
-          status: String(row['Status'] || row['STATUS'] || 'Active').trim(),
-          interviews: String(row['Interviews'] || row['INTERVIEWS'] || '').trim(),
-          selection: String(row['Selection'] || row['SELECTION'] || '').trim(),
-          offers: String(row['Offers'] || row['OFFERS'] || '').trim(),
-          joining: String(row['Joining'] || row['JOINING'] || '').trim(),
-          onboarding: String(row['Onboarding'] || row['ONBOARDING'] || '').trim(),
-          offerRemarks: String(row['Offer Remarks'] || row['OFFER REMARKS'] || '').trim(),
+          candidateName: String(findRowValue(row, ['Candidate Name', 'EMPLOYEE NAME', 'Name', 'candidate_name', 'Applicant Name']) || '').trim(),
+          phoneNumber: String(findRowValue(row, ['Mobile Number', 'MOBILE NUMBER', 'Phone Number', 'Phone', 'phone', 'Contact']) || '').trim(),
+          email: String(findRowValue(row, ['Email', 'EMAIL', 'email', 'Email Address']) || '').trim(),
+          college: String(findRowValue(row, ['College/University', 'COLLEGE/UNIVERSITY', 'College', 'college', 'University']) || '').trim(),
+          location: String(findRowValue(row, ['Location', 'LOCATION', 'location', 'City']) || '').trim(),
+          source: String(findRowValue(row, ['Source', 'SOURCE', 'source']) || 'LinkedIn').trim(),
+          roleApplied: String(findRowValue(row, ['Role Applied', 'ROLE APPLIED', 'Role', 'role', 'Position']) || 'Sales').trim(),
+          recruiter: String(findRowValue(row, ['Recruiter', 'RECRUITER', 'recruiter']) || 'Abbu Veena').trim(),
+          applicationDate: formatExcelDate(findRowValue(row, ['Application Date', 'APPLICATION DATE', 'Date', 'date', 'Applied Date'])),
+          currentStage: String(findRowValue(row, ['Current Stage', 'CURRENT STAGE', 'Stage', 'stage']) || 'Screening').trim(),
+          status: String(findRowValue(row, ['Status', 'STATUS', 'status']) || 'Active').trim(),
+          interviews: String(findRowValue(row, ['Interviews', 'INTERVIEWS', 'interviews']) || '').trim(),
+          selection: String(findRowValue(row, ['Selection', 'SELECTION', 'selection']) || '').trim(),
+          offers: formatExcelDate(findRowValue(row, ['Offers', 'OFFERS', 'offers', 'Offer Date'])),
+          joining: formatExcelDate(findRowValue(row, ['Joining', 'JOINING', 'joining', 'Joining Date', 'DOJ', 'Date of Joining'])),
+          onboarding: String(findRowValue(row, ['Onboarding', 'ONBOARDING', 'onboarding']) || '').trim(),
+          offerRemarks: String(findRowValue(row, ['Offer Remarks', 'OFFER REMARKS', 'Remarks', 'remarks', 'Notes']) || '').trim(),
         })).filter(r => r.candidateName);
 
         if (formatted.length === 0) {
@@ -441,7 +525,7 @@ export default function InterviewsPage() {
                   </td>
                 </tr>
               ) : (
-                filteredCandidates.map((c) => (
+                paginatedCandidates.map((c) => (
                   <tr key={c.id} className="hover:bg-orange-50/20 transition-colors">
                     <td className="py-3 px-4 font-extrabold text-slate-900 whitespace-nowrap">{c.candidateName}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.phoneNumber || '-'}</td>
@@ -451,7 +535,7 @@ export default function InterviewsPage() {
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.source || '-'}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.roleApplied || '-'}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.recruiter || '-'}</td>
-                    <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.applicationDate || '-'}</td>
+                    <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{formatExcelDate(c.applicationDate)}</td>
                     <td className="py-3 px-4 whitespace-nowrap">
                       <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
                         c.currentStage === 'Joined' || c.currentStage === 'Completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
@@ -473,8 +557,8 @@ export default function InterviewsPage() {
                     </td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.interviews || '-'}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.selection || '-'}</td>
-                    <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.offers || '-'}</td>
-                    <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.joining || '-'}</td>
+                    <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{formatExcelDate(c.offers)}</td>
+                    <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{formatExcelDate(c.joining)}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.onboarding || '-'}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.offerRemarks || '-'}</td>
                     <td className="py-3 px-4 whitespace-nowrap">
@@ -501,6 +585,13 @@ export default function InterviewsPage() {
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={page}
+          totalItems={filteredCandidates.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Manual Add / Edit Candidate Popup Modal */}

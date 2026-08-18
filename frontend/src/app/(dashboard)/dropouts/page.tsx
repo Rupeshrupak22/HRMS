@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { ActionBar } from '@/components/ActionBar';
 import { apiRequest } from '@/lib/api';
+import { Pagination } from '@/components/Pagination';
 
 interface DropoutEntry {
   id: string;
@@ -61,13 +62,28 @@ export default function DropoutTrackerPage() {
   });
 
   const filteredDropouts = dropouts.filter((d) => {
-    const matchesSearch = d.candidateName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      d.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      d.recruiter.toLowerCase().includes(searchTerm.toLowerCase());
+    const candidate = (d.candidateName || '').toLowerCase();
+    const empId = (d.employeeId || '').toLowerCase();
+    const recruiter = (d.recruiter || '').toLowerCase();
+    const q = searchTerm.toLowerCase();
+
+    const matchesSearch = !searchTerm || candidate.includes(q) || empId.includes(q) || recruiter.includes(q);
     const matchesRole = !filterRole || d.role === filterRole;
     const matchesStage = !filterStage || d.dropoutStage === filterStage;
     return matchesSearch && matchesRole && matchesStage;
   });
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, filterRole, filterStage]);
+
+  const paginatedDropouts = React.useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredDropouts.slice(start, start + PAGE_SIZE);
+  }, [filteredDropouts, page]);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -146,9 +162,14 @@ export default function DropoutTrackerPage() {
 
   // Stats
   const reasonCounts: Record<string, number> = {};
-  dropouts.forEach((d) => { reasonCounts[d.dropoutReason] = (reasonCounts[d.dropoutReason] || 0) + 1; });
+  dropouts.forEach((d) => {
+    if (d.dropoutReason) {
+      reasonCounts[d.dropoutReason] = (reasonCounts[d.dropoutReason] || 0) + 1;
+    }
+  });
   const topReason = Object.entries(reasonCounts).sort((a, b) => b[1] - a[1])[0];
-  const thisMonthCount = dropouts.filter((d) => d.dropoutDate.startsWith('2026-08')).length;
+  const nowMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  const thisMonthCount = dropouts.filter((d) => d.dropoutDate && d.dropoutDate.startsWith(nowMonth)).length;
 
   return (
     <div className="space-y-5">
@@ -246,7 +267,7 @@ export default function DropoutTrackerPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {filteredDropouts.map((drop) => (
+              {paginatedDropouts.map((drop) => (
                 <tr key={drop.id} className="hover:bg-orange-50/30 transition-colors">
                   <td className="py-3 px-4">
                     <div className="font-bold text-slate-900">{drop.candidateName}</div>
@@ -281,10 +302,12 @@ export default function DropoutTrackerPage() {
             </tbody>
           </table>
         </div>
-        <div className="px-4 py-3 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500">
-          <span>Showing {filteredDropouts.length} of {dropouts.length} records</span>
-          <span className="font-medium">Managed by: Veena (Onboarding &amp; Hiring)</span>
-        </div>
+        <Pagination
+          currentPage={page}
+          totalItems={filteredDropouts.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Form Modal */}

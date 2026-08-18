@@ -26,6 +26,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
+import { Pagination } from '@/components/Pagination';
 
 interface RecruitmentEntry {
   id: string;
@@ -92,6 +93,18 @@ export default function RecruitmentTrackerPage() {
     const matchesStatus = !filterStatus || e.status === filterStatus;
     return matchesSearch && matchesRole && matchesStage && matchesStatus;
   });
+
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchTerm, filterRole, filterStage, filterStatus]);
+
+  const paginatedEntries = React.useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredEntries.slice(start, start + PAGE_SIZE);
+  }, [filteredEntries, page]);
 
   const handleInputChange = (ev: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     setFormData((prev) => ({ ...prev, [ev.target.name]: ev.target.value }));
@@ -439,7 +452,7 @@ export default function RecruitmentTrackerPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {filteredEntries.map((entry) => (
+              {paginatedEntries.map((entry) => (
                 <tr key={entry.id} className="hover:bg-orange-50/40 transition-all group">
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-2.5">
@@ -448,34 +461,49 @@ export default function RecruitmentTrackerPage() {
                       </div>
                       <div>
                         <div className="font-bold text-slate-900 whitespace-nowrap text-[11px]">{entry.employeeName}</div>
-                        <div className="text-[9px] text-slate-400 font-medium">{entry.id}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{entry.id}</div>
                       </div>
                     </div>
                   </td>
-                  <td className="py-3.5 px-4 text-slate-700 font-medium whitespace-nowrap text-[11px]">{entry.mobileNumber}</td>
-                  <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap text-[11px]">{entry.email}</td>
+                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap font-medium text-[11px]">{entry.mobileNumber}</td>
+                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.email}</td>
                   <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.collegeUniversity}</td>
                   <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.location}</td>
-                  <td className="py-3.5 px-4">
-                    <span className="px-2 py-0.5 bg-violet-50 text-violet-700 border border-violet-200 text-[10px] font-bold rounded-md whitespace-nowrap">{entry.source}</span>
+                  <td className="py-3.5 px-4 whitespace-nowrap">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">{entry.source}</span>
                   </td>
-                  <td className="py-3.5 px-4">
-                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 text-[10px] font-bold rounded-md whitespace-nowrap">{entry.roleApplied}</span>
+                  <td className="py-3.5 px-4 whitespace-nowrap">
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700">{entry.roleApplied}</span>
                   </td>
-                  <td className="py-3.5 px-4 text-slate-700 font-medium whitespace-nowrap text-[11px]">{entry.recruiter}</td>
-                  <td className="py-3.5 px-4 text-slate-700 font-medium whitespace-nowrap text-[11px]">{entry.applicationDate}</td>
-                  <td className="py-3.5 px-4">
-                    <span className={`px-2 py-0.5 border text-[10px] font-bold rounded-md whitespace-nowrap ${getStageColor(entry.currentStage)}`}>{entry.currentStage}</span>
+                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px] font-medium">{entry.recruiter}</td>
+                  <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap text-[11px]">{entry.applicationDate}</td>
+                  <td className="py-3.5 px-4 whitespace-nowrap">
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      entry.currentStage === 'Onboarding' ? 'bg-emerald-100 text-emerald-800' :
+                      entry.currentStage === 'Joining' ? 'bg-green-100 text-green-800' :
+                      entry.currentStage === 'Offer' ? 'bg-purple-100 text-purple-800' :
+                      entry.currentStage === 'Selection' ? 'bg-blue-100 text-blue-800' :
+                      entry.currentStage === 'Interview' ? 'bg-amber-100 text-amber-800' :
+                      'bg-slate-100 text-slate-700'
+                    }`}>
+                      {entry.currentStage}
+                    </span>
                   </td>
-                  <td className="py-3.5 px-4">
-                    <span className={`px-2 py-0.5 border text-[10px] font-bold rounded-md whitespace-nowrap ${getStatusColor(entry.status)}`}>{entry.status}</span>
+                  <td className="py-3.5 px-4 whitespace-nowrap">
+                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                      entry.status === 'Completed' || entry.status === 'Selected' ? 'bg-emerald-100 text-emerald-800' :
+                      entry.status === 'Rejected' || entry.status === 'Dropped' ? 'bg-red-100 text-red-800' :
+                      'bg-amber-100 text-amber-800'
+                    }`}>
+                      {entry.status}
+                    </span>
                   </td>
-                  <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap text-[11px]">{entry.interviews || '-'}</td>
-                  <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap text-[11px]">{entry.selection || '-'}</td>
-                  <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap text-[11px]">{entry.offers || '-'}</td>
-                  <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap text-[11px]">{entry.joining || '-'}</td>
-                  <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap text-[11px]">{entry.onboarding || '-'}</td>
-                  <td className="py-3.5 px-4 text-slate-500 max-w-[140px] truncate text-[11px]" title={entry.remarks}>{entry.remarks || '-'}</td>
+                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.interviews || '—'}</td>
+                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.selection || '—'}</td>
+                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.offers || '—'}</td>
+                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.joining || '—'}</td>
+                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.onboarding || '—'}</td>
+                  <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap text-[11px] max-w-[150px] truncate">{entry.remarks || '—'}</td>
                   <td className="py-3.5 px-4">
                     <div className="flex items-center justify-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
                       <button onClick={() => setViewingEntry(entry)} title="View" className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 cursor-pointer transition-colors"><Eye className="w-3.5 h-3.5" /></button>
@@ -485,7 +513,7 @@ export default function RecruitmentTrackerPage() {
                   </td>
                 </tr>
               ))}
-              {filteredEntries.length === 0 && (
+              {paginatedEntries.length === 0 && (
                 <tr>
                   <td colSpan={18} className="py-16 text-center">
                     <div className="text-slate-300 mb-2"><Users className="w-10 h-10 mx-auto" /></div>
@@ -497,12 +525,12 @@ export default function RecruitmentTrackerPage() {
             </tbody>
           </table>
         </div>
-        <div className="px-5 py-3 border-t border-slate-100 flex items-center justify-between bg-slate-50/50">
-          <span className="text-[11px] text-slate-500 font-medium">
-            {filteredEntries.length} candidates shown
-          </span>
-          <span className="text-[11px] text-slate-400 font-medium">Managed by: Veena (Onboarding &amp; Hiring)</span>
-        </div>
+        <Pagination
+          currentPage={page}
+          totalItems={filteredEntries.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
       </div>
 
       {/* Form Modal */}

@@ -11,7 +11,8 @@ function crud(model: any) {
     getAll: async (req: AuthRequest, res: Response, next: any) => {
       try {
         const where: any = {};
-        if (req.user!.role === 'HR_EXECUTIVE') {
+        const isVeenaLead = req.user!.email === 'veena@adyapan.com' || req.user!.specialization === 'ONBOARDING_HIRING' || ['SUPER_ADMIN', 'HR_ADMIN'].includes(req.user!.role);
+        if (!isVeenaLead && req.user!.role === 'HR_EXECUTIVE') {
           where.createdByEmail = req.user!.email;
         }
         res.json(await model.findMany({ where, orderBy: { createdAt: 'desc' } }));

@@ -111,6 +111,7 @@ apiRouter.use('/reports', reportRoutes);
 apiRouter.use('/notifications', notificationRoutes);
 apiRouter.use('/aravind', aravindRoutes);
 apiRouter.use('/nitisha', nitishaRoutes);
+apiRouter.use('/veena', veenaRoutes);
 apiRouter.use('/veena-portal', veenaRoutes);
 apiRouter.use('/ai', aiRoutes);
 

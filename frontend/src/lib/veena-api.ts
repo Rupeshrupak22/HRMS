@@ -2,7 +2,9 @@ const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000/
 const BASE = API_BASE + '/veena-portal';
 
 async function request(endpoint: string, options: RequestInit = {}) {
-  const token = typeof window !== 'undefined' ? localStorage.getItem('adyapan_access_token') : null;
+  const token = typeof window !== 'undefined'
+    ? localStorage.getItem('adyapan_access_token') || localStorage.getItem('token')
+    : null;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {}),

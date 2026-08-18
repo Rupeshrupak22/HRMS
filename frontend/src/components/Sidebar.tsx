@@ -76,12 +76,14 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Asset Management', href: '/assets', icon: Laptop, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'FINANCE'] },
     { label: 'Document Vault', href: '/documents', icon: FolderOpen, roles: ['HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'] },
     { label: 'Expenses & Travel', href: '/expenses', icon: Receipt, roles: ['HR_ADMIN', 'FINANCE', 'DEPARTMENT_HEAD', 'TEAM_LEADER', 'EMPLOYEE'] },
+    { label: 'Employee Master', href: '/employee-master', icon: Users, roles: ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'] },
     { label: 'Settings', href: '/settings', icon: Settings, roles: ['HR_ADMIN'] },
   ];
 
   // Pavitra-specific navigation (Attendance & Leave)
   const pavitraNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
+    { label: 'Employee Master', href: '/employee-master', icon: Users },
     { label: 'Attendance', href: '/attendance', icon: Clock },
     { label: 'Leaves', href: '/leaves', icon: CalendarDays },
     { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
