@@ -18,6 +18,12 @@ import {
   Pencil,
   Trash2,
   FileSpreadsheet,
+  UserX,
+  FileText,
+  Target,
+  UserCheck,
+  ArrowUpRight,
+  ClipboardCheck,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { veenaApi } from '@/lib/veena-api';
@@ -127,6 +133,8 @@ function findRowValue(row: Record<string, any>, aliases: string[]): any {
 
 export function VeenaDashboard() {
   const [candidates, setCandidates] = useState<CandidateRecord[]>([]);
+  const [dropouts, setDropouts] = useState<any[]>([]);
+  const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [stageFilter, setStageFilter] = useState('');
@@ -160,9 +168,10 @@ export function VeenaDashboard() {
     offerRemarks: '',
   });
 
-  const loadCandidates = async () => {
+  const loadAllData = async () => {
     setLoading(true);
     try {
+      // 1. Candidates (Onboarding / Recruitment)
       const res = await veenaApi.getOnboarding();
       const list = Array.isArray(res) ? res : [];
       const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_onboarding_candidates') : null;
@@ -171,8 +180,33 @@ export function VeenaDashboard() {
 
       const existingNames = new Set(list.map((c: any) => (c.candidateName || '').toLowerCase().trim()));
       const uniqueLocal = localList.filter((c: any) => !existingNames.has((c.candidateName || '').toLowerCase().trim()));
-
       setCandidates([...list, ...uniqueLocal]);
+
+      // 2. Dropouts
+      try {
+        const dropRes = await veenaApi.getDropouts();
+        const dropList = Array.isArray(dropRes) ? dropRes : [];
+        const savedDropLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_dropout_candidates') : null;
+        let localDropList: any[] = [];
+        try { localDropList = savedDropLocal ? JSON.parse(savedDropLocal) : []; } catch { localDropList = []; }
+
+        const existingDrop = new Set(dropList.map((c: any) => (c.candidateName || '').toLowerCase().trim()));
+        const uniqueDropLocal = localDropList.filter((c: any) => !existingDrop.has((c.candidateName || '').toLowerCase().trim()));
+        setDropouts([...dropList, ...uniqueDropLocal]);
+      } catch {
+        const savedDropLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_dropout_candidates') : null;
+        let localDropList: any[] = [];
+        try { localDropList = savedDropLocal ? JSON.parse(savedDropLocal) : []; } catch { localDropList = []; }
+        setDropouts(localDropList);
+      }
+
+      // 3. Daily Reports
+      try {
+        const repRes = await veenaApi.getDailyReports();
+        setDailyReports(Array.isArray(repRes) ? repRes : []);
+      } catch {
+        setDailyReports([]);
+      }
     } catch {
       const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_onboarding_candidates') : null;
       let localList: any[] = [];
@@ -183,15 +217,21 @@ export function VeenaDashboard() {
     }
   };
 
+  const loadCandidates = loadAllData;
+
   useEffect(() => {
-    loadCandidates();
+    loadAllData();
   }, []);
 
-  // Dynamic Metrics (Starts at 0 if no candidate exists - NO HARDCODED 8)
+  // Dynamic Metrics across all Veena records
   const totalCount = candidates.length;
-  const joinedCount = candidates.filter((c) => c.status === 'Joined' || c.currentStage === 'Joined').length;
-  const selectedCount = candidates.filter((c) => c.status === 'Selected' || c.currentStage === 'Selection').length;
+  const joinedCount = candidates.filter((c) => c.status === 'Joined' || c.currentStage === 'Joined' || c.currentStage === 'Completed').length;
+  const selectedCount = candidates.filter((c) => c.status === 'Selected' || c.currentStage === 'Selection' || c.currentStage === 'Offer').length;
   const inProgressCount = candidates.filter((c) => c.status === 'Active' || (c.status !== 'Joined' && c.status !== 'Dropped' && c.status !== 'Rejected')).length;
+  const dropoutsCount = dropouts.length;
+  const dailyReportsCount = dailyReports.length;
+  const conversionRate = totalCount + dropoutsCount > 0 ? (((joinedCount) / (totalCount + dropoutsCount)) * 100).toFixed(1) : '0';
+  const dropoutRate = totalCount + dropoutsCount > 0 ? (((dropoutsCount) / (totalCount + dropoutsCount)) * 100).toFixed(1) : '0';
 
   const pipelineStages = [
     { name: 'Application', count: candidates.filter((c) => c.currentStage === 'Application').length },
@@ -488,8 +528,47 @@ export function VeenaDashboard() {
         </div>
       </div>
 
+      {/* Quick Action Navigation Bar */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <Link
+          href="/onboarding"
+          className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white border border-slate-200 hover:border-orange-400 text-slate-700 hover:text-orange-600 text-xs font-bold transition-all shadow-2xs whitespace-nowrap cursor-pointer"
+        >
+          <UserPlus className="w-4 h-4 text-orange-500" />
+          <span>Recruitment Tracker</span>
+        </Link>
+        <Link
+          href="/interviews"
+          className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white border border-slate-200 hover:border-orange-400 text-slate-700 hover:text-orange-600 text-xs font-bold transition-all shadow-2xs whitespace-nowrap cursor-pointer"
+        >
+          <Users className="w-4 h-4 text-blue-500" />
+          <span>Interviews &amp; Candidates</span>
+        </Link>
+        <Link
+          href="/recruitment-tracker"
+          className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white border border-slate-200 hover:border-orange-400 text-slate-700 hover:text-orange-600 text-xs font-bold transition-all shadow-2xs whitespace-nowrap cursor-pointer"
+        >
+          <Target className="w-4 h-4 text-indigo-500" />
+          <span>Onboarding Pipeline</span>
+        </Link>
+        <Link
+          href="/dropouts"
+          className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white border border-slate-200 hover:border-rose-400 text-slate-700 hover:text-rose-600 text-xs font-bold transition-all shadow-2xs whitespace-nowrap cursor-pointer"
+        >
+          <UserX className="w-4 h-4 text-rose-500" />
+          <span>Dropout Tracker ({dropoutsCount})</span>
+        </Link>
+        <Link
+          href="/daily-reports"
+          className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white border border-slate-200 hover:border-amber-400 text-slate-700 hover:text-amber-600 text-xs font-bold transition-all shadow-2xs whitespace-nowrap cursor-pointer"
+        >
+          <FileText className="w-4 h-4 text-amber-500" />
+          <span>Daily Reports ({dailyReportsCount})</span>
+        </Link>
+      </div>
+
       {/* Stat Cards Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         {/* TOTAL CANDIDATES */}
         <button
           onClick={() => setActiveCardFilter(activeCardFilter === 'all' ? null : 'all')}
@@ -509,7 +588,7 @@ export function VeenaDashboard() {
           </div>
         </button>
 
-        {/* JOINED */}
+        {/* JOINED & SELECTED */}
         <button
           onClick={() => setActiveCardFilter(activeCardFilter === 'status:Joined' ? null : 'status:Joined')}
           className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
@@ -517,8 +596,11 @@ export function VeenaDashboard() {
           }`}
         >
           <div>
-            <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">JOINED</div>
+            <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">JOINED &amp; OFFERS</div>
             <div className="text-3xl font-black text-emerald-600 mt-1">{joinedCount}</div>
+            <div className="text-[10px] font-bold text-emerald-700 mt-1">
+              {selectedCount} Offers Released
+            </div>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
             <CheckCircle2 className="w-6 h-6" />
@@ -535,27 +617,48 @@ export function VeenaDashboard() {
           <div>
             <div className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">IN PROGRESS</div>
             <div className="text-3xl font-black text-blue-600 mt-1">{inProgressCount}</div>
+            <div className="text-[10px] font-bold text-blue-700 mt-1">
+              Screening &amp; Interviews
+            </div>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
             <TrendingUp className="w-6 h-6" />
           </div>
         </button>
 
-        {/* SELECTED */}
-        <button
-          onClick={() => setActiveCardFilter(activeCardFilter === 'status:Selected' ? null : 'status:Selected')}
-          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
-            activeCardFilter === 'status:Selected' ? 'bg-amber-50 border-amber-400 ring-2 ring-amber-200' : 'bg-white border-amber-200 hover:border-amber-400'
-          }`}
+        {/* DROPOUTS TRACKER */}
+        <Link
+          href="/dropouts"
+          className="p-5 rounded-3xl border border-slate-200 hover:border-rose-400 bg-white hover:bg-rose-50/30 shadow-xs flex items-center justify-between text-left transition-all cursor-pointer group"
         >
           <div>
-            <div className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">SELECTED</div>
-            <div className="text-3xl font-black text-amber-600 mt-1">{selectedCount}</div>
+            <div className="text-[11px] font-bold text-rose-600 uppercase tracking-wider">DROPOUT CASES</div>
+            <div className="text-3xl font-black text-rose-600 mt-1">{dropoutsCount}</div>
+            <div className="text-[10px] font-bold text-rose-500 mt-1">
+              {dropoutRate}% Dropout Rate
+            </div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600">
-            <Award className="w-6 h-6" />
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 border border-rose-200 flex items-center justify-center text-rose-600 group-hover:scale-105 transition-transform">
+            <UserX className="w-6 h-6" />
           </div>
-        </button>
+        </Link>
+
+        {/* DAILY WORK REPORTS */}
+        <Link
+          href="/daily-reports"
+          className="p-5 rounded-3xl border border-slate-200 hover:border-amber-400 bg-white hover:bg-amber-50/30 shadow-xs flex items-center justify-between text-left transition-all cursor-pointer group"
+        >
+          <div>
+            <div className="text-[11px] font-bold text-amber-600 uppercase tracking-wider">DAILY REPORTS</div>
+            <div className="text-3xl font-black text-amber-600 mt-1">{dailyReportsCount}</div>
+            <div className="text-[10px] font-bold text-amber-700 mt-1">
+              Submitted Work Logs
+            </div>
+          </div>
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 border border-amber-200 flex items-center justify-center text-amber-600 group-hover:scale-105 transition-transform">
+            <FileText className="w-6 h-6" />
+          </div>
+        </Link>
       </div>
 
       {/* Control Bar: Search, Filters, Refresh, Import, Template, Add Candidate */}
@@ -587,7 +690,7 @@ export function VeenaDashboard() {
 
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={loadCandidates}
+            onClick={loadAllData}
             className="p-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 transition-colors cursor-pointer"
             title="Refresh List"
           >
@@ -636,6 +739,7 @@ export function VeenaDashboard() {
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wider">
               <tr>
+                <th className="py-3.5 px-4">CANDIDATE ID</th>
                 <th className="py-3.5 px-4">EMPLOYEE NAME</th>
                 <th className="py-3.5 px-4">MOBILE NUMBER</th>
                 <th className="py-3.5 px-4">EMAIL</th>
@@ -659,19 +763,20 @@ export function VeenaDashboard() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={18} className="py-8 text-center text-slate-400 font-medium">
+                  <td colSpan={19} className="py-8 text-center text-slate-400 font-medium">
                     Loading Candidate Register...
                   </td>
                 </tr>
               ) : filteredCandidates.length === 0 ? (
                 <tr>
-                  <td colSpan={18} className="py-12 text-center text-slate-400">
+                  <td colSpan={19} className="py-12 text-center text-slate-400">
                     No candidate records found. Click "+ Add Candidate" or "Import XLSX" to add records.
                   </td>
                 </tr>
               ) : (
-                paginatedCandidates.map((c) => (
-                  <tr key={c.id} className="hover:bg-orange-50/20 transition-colors">
+                paginatedCandidates.map((c, idx) => (
+                  <tr key={c.id || idx} className="hover:bg-orange-50/20 transition-colors">
+                    <td className="py-3 px-4 font-mono font-bold text-slate-700 whitespace-nowrap">{c.id || `CAN-${String(idx + 1).padStart(3, '0')}`}</td>
                     <td className="py-3 px-4 font-extrabold text-slate-900 whitespace-nowrap">{c.candidateName}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.phoneNumber || '-'}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.email || '-'}</td>

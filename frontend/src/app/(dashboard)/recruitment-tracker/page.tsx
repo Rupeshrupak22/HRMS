@@ -185,7 +185,11 @@ export default function RecruitmentTrackerPage() {
         joining: cols[15] || '', onboarding: cols[16] || '', remarks: cols[17] || '',
       };
     });
-    setEntries((prev) => [...newEntries, ...prev]);
+    const updated = [...newEntries, ...entries];
+    setEntries(updated);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('adyapan_recruitment_candidates', JSON.stringify(updated));
+    }
   };
 
   const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -235,9 +239,9 @@ export default function RecruitmentTrackerPage() {
               <UserCheck className="w-5 h-5" />
             </div>
             <div>
-              <h1 className="text-xl font-black tracking-tight">Recruitment &amp; Onboarding</h1>
+              <h1 className="text-xl font-black tracking-tight">Onboarding Pipeline</h1>
               <p className="text-[11px] text-orange-100 font-medium">
-                End-to-end recruitment pipeline — from application to onboarding
+                End-to-end onboarding pipeline — candidate stages from selection to joined
               </p>
             </div>
           </div>
@@ -431,6 +435,7 @@ export default function RecruitmentTrackerPage() {
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="bg-gradient-to-r from-slate-50 to-slate-100/50 border-b border-slate-200">
+                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Candidate ID</th>
                 <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Employee Name</th>
                 <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Mobile Number</th>
                 <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Email</th>
@@ -454,15 +459,13 @@ export default function RecruitmentTrackerPage() {
             <tbody className="divide-y divide-slate-100">
               {paginatedEntries.map((entry) => (
                 <tr key={entry.id} className="hover:bg-orange-50/40 transition-all group">
+                  <td className="py-3.5 px-4 font-mono font-bold text-slate-700 whitespace-nowrap text-[11px]">{entry.id}</td>
                   <td className="py-3.5 px-4">
                     <div className="flex items-center gap-2.5">
                       <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white text-[10px] font-black flex-shrink-0">
                         {entry.employeeName.split(' ').map(n => n[0]).join('').slice(0, 2)}
                       </div>
-                      <div>
-                        <div className="font-bold text-slate-900 whitespace-nowrap text-[11px]">{entry.employeeName}</div>
-                        <div className="text-[10px] text-slate-400 font-mono">{entry.id}</div>
-                      </div>
+                      <div className="font-bold text-slate-900 whitespace-nowrap text-[11px]">{entry.employeeName}</div>
                     </div>
                   </td>
                   <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap font-medium text-[11px]">{entry.mobileNumber}</td>

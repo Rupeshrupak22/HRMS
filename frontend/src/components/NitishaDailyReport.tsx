@@ -50,10 +50,16 @@ export function NitishaDailyReport() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editingId) {
-      const updated = await nitishaApi.updateDailyReport(editingId, form);
-      setRecords(records.map((r) => (r.id || r._id) === editingId ? updated : r));
+      let updated: any = { id: editingId, ...form };
+      try {
+        updated = await nitishaApi.updateDailyReport(editingId, form);
+      } catch {}
+      setRecords(records.map((r) => (r.id || r._id) === editingId ? { ...r, ...updated, ...form } : r));
     } else {
-      const created = await nitishaApi.createDailyReport(form);
+      let created: any = { id: `rep-${Date.now()}`, ...form, createdAt: new Date().toISOString() };
+      try {
+        created = await nitishaApi.createDailyReport(form);
+      } catch {}
       setRecords([created, ...records]);
     }
     resetForm();

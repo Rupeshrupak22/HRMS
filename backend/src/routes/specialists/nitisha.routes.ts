@@ -35,7 +35,8 @@ function crud(model: any, filename: string) {
     getAll: async (req: AuthRequest, res: Response, next: any) => {
       try {
         const where: any = {};
-        if (req.user!.role === 'HR_EXECUTIVE') {
+        const isNitishaLead = req.user!.email === 'nitisha@adyapan.com' || req.user!.specialization === 'DISCIPLINE_POSH' || ['SUPER_ADMIN', 'HR_ADMIN'].includes(req.user!.role);
+        if (!isNitishaLead && req.user!.role === 'HR_EXECUTIVE') {
           where.createdByEmail = req.user!.email;
         }
         let list: any[] = [];
@@ -121,7 +122,8 @@ router.get('/issues', async (req: AuthRequest, res: Response) => {
     let dbList: any[] = [];
     if ((prisma as any).employeeIssue) {
       const where: any = {};
-      if (req.user!.role === 'HR_EXECUTIVE') {
+      const isNitishaLead = req.user!.email === 'nitisha@adyapan.com' || req.user!.specialization === 'DISCIPLINE_POSH' || ['SUPER_ADMIN', 'HR_ADMIN'].includes(req.user!.role);
+      if (!isNitishaLead && req.user!.role === 'HR_EXECUTIVE') {
         where.createdByEmail = req.user!.email;
       }
       dbList = await (prisma as any).employeeIssue.findMany({ where, orderBy: { createdAt: 'desc' } });
