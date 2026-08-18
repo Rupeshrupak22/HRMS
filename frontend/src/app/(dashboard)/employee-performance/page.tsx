@@ -1,13 +1,18 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { Plus, X, Pencil, Trash2, TrendingUp } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Plus, X, Pencil, Trash2, TrendingUp, Search } from 'lucide-react';
 import { nitishaApi } from '@/lib/nitisha-api';
+import { Pagination } from '@/components/Pagination';
 
 export default function EmployeePerformancePage() {
   const [records, setRecords] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
+
   const [form, setForm] = useState({
     employeeName: '',
     joiningDate: '',
@@ -18,8 +23,11 @@ export default function EmployeePerformancePage() {
     dailyPerformance: '',
     weeklyPerformance: '',
     monthlyPerformance: '',
+    dailyRevenue: '',
+    weeklyRevenue: '',
     monthlyRevenue: '',
     pipCase: '',
+    furtherActions: '',
     // PIP Yes fields
     reasonForPip: '',
     performanceGap: '',
@@ -27,27 +35,38 @@ export default function EmployeePerformancePage() {
     improvementAction: '',
     managerRemark: '',
     finalRemark: '',
-    // PIP No fields
-    furtherActions: '',
-    employeeIssue: '',
-    employeeExplanation: '',
-    factFinding: '',
-    managerExplanation: '',
-    myExplanation: '',
   });
 
   useEffect(() => {
     nitishaApi.getPerformances().then(setRecords).catch(() => {});
   }, []);
 
+  const filteredRecords = useMemo(() => {
+    return records.filter((r) => {
+      const q = searchTerm.toLowerCase().trim();
+      if (!q) return true;
+      return (
+        (r.employeeName || '').toLowerCase().includes(q) ||
+        (r.employeeId || '').toLowerCase().includes(q) ||
+        (r.department || '').toLowerCase().includes(q) ||
+        (r.designation || '').toLowerCase().includes(q) ||
+        (r.kpi || '').toLowerCase().includes(q)
+      );
+    });
+  }, [records, searchTerm]);
+
+  const paginatedRecords = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredRecords.slice(start, start + PAGE_SIZE);
+  }, [filteredRecords, page]);
+
   const resetForm = () => {
     setForm({
       employeeName: '', joiningDate: '', employeeId: '', department: '', designation: '',
       kpi: '', dailyPerformance: '', weeklyPerformance: '', monthlyPerformance: '',
-      monthlyRevenue: '', pipCase: '', reasonForPip: '', performanceGap: '',
-      currentPerformance: '', improvementAction: '', managerRemark: '', finalRemark: '',
-      furtherActions: '', employeeIssue: '', employeeExplanation: '', factFinding: '',
-      managerExplanation: '', myExplanation: '',
+      dailyRevenue: '', weeklyRevenue: '', monthlyRevenue: '', pipCase: '', furtherActions: '',
+      reasonForPip: '', performanceGap: '', currentPerformance: '', improvementAction: '',
+      managerRemark: '', finalRemark: '',
     });
     setEditingId(null);
     setShowForm(false);
@@ -55,7 +74,28 @@ export default function EmployeePerformancePage() {
 
   const handleEdit = (record: any) => {
     const { id, _id, ...rest } = record;
-    setForm({ ...form, ...rest });
+    setForm({
+      employeeName: rest.employeeName || '',
+      joiningDate: rest.joiningDate || '',
+      employeeId: rest.employeeId || '',
+      department: rest.department || '',
+      designation: rest.designation || '',
+      kpi: rest.kpi || '',
+      dailyPerformance: rest.dailyPerformance || '',
+      weeklyPerformance: rest.weeklyPerformance || '',
+      monthlyPerformance: rest.monthlyPerformance || '',
+      dailyRevenue: rest.dailyRevenue || '',
+      weeklyRevenue: rest.weeklyRevenue || '',
+      monthlyRevenue: rest.monthlyRevenue || '',
+      pipCase: rest.pipCase || '',
+      furtherActions: rest.furtherActions || '',
+      reasonForPip: rest.reasonForPip || '',
+      performanceGap: rest.performanceGap || '',
+      currentPerformance: rest.currentPerformance || '',
+      improvementAction: rest.improvementAction || '',
+      managerRemark: rest.managerRemark || '',
+      finalRemark: rest.finalRemark || '',
+    });
     setEditingId(id || _id);
     setShowForm(true);
   };
@@ -68,15 +108,30 @@ export default function EmployeePerformancePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const isTechOrHR = form.department === 'Tech' || form.department === 'HR';
+    const payload = {
+      ...form,
+      dailyPerformance: isTechOrHR ? '' : form.dailyPerformance,
+      weeklyPerformance: isTechOrHR ? '' : form.weeklyPerformance,
+      // Only Sales gets dailyRevenue
+      dailyRevenue: form.department === 'Sales' ? form.dailyRevenue : '',
+      // Sales and Operation get weekly and monthly revenue
+      weeklyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.weeklyRevenue : '',
+      monthlyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.monthlyRevenue : '',
+    };
     if (editingId) {
-      const updated = await nitishaApi.updatePerformance(editingId, form);
-      setRecords(records.map((r) => (r.id || r._id) === editingId ? updated : r));
+      const updated = await nitishaApi.updatePerformance(editingId, payload);
+      setRecords(records.map((r) => (r.id || r._id) === editingId ? { ...r, ...updated, ...payload } : r));
     } else {
-      const created = await nitishaApi.createPerformance(form);
+      const created = await nitishaApi.createPerformance(payload);
       setRecords([created, ...records]);
     }
     resetForm();
   };
+
+  const isSales = form.department === 'Sales';
+  const isRevenueDept = form.department === 'Sales' || form.department === 'Operation';
+  const showDailyWeeklyPerf = form.department !== 'Tech' && form.department !== 'HR';
 
   return (
     <div className="space-y-6">
@@ -90,13 +145,25 @@ export default function EmployeePerformancePage() {
             Track KPIs, performance reviews, PIP cases, and disciplinary actions
           </p>
         </div>
-        <button
-          onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition-colors shadow-md cursor-pointer"
-        >
-          {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {showForm ? 'Cancel' : 'Add Performance Record'}
-        </button>
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search performance..."
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+              className="pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-xs"
+            />
+          </div>
+          <button
+            onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition-colors shadow-md cursor-pointer"
+          >
+            {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {showForm ? 'Cancel' : 'Add Performance Record'}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -117,7 +184,18 @@ export default function EmployeePerformancePage() {
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">Department *</label>
-              <input type="text" required value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+              <select
+                required
+                value={form.department}
+                onChange={(e) => setForm({ ...form, department: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
+              >
+                <option value="">Select Department</option>
+                <option value="Sales">Sales</option>
+                <option value="Tech">Tech</option>
+                <option value="Operation">Operation</option>
+                <option value="HR">HR</option>
+              </select>
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">Designation *</label>
@@ -127,22 +205,69 @@ export default function EmployeePerformancePage() {
               <label className="block text-xs font-semibold text-slate-600 mb-1">KPI *</label>
               <input type="text" required value={form.kpi} onChange={(e) => setForm({ ...form, kpi: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Daily Performance *</label>
-              <input type="text" required value={form.dailyPerformance} onChange={(e) => setForm({ ...form, dailyPerformance: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Weekly Performance *</label>
-              <input type="text" required value={form.weeklyPerformance} onChange={(e) => setForm({ ...form, weeklyPerformance: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-            </div>
+
+            {/* Daily & Weekly Performance - Hidden for Tech and HR */}
+            {showDailyWeeklyPerf && (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Daily Performance *</label>
+                  <input type="text" required value={form.dailyPerformance} onChange={(e) => setForm({ ...form, dailyPerformance: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Weekly Performance *</label>
+                  <input type="text" required value={form.weeklyPerformance} onChange={(e) => setForm({ ...form, weeklyPerformance: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
+                </div>
+              </>
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">Monthly Performance *</label>
               <input type="text" required value={form.monthlyPerformance} onChange={(e) => setForm({ ...form, monthlyPerformance: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Monthly Revenue *</label>
-              <input type="text" required value={form.monthlyRevenue} onChange={(e) => setForm({ ...form, monthlyRevenue: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-            </div>
+
+            {/* Daily Revenue - ONLY for Sales */}
+            {isSales && (
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Daily Revenue *</label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. ₹10,000"
+                  value={form.dailyRevenue}
+                  onChange={(e) => setForm({ ...form, dailyRevenue: e.target.value })}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                />
+              </div>
+            )}
+
+            {/* Weekly & Monthly Revenue - For Sales and Operation */}
+            {isRevenueDept && (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Weekly Revenue *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. ₹50,000"
+                    value={form.weeklyRevenue}
+                    onChange={(e) => setForm({ ...form, weeklyRevenue: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Monthly Revenue *</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. ₹2,00,000"
+                    value={form.monthlyRevenue}
+                    onChange={(e) => setForm({ ...form, monthlyRevenue: e.target.value })}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                  />
+                </div>
+              </>
+            )}
+
             <div>
               <label className="block text-xs font-semibold text-slate-600 mb-1">PIP Case *</label>
               <select required value={form.pipCase} onChange={(e) => setForm({ ...form, pipCase: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
@@ -150,6 +275,18 @@ export default function EmployeePerformancePage() {
                 <option value="Yes">Yes</option>
                 <option value="No">No</option>
               </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Further Actions *</label>
+              <input
+                type="text"
+                required
+                placeholder="e.g. Warning letter issued / Mentorship"
+                value={form.furtherActions}
+                onChange={(e) => setForm({ ...form, furtherActions: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
             </div>
           </div>
 
@@ -182,33 +319,6 @@ export default function EmployeePerformancePage() {
             </div>
           )}
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2 border-t border-slate-100">
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Further Actions *</label>
-              <input type="text" required value={form.furtherActions} onChange={(e) => setForm({ ...form, furtherActions: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Employee Issue *</label>
-              <input type="text" required value={form.employeeIssue} onChange={(e) => setForm({ ...form, employeeIssue: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Employee Explanation *</label>
-              <input type="text" required value={form.employeeExplanation} onChange={(e) => setForm({ ...form, employeeExplanation: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Fact Finding *</label>
-              <input type="text" required value={form.factFinding} onChange={(e) => setForm({ ...form, factFinding: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Manager Explanation *</label>
-              <input type="text" required value={form.managerExplanation} onChange={(e) => setForm({ ...form, managerExplanation: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">My Explanation *</label>
-              <input type="text" required value={form.myExplanation} onChange={(e) => setForm({ ...form, myExplanation: e.target.value })} className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500" />
-            </div>
-          </div>
-
           <button type="submit" className="px-5 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition-colors cursor-pointer">
             {editingId ? 'Update Performance Record' : 'Save Performance Record'}
           </button>
@@ -228,41 +338,70 @@ export default function EmployeePerformancePage() {
                 <th className="px-4 py-3 text-left font-bold text-slate-600">Daily</th>
                 <th className="px-4 py-3 text-left font-bold text-slate-600">Weekly</th>
                 <th className="px-4 py-3 text-left font-bold text-slate-600">Monthly</th>
-                <th className="px-4 py-3 text-left font-bold text-slate-600">Revenue</th>
+                <th className="px-4 py-3 text-left font-bold text-slate-600">Daily Rev</th>
+                <th className="px-4 py-3 text-left font-bold text-slate-600">Weekly Rev</th>
+                <th className="px-4 py-3 text-left font-bold text-slate-600">Monthly Rev</th>
                 <th className="px-4 py-3 text-left font-bold text-slate-600">PIP</th>
+                <th className="px-4 py-3 text-left font-bold text-slate-600">Further Actions</th>
                 <th className="px-4 py-3 text-left font-bold text-slate-600">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {records.map((r) => (
-                <tr key={r.id || r._id} className="border-b border-slate-100 hover:bg-orange-50/30">
-                  <td className="px-4 py-3 font-semibold text-slate-800">{r.employeeName}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.employeeId}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.department}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.designation}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.kpi}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.dailyPerformance}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.weeklyPerformance}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.monthlyPerformance}</td>
-                  <td className="px-4 py-3 text-slate-700">{r.monthlyRevenue}</td>
-                  <td className="px-4 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.pipCase === 'Yes' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                      {r.pipCase}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <button onClick={() => handleEdit(r)} className="p-1.5 rounded-lg hover:bg-orange-100 text-orange-600 transition-colors cursor-pointer" title="Edit">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => handleDelete(r.id || r._id)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500 transition-colors cursor-pointer" title="Delete">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+              {paginatedRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={14} className="px-4 py-8 text-center text-slate-400">
+                    No performance records found. Click &quot;Add Performance Record&quot; to create one.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                paginatedRecords.map((r) => (
+                  <tr key={r.id || r._id} className="border-b border-slate-100 hover:bg-orange-50/30">
+                    <td className="px-4 py-3 font-semibold text-slate-800">{r.employeeName}</td>
+                    <td className="px-4 py-3 text-slate-700">{r.employeeId}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                        r.department === 'Sales' ? 'bg-blue-100 text-blue-700' :
+                        r.department === 'Tech' ? 'bg-purple-100 text-purple-700' :
+                        r.department === 'Operation' ? 'bg-amber-100 text-amber-700' :
+                        'bg-emerald-100 text-emerald-700'
+                      }`}>
+                        {r.department || '—'}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-700">{r.designation}</td>
+                    <td className="px-4 py-3 text-slate-700">{r.kpi}</td>
+                    <td className="px-4 py-3 text-slate-700">{r.dailyPerformance || '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{r.weeklyPerformance || '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{r.monthlyPerformance}</td>
+                    <td className="px-4 py-3 text-slate-700 font-mono">{r.dailyRevenue || '—'}</td>
+                    <td className="px-4 py-3 text-slate-700 font-mono">{r.weeklyRevenue || '—'}</td>
+                    <td className="px-4 py-3 text-slate-700 font-mono">{r.monthlyRevenue || '—'}</td>
+                    <td className="px-4 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.pipCase === 'Yes' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                        {r.pipCase}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3 text-slate-700 max-w-[150px] truncate" title={r.furtherActions}>{r.furtherActions || '—'}</td>
+                    <td className="px-4 py-3">
+                      <button onClick={() => handleEdit(r)} className="p-1.5 rounded-lg hover:bg-orange-100 text-orange-600 transition-colors cursor-pointer" title="Edit">
+                        <Pencil className="w-3.5 h-3.5" />
+                      </button>
+                      <button onClick={() => handleDelete(r.id || r._id)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500 transition-colors cursor-pointer" title="Delete">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
+        <Pagination
+          currentPage={page}
+          totalItems={filteredRecords.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

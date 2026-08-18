@@ -24,6 +24,8 @@ import {
   MessageSquareWarning,
   ClipboardList,
   UserX,
+  UserMinus,
+  AlertCircle,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -40,6 +42,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   const nitishaNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Employee Performance', href: '/employee-performance', icon: Target },
+    { label: 'Employee Issue', href: '/employee-issues', icon: AlertCircle },
     { label: 'Discipline', href: '/discipline', icon: ShieldAlert },
     { label: 'Relations', href: '/relations', icon: Users },
     { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
@@ -50,6 +53,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
     { label: 'Retention', href: '/retention', icon: ShieldAlert },
     { label: 'Resignation', href: '/resignation', icon: UserX },
+    { label: 'Abscond', href: '/abscond', icon: UserMinus },
     { label: 'Exit', href: '/exit', icon: LogOut },
     { label: 'F&F', href: '/fnf', icon: CreditCard },
     { label: 'Employee Complaints', href: '/employee-complaints', icon: MessageSquareWarning },
@@ -94,10 +98,10 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   // Veena-specific navigation (Onboarding & Hiring)
   const veenaNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { label: 'Onboarding Pipeline', href: '/onboarding', icon: UserPlus },
-    { label: 'Interviews & Candidates', href: '/interviews', icon: Users },
-    { label: 'Dropout Tracker', href: '/dropouts', icon: UserX },
     { label: 'Recruitment Tracker', href: '/recruitment-tracker', icon: UserPlus },
+    { label: 'Interviews & Candidates', href: '/interviews', icon: Users },
+    { label: 'Onboarding Pipeline', href: '/onboarding', icon: Target },
+    { label: 'Dropout Tracker', href: '/dropouts', icon: UserX },
     { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
   ];
 
@@ -135,9 +139,9 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   ];
 
   // Use specialist-specific nav based on specialization
-  const isAravind = user?.specialization === 'RESIGNATION_EXIT';
-  const isNitisha = user?.specialization === 'DISCIPLINE_POSH';
-  const isVeena = user?.specialization === 'ONBOARDING_HIRING';
+  const isAravind = user?.specialization === 'RESIGNATION_EXIT' || user?.email === 'aravind@adyapan.com';
+  const isNitisha = user?.specialization === 'DISCIPLINE_POSH' || user?.email === 'nitisha@adyapan.com';
+  const isVeena = user?.specialization === 'ONBOARDING_HIRING' || user?.email === 'veena@adyapan.com';
   const isPavitra = user?.specialization === 'ATTENDANCE_LEAVE' || user?.email === 'pavitra@adyapan.com';
   const isCharitha = user?.specialization === 'SALARY_PAYROLL' || user?.email === 'charitha@adyapan.com';
   const isNandini = user?.specialization === 'HR_MANAGER_ALL' || user?.email === 'nandini@adyapan.com' || user?.email === 'nandani@adyapan.com';

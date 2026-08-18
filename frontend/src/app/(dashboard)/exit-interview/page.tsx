@@ -1,8 +1,9 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { ClipboardList, Plus, X, Pencil, Trash2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { ClipboardList, Plus, X, Pencil, Trash2, Search, Download } from 'lucide-react';
 import { aravindApi } from '@/lib/aravind-api';
+import { Pagination } from '@/components/Pagination';
 
 interface ExitInterviewRecord {
   id: string;
@@ -17,51 +18,31 @@ interface ExitInterviewRecord {
   rehireEligibility: string;
 }
 
-const initialData: ExitInterviewRecord[] = [
-  {
-    id: '1',
-    employeeId: 'EMP-056',
-    name: 'Ishan Abhinav',
-    department: 'Sales',
-    designation: 'Sales Intern',
-    reason: 'Personal reasons',
-    managerFeedback: 'Good performer, leaving for personal reasons',
-    employeeFeedback: 'Positive work culture, need better stipend',
-    interviewDate: '2026-08-05',
-    rehireEligibility: 'Yes',
-  },
-  {
-    id: '2',
-    employeeId: 'EMP-088',
-    name: 'Ramesh Kumar',
-    department: 'Sales',
-    designation: 'Sales Executive',
-    reason: 'Higher education',
-    managerFeedback: 'Consistent performer, relocating',
-    employeeFeedback: 'Great team, wish I could continue remotely',
-    interviewDate: '2026-08-08',
-    rehireEligibility: 'Yes',
-  },
-];
-
 export default function ExitInterviewPage() {
   const [records, setRecords] = useState<ExitInterviewRecord[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [rehireFilter, setRehireFilter] = useState('ALL');
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 20;
+
   const [form, setForm] = useState<Omit<ExitInterviewRecord, 'id'>>({
     employeeId: '', name: '', department: '', designation: '', reason: '',
-    managerFeedback: '', employeeFeedback: '', interviewDate: '', rehireEligibility: '',
+    managerFeedback: '', employeeFeedback: '', interviewDate: '', rehireEligibility: 'Yes',
   });
 
   const resetForm = () => {
-    setForm({ employeeId: '', name: '', department: '', designation: '', reason: '',
-      managerFeedback: '', employeeFeedback: '', interviewDate: '', rehireEligibility: '' });
+    setForm({
+      employeeId: '', name: '', department: '', designation: '', reason: '',
+      managerFeedback: '', employeeFeedback: '', interviewDate: '', rehireEligibility: 'Yes',
+    });
     setEditingId(null);
     setShowForm(false);
   };
 
   useEffect(() => {
-    aravindApi.getExitInterview().then(setRecords).catch(() => {});
+    aravindApi.getExitInterview().then((data) => setRecords(Array.isArray(data) ? data : [])).catch(() => setRecords([]));
   }, []);
 
   const handleEdit = (record: ExitInterviewRecord) => {
@@ -81,12 +62,70 @@ export default function ExitInterviewPage() {
     e.preventDefault();
     if (editingId) {
       const updated = await aravindApi.updateExitInterview(editingId, form);
-      setRecords(records.map((r) => r.id === editingId ? updated : r));
+      setRecords(records.map((r) => r.id === editingId ? { ...r, ...updated, ...form } : r));
     } else {
       const created = await aravindApi.createExitInterview(form);
       setRecords([created, ...records]);
     }
     resetForm();
+  };
+
+  const filteredRecords = useMemo(() => {
+    return records.filter((r) => {
+      const q = searchTerm.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        (r.name || '').toLowerCase().includes(q) ||
+        (r.employeeId || '').toLowerCase().includes(q) ||
+        (r.department || '').toLowerCase().includes(q) ||
+        (r.designation || '').toLowerCase().includes(q) ||
+        (r.reason || '').toLowerCase().includes(q) ||
+        (r.employeeFeedback || '').toLowerCase().includes(q);
+
+      const matchesRehire = rehireFilter === 'ALL' || r.rehireEligibility === rehireFilter;
+      return matchesSearch && matchesRehire;
+    });
+  }, [records, searchTerm, rehireFilter]);
+
+  const paginatedRecords = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredRecords.slice(start, start + PAGE_SIZE);
+  }, [filteredRecords, page]);
+
+  const handleExportCSV = () => {
+    if (records.length === 0) return;
+    const headers = [
+      'Emp ID',
+      'Name',
+      'Department',
+      'Designation',
+      'Reason',
+      'Manager Feedback',
+      'Employee Feedback',
+      'Interview Date',
+      'Rehire Eligibility',
+    ];
+
+    const rows = filteredRecords.map((r) => [
+      `"${r.employeeId || ''}"`,
+      `"${r.name || ''}"`,
+      `"${r.department || ''}"`,
+      `"${r.designation || ''}"`,
+      `"${(r.reason || '').replace(/"/g, '""')}"`,
+      `"${(r.managerFeedback || '').replace(/"/g, '""')}"`,
+      `"${(r.employeeFeedback || '').replace(/"/g, '""')}"`,
+      `"${r.interviewDate || ''}"`,
+      `"${r.rehireEligibility || ''}"`,
+    ]);
+
+    const csvContent = [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `exit_interviews_${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -101,11 +140,51 @@ export default function ExitInterviewPage() {
             Conduct and record exit interviews, feedback analysis, and rehire eligibility
           </p>
         </div>
-        <button onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition-colors shadow-md cursor-pointer">
-          {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
-          {showForm ? 'Cancel' : 'Add Exit Interview'}
-        </button>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search exit interviews..."
+              value={searchTerm}
+              onChange={(e) => {
+                setSearchTerm(e.target.value);
+                setPage(1);
+              }}
+              className="pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-xs"
+            />
+          </div>
+
+          <select
+            value={rehireFilter}
+            onChange={(e) => {
+              setRehireFilter(e.target.value);
+              setPage(1);
+            }}
+            className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer shadow-xs"
+          >
+            <option value="ALL">All Rehire</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+            <option value="Conditional">Conditional</option>
+          </select>
+
+          <button
+            onClick={handleExportCSV}
+            disabled={records.length === 0}
+            className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-white border border-slate-200 text-slate-700 hover:bg-slate-50 text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50"
+          >
+            <Download className="w-3.5 h-3.5 text-slate-500" />
+            <span>Export CSV</span>
+          </button>
+
+          <button onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition-colors shadow-md cursor-pointer">
+            {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
+            {showForm ? 'Cancel' : 'Add Exit Interview'}
+          </button>
+        </div>
       </div>
 
       {showForm && (
@@ -136,8 +215,7 @@ export default function ExitInterviewPage() {
               <label className="block text-xs font-semibold text-slate-600 mb-1">Rehire Eligibility *</label>
               <select required value={form.rehireEligibility}
                 onChange={(e) => setForm({ ...form, rehireEligibility: e.target.value })}
-                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500">
-                <option value="">Select</option>
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer">
                 <option value="Yes">Yes</option>
                 <option value="No">No</option>
                 <option value="Conditional">Conditional</option>
@@ -180,32 +258,49 @@ export default function ExitInterviewPage() {
               </tr>
             </thead>
             <tbody>
-              {records.map((r) => (
-                <tr key={r.id} className="border-b border-slate-100 hover:bg-orange-50/30">
-                  <td className="px-3 py-3 font-semibold text-slate-800">{r.employeeId}</td>
-                  <td className="px-3 py-3 text-slate-700">{r.name}</td>
-                  <td className="px-3 py-3 text-slate-700">{r.department}</td>
-                  <td className="px-3 py-3 text-slate-700">{r.designation}</td>
-                  <td className="px-3 py-3 text-slate-700">{r.reason}</td>
-                  <td className="px-3 py-3 text-slate-700 max-w-[180px] truncate">{r.managerFeedback}</td>
-                  <td className="px-3 py-3 text-slate-700 max-w-[180px] truncate">{r.employeeFeedback}</td>
-                  <td className="px-3 py-3 text-slate-700">{r.interviewDate}</td>
-                  <td className="px-3 py-3">
-                    <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.rehireEligibility === 'Yes' ? 'bg-green-100 text-green-700' : r.rehireEligibility === 'No' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{r.rehireEligibility}</span>
-                  </td>
-                  <td className="px-3 py-3">
-                    <button onClick={() => handleEdit(r)} className="p-1.5 rounded-lg hover:bg-orange-100 text-orange-600 transition-colors cursor-pointer" title="Edit">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </button>
-                    <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500 transition-colors cursor-pointer" title="Delete">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+              {paginatedRecords.length === 0 ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
+                    No exit interview records found.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                paginatedRecords.map((r) => (
+                  <tr key={r.id} className="border-b border-slate-100 hover:bg-orange-50/30">
+                    <td className="px-3 py-3 font-semibold text-slate-800 font-mono">{r.employeeId}</td>
+                    <td className="px-3 py-3 text-slate-700 font-semibold">{r.name}</td>
+                    <td className="px-3 py-3 text-slate-700">{r.department}</td>
+                    <td className="px-3 py-3 text-slate-700">{r.designation}</td>
+                    <td className="px-3 py-3 text-slate-700">{r.reason}</td>
+                    <td className="px-3 py-3 text-slate-700 max-w-[180px] truncate" title={r.managerFeedback}>{r.managerFeedback}</td>
+                    <td className="px-3 py-3 text-slate-700 max-w-[180px] truncate" title={r.employeeFeedback}>{r.employeeFeedback}</td>
+                    <td className="px-3 py-3 text-slate-700">{r.interviewDate}</td>
+                    <td className="px-3 py-3">
+                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.rehireEligibility === 'Yes' ? 'bg-green-100 text-green-700' : r.rehireEligibility === 'No' ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-700'}`}>{r.rehireEligibility}</span>
+                    </td>
+                    <td className="px-3 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <button onClick={() => handleEdit(r)} className="p-1.5 rounded-lg hover:bg-orange-100 text-orange-600 transition-colors cursor-pointer" title="Edit">
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button onClick={() => handleDelete(r.id)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500 transition-colors cursor-pointer" title="Delete">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
             </tbody>
           </table>
         </div>
+
+        <Pagination
+          currentPage={page}
+          totalItems={filteredRecords.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
       </div>
     </div>
   );

@@ -31,6 +31,12 @@ export const nitishaApi = {
   updatePerformance: (id: string, data: any) => request(`/performance/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deletePerformance: (id: string) => request(`/performance/${id}`, { method: 'DELETE' }),
 
+  // Employee Issues
+  getIssues: () => request('/issues'),
+  createIssue: (data: any) => request('/issues', { method: 'POST', body: JSON.stringify(data) }),
+  updateIssue: (id: string, data: any) => request(`/issues/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteIssue: (id: string) => request(`/issues/${id}`, { method: 'DELETE' }),
+
   // Discipline
   getDiscipline: () => request('/discipline'),
   createDiscipline: (data: any) => request('/discipline', { method: 'POST', body: JSON.stringify(data) }),

@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, ShieldAlert, UserX, LogOut, CreditCard, MessageSquareWarning, ClipboardList, Calendar, Eye, X, Download } from 'lucide-react';
+import { FileText, ShieldAlert, UserX, UserMinus, LogOut, CreditCard, MessageSquareWarning, ClipboardList, Calendar, Eye, X, Download } from 'lucide-react';
 import { aravindApi } from '@/lib/aravind-api';
 import { apiRequest } from '@/lib/api';
 import { Pagination } from '@/components/Pagination';
@@ -9,6 +9,7 @@ import { Pagination } from '@/components/Pagination';
 export default function AravindReportPage() {
   const [retention, setRetention] = useState<any[]>([]);
   const [resignation, setResignation] = useState<any[]>([]);
+  const [abscond, setAbscond] = useState<any[]>([]);
   const [exit, setExit] = useState<any[]>([]);
   const [fnf, setFnf] = useState<any[]>([]);
   const [complaints, setComplaints] = useState<any[]>([]);
@@ -20,6 +21,7 @@ export default function AravindReportPage() {
   // Pagination states
   const [pageRet, setPageRet] = useState(1);
   const [pageRes, setPageRes] = useState(1);
+  const [pageAbs, setPageAbs] = useState(1);
   const [pageExit, setPageExit] = useState(1);
   const [pageFnf, setPageFnf] = useState(1);
   const [pageComp, setPageComp] = useState(1);
@@ -30,6 +32,7 @@ export default function AravindReportPage() {
   useEffect(() => {
     aravindApi.getRetention().then(setRetention).catch(() => {});
     aravindApi.getResignation().then(setResignation).catch(() => {});
+    aravindApi.getAbscond().then(setAbscond).catch(() => {});
     aravindApi.getExitClearance().then(setExit).catch(() => {});
     aravindApi.getFnF().then(setFnf).catch(() => {});
     aravindApi.getComplaints().then(setComplaints).catch(() => {});
@@ -56,13 +59,14 @@ export default function AravindReportPage() {
   const filterByDate = (records: any[]) => {
     if (!filterDate) return records;
     return records.filter((r) => {
-      const created = r.date || r.reportDate || r.dateOfResignation || (r.createdAt ? r.createdAt.split('T')[0] : '');
+      const created = r.date || r.reportDate || r.dateOfResignation || r.lastWorkingDay || (r.createdAt ? r.createdAt.split('T')[0] : '');
       return created === filterDate;
     });
   };
 
   const filteredRetention = filterByDate(retention);
   const filteredResignation = filterByDate(resignation);
+  const filteredAbscond = filterByDate(abscond);
   const filteredExit = filterByDate(exit);
   const filteredFnf = filterByDate(fnf);
   const filteredComplaints = filterByDate(complaints);
@@ -177,6 +181,38 @@ export default function AravindReportPage() {
               </table>
             </div>
             <Pagination currentPage={pageRes} totalItems={filteredResignation.length} pageSize={PAGE_SIZE} onPageChange={setPageRes} />
+          </div>
+        )}
+      </section>
+
+      {/* Abscond Cases Section */}
+      <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
+          <UserMinus className="w-4 h-4 text-rose-600" /> Abscond Cases ({filteredAbscond.length})
+        </h2>
+        {filteredAbscond.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No abscond records found.</p> : (
+          <div className="rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead><tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                  <th className="px-4 py-3">Emp ID</th>
+                  <th className="px-4 py-3">Name</th>
+                  <th className="px-4 py-3">Department</th>
+                  <th className="px-4 py-3">Designation</th>
+                  <th className="px-4 py-3">Manager</th>
+                </tr></thead>
+                <tbody className="divide-y divide-slate-100">{filteredAbscond.slice((pageAbs - 1) * PAGE_SIZE, pageAbs * PAGE_SIZE).map((r) => (
+                  <tr key={r.id || r._id} className="hover:bg-slate-50 transition">
+                    <td className="px-4 py-2.5 font-mono font-bold text-rose-700">{r.employeeId}</td>
+                    <td className="px-4 py-2.5 font-semibold text-slate-700">{r.name}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.department}</td>
+                    <td className="px-4 py-2.5 text-slate-600">{r.designation}</td>
+                    <td className="px-4 py-2.5 font-medium text-slate-800">{r.manager || '—'}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+            <Pagination currentPage={pageAbs} totalItems={filteredAbscond.length} pageSize={PAGE_SIZE} onPageChange={setPageAbs} />
           </div>
         )}
       </section>

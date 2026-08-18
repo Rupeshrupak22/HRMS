@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   ShieldAlert, UserX, LogOut, CreditCard,
   MessageSquareWarning, ClipboardList, FileText,
-  Send, TrendingUp, AlertCircle,
+  Send, TrendingUp, AlertCircle, UserMinus,
 } from 'lucide-react';
 import { aravindApi } from '@/lib/aravind-api';
 
@@ -15,6 +15,8 @@ interface Stats {
   retentionRetained: number;
   resignationTotal: number;
   resignationPending: number;
+  abscondTotal: number;
+  abscondPending: number;
   exitTotal: number;
   exitPending: number;
   fnfTotal: number;
@@ -29,6 +31,7 @@ export function AravindDashboard() {
   const [stats, setStats] = useState<Stats>({
     retentionTotal: 0, retentionOpen: 0, retentionRetained: 0,
     resignationTotal: 0, resignationPending: 0,
+    abscondTotal: 0, abscondPending: 0,
     exitTotal: 0, exitPending: 0,
     fnfTotal: 0, fnfPending: 0,
     complaintsTotal: 0, complaintsOpen: 0,
@@ -38,9 +41,10 @@ export function AravindDashboard() {
   useEffect(() => {
     async function load() {
       try {
-        const [retention, resignation, exit, fnf, complaints, interviews, reports] = await Promise.all([
+        const [retention, resignation, abscond, exit, fnf, complaints, interviews, reports] = await Promise.all([
           aravindApi.getRetention(),
           aravindApi.getResignation(),
+          aravindApi.getAbscond().catch(() => []),
           aravindApi.getExitClearance(),
           aravindApi.getFnF(),
           aravindApi.getComplaints(),
@@ -53,6 +57,8 @@ export function AravindDashboard() {
           retentionRetained: retention.filter((r: any) => r.retentionOutcome === 'Retained').length,
           resignationTotal: resignation.length,
           resignationPending: resignation.filter((r: any) => r.overall !== 'Completed').length,
+          abscondTotal: abscond.length,
+          abscondPending: abscond.filter((r: any) => r.status !== 'Terminated - Absconded' && r.status !== 'Rejoined / Recovered').length,
           exitTotal: exit.length,
           exitPending: exit.filter((r: any) => r.overallClearance !== 'Completed').length,
           fnfTotal: fnf.length,
@@ -70,6 +76,7 @@ export function AravindDashboard() {
   const cards = [
     { label: 'Retention Cases', value: stats.retentionTotal, sub: `${stats.retentionOpen} Open · ${stats.retentionRetained} Retained`, icon: ShieldAlert, color: 'amber', href: '/retention' },
     { label: 'Active Resignations', value: stats.resignationTotal, sub: `${stats.resignationPending} In Progress`, icon: UserX, color: 'red', href: '/resignation' },
+    { label: 'Abscond Cases', value: stats.abscondTotal, sub: `${stats.abscondPending} Under Notice`, icon: UserMinus, color: 'rose', href: '/abscond' },
     { label: 'Exit Clearances', value: stats.exitTotal, sub: `${stats.exitPending} Pending`, icon: LogOut, color: 'blue', href: '/exit' },
     { label: 'F&F Settlements', value: stats.fnfTotal, sub: `${stats.fnfPending} Payment Pending`, icon: CreditCard, color: 'emerald', href: '/fnf' },
     { label: 'Employee Complaints', value: stats.complaintsTotal, sub: `${stats.complaintsOpen} Open`, icon: MessageSquareWarning, color: 'purple', href: '/employee-complaints' },
@@ -80,6 +87,7 @@ export function AravindDashboard() {
   const colorMap: Record<string, { bg: string; border: string; text: string; iconBg: string }> = {
     amber: { bg: 'bg-amber-50', border: 'border-amber-200', text: 'text-amber-600', iconBg: 'bg-amber-100' },
     red: { bg: 'bg-red-50', border: 'border-red-200', text: 'text-red-600', iconBg: 'bg-red-100' },
+    rose: { bg: 'bg-rose-50', border: 'border-rose-200', text: 'text-rose-600', iconBg: 'bg-rose-100' },
     blue: { bg: 'bg-blue-50', border: 'border-blue-200', text: 'text-blue-600', iconBg: 'bg-blue-100' },
     emerald: { bg: 'bg-emerald-50', border: 'border-emerald-200', text: 'text-emerald-600', iconBg: 'bg-emerald-100' },
     purple: { bg: 'bg-purple-50', border: 'border-purple-200', text: 'text-purple-600', iconBg: 'bg-purple-100' },
@@ -99,11 +107,14 @@ export function AravindDashboard() {
             </span>
           </h1>
           <p className="text-xs text-orange-100 mt-1">
-            Notice period tracking, exit interview reviews, department no-dues & Full & Final (F&F) settlement calculation
+            Notice period tracking, abscond management, exit interview reviews, department no-dues & Full & Final (F&F) settlement
           </p>
         </div>
-        <div className="flex gap-2">
-          <Link href="/exit" className="px-4 py-2 rounded-xl bg-white text-orange-600 font-extrabold text-xs shadow-md">
+        <div className="flex flex-wrap gap-2">
+          <Link href="/abscond" className="px-4 py-2 rounded-xl bg-white text-orange-600 font-extrabold text-xs shadow-md">
+            Abscond Tracker
+          </Link>
+          <Link href="/exit" className="px-4 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white font-extrabold text-xs border border-white/30">
             Process Exit Form
           </Link>
           <Link href="/daily-reports" className="px-4 py-2 rounded-xl bg-black/20 text-white font-bold text-xs border border-white/20 flex items-center gap-1">
@@ -136,10 +147,11 @@ export function AravindDashboard() {
       {/* Quick Actions */}
       <div className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs">
         <h3 className="text-sm font-bold text-slate-900 mb-3">Quick Actions</h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-3">
           {[
             { label: 'Retention', href: '/retention', icon: ShieldAlert, color: 'text-amber-600' },
             { label: 'Resignation', href: '/resignation', icon: UserX, color: 'text-red-600' },
+            { label: 'Abscond', href: '/abscond', icon: UserMinus, color: 'text-rose-600' },
             { label: 'Exit', href: '/exit', icon: LogOut, color: 'text-blue-600' },
             { label: 'F&F', href: '/fnf', icon: CreditCard, color: 'text-emerald-600' },
             { label: 'Complaints', href: '/employee-complaints', icon: MessageSquareWarning, color: 'text-purple-600' },

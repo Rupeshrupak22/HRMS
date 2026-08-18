@@ -66,4 +66,10 @@ export const aravindApi = {
   createDailyReport: (data: any) => request('/daily-reports', { method: 'POST', body: JSON.stringify(data) }),
   updateDailyReport: (id: string, data: any) => request(`/daily-reports/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteDailyReport: (id: string) => request(`/daily-reports/${id}`, { method: 'DELETE' }),
+
+  // Abscond Tracker
+  getAbscond: () => request('/abscond'),
+  createAbscond: (data: any) => request('/abscond', { method: 'POST', body: JSON.stringify(data) }),
+  updateAbscond: (id: string, data: any) => request(`/abscond/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteAbscond: (id: string) => request(`/abscond/${id}`, { method: 'DELETE' }),
 };

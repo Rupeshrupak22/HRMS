@@ -666,7 +666,9 @@ model EmployeePerformance {
   dailyPerformance    String
   weeklyPerformance   String
   monthlyPerformance  String
-  monthlyRevenue      String
+  dailyRevenue        String?
+  weeklyRevenue       String?
+  monthlyRevenue      String?
   pipCase             String   @default("No")
   reasonForPip        String?
   performanceGap      String?
@@ -680,6 +682,24 @@ model EmployeePerformance {
   factFinding         String?
   managerExplanation  String?
   myExplanation       String?
+  createdByEmail      String?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+}
+
+model EmployeeIssue {
+  id                  String   @id @default(uuid())
+  employeeId          String
+  employeeName        String
+  email               String?
+  contact             String?
+  employeeIssue       String
+  employeeExplanation String?
+  factFinding         String?
+  managerExplanation  String?
+  myExplanation       String?
+  status              String   @default("OPEN")
+  date                String?
   createdByEmail      String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
