@@ -510,10 +510,16 @@ export default function AttendancePage() {
       for (let i = 1; i <= daysInMonth; i++) {
         if (editForm[i]) {
           const dateStr = `${selectedMonth}-${String(i).padStart(2, '0')}`;
+          const dayApprovedBy = editForm[`approvedBy_${i}`] || '';
+          const remarkData = { ...summaryPayload };
+          if (dayApprovedBy) {
+            remarkData[`approvedBy_day_${i}`] = dayApprovedBy;
+          }
           records.push({ 
             date: dateStr, 
             status: editForm[i],
-            remarks: JSON.stringify(summaryPayload),
+            remarks: JSON.stringify(remarkData),
+            approvedBy: dayApprovedBy || editForm.approvedBy || '',
           });
         }
       }
@@ -597,7 +603,7 @@ export default function AttendancePage() {
   };
 
   const calculateCountersFromDays = () => {
-    let p = 0, a = 0, el = 0, ll = 0, sl = 0, ecl = 0, pl = 0, llv = 0, cl = 0, nh = 0, fh = 0, h = 0, t = 0, hd = 0, wfh = 0, wo = 0, ot = 0;
+    let p = 0, a = 0, el = 0, ll = 0, sl = 0, ecl = 0, pl = 0, llv = 0, cl = 0, nh = 0, fh = 0, h = 0, t = 0, hd = 0, wfh = 0, wo = 0, ot = 0, lop = 0, personalLeave = 0;
     for (let i = 1; i <= daysInMonth; i++) {
       const s = editForm[i];
       if (s === 'PRESENT' || s === 'P') p++;
@@ -606,7 +612,7 @@ export default function AttendancePage() {
       else if (s === 'LATE_LOGIN' || s === 'LL') ll++;
       else if (s === 'SICK_LEAVE' || s === 'SL') sl++;
       else if (s === 'EMERGENCY_LEAVE' || s === 'E_L') ecl++;
-      else if (s === 'PAID_LEAVE' || s === 'PL') pl++;
+      else if (s === 'PAID_LEAVE') pl++;
       else if (s === 'LONG_LEAVE' || s === 'LLV') llv++;
       else if (s === 'CASUAL_LEAVE' || s === 'CL') cl++;
       else if (s === 'NATIONAL_HOLIDAY' || s === 'NH') nh++;
@@ -617,6 +623,8 @@ export default function AttendancePage() {
       else if (s === 'WORK_FROM_HOME' || s === 'WFH') wfh++;
       else if (s === 'WEEKLY_OFF' || s === 'WO') wo++;
       else if (s === 'OVERTIME' || s === 'OT') ot++;
+      else if (s === 'LOP') lop++;
+      else if (s === 'PERSONAL_LEAVE') personalLeave++;
     }
     setEditForm({
       ...editForm,
@@ -633,6 +641,12 @@ export default function AttendancePage() {
       festiveHoliday: fh,
       holiday: h,
       training: t,
+      hd,
+      wfh,
+      wo,
+      ot,
+      lop,
+      personalLeave,
     });
   };
 
@@ -1114,6 +1128,8 @@ export default function AttendancePage() {
                     else if (currentVal === 'WORK_FROM_HOME') badgeColor = 'bg-teal-50 border-teal-300 text-teal-700 font-bold';
                     else if (currentVal) badgeColor = 'bg-violet-50 border-violet-300 text-violet-700 font-bold';
 
+                    const isLeaveStatus = ['CASUAL_LEAVE', 'SICK_LEAVE', 'EMERGENCY_LEAVE', 'PAID_LEAVE', 'LONG_LEAVE', 'LOP', 'HALF_DAY'].includes(currentVal);
+
                     return (
                       <div key={i} className={`flex flex-col gap-1 p-2 rounded-xl border transition ${badgeColor}`}>
                         <div className="flex justify-between items-center px-0.5">
@@ -1148,9 +1164,17 @@ export default function AttendancePage() {
                           <option value="FESTIVE_HOLIDAY">FH (Festive Holiday)</option>
                           <option value="TRAINING">T (Training)</option>
                           <option value="LOP">LOP (Loss of pay)</option>
-                          <option value="PL">PL (Personal Leave)</option>
-                          <option value="Other">OR (Reason)</option>
+                          <option value="PERSONAL_LEAVE">PL (Personal Leave)</option>
                         </select>
+                        {isLeaveStatus && (
+                          <input
+                            type="text"
+                            placeholder="Approved by"
+                            value={editForm[`approvedBy_${i + 1}`] || ''}
+                            onChange={(e) => setEditForm({...editForm, [`approvedBy_${i + 1}`]: e.target.value})}
+                            className="bg-white border border-slate-200 text-slate-700 text-[10px] rounded-md px-1.5 py-1 mt-0.5 focus:ring-1 focus:ring-indigo-400 outline-none placeholder:text-slate-300"
+                          />
+                        )}
                       </div>
                     );
                   })}
@@ -1364,6 +1388,72 @@ export default function AttendancePage() {
                         value={editForm.training ?? 0}
                         onChange={(e) => setEditForm({ ...editForm, training: e.target.value })}
                         className="w-full bg-white border border-yellow-200 text-yellow-900 text-xs font-bold rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-yellow-500 outline-none transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-gray-700 mb-1">LOP (Loss of Pay)</label>
+                      <input
+                        type="text"
+                        placeholder="0"
+                        value={editForm.lop ?? 0}
+                        onChange={(e) => setEditForm({ ...editForm, lop: e.target.value })}
+                        className="w-full bg-white border border-gray-200 text-gray-900 text-xs font-bold rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-gray-500 outline-none transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-fuchsia-700 mb-1">Personal Leave</label>
+                      <input
+                        type="text"
+                        placeholder="0"
+                        value={editForm.personalLeave ?? 0}
+                        onChange={(e) => setEditForm({ ...editForm, personalLeave: e.target.value })}
+                        className="w-full bg-white border border-fuchsia-200 text-fuchsia-900 text-xs font-bold rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-fuchsia-500 outline-none transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-teal-700 mb-1">Work from Home</label>
+                      <input
+                        type="text"
+                        placeholder="0"
+                        value={editForm.wfh ?? 0}
+                        onChange={(e) => setEditForm({ ...editForm, wfh: e.target.value })}
+                        className="w-full bg-white border border-teal-200 text-teal-900 text-xs font-bold rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-teal-500 outline-none transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-sky-700 mb-1">Half Day</label>
+                      <input
+                        type="text"
+                        placeholder="0"
+                        value={editForm.hd ?? 0}
+                        onChange={(e) => setEditForm({ ...editForm, hd: e.target.value })}
+                        className="w-full bg-white border border-sky-200 text-sky-900 text-xs font-bold rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-sky-500 outline-none transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-600 mb-1">Weekly Off</label>
+                      <input
+                        type="text"
+                        placeholder="0"
+                        value={editForm.wo ?? 0}
+                        onChange={(e) => setEditForm({ ...editForm, wo: e.target.value })}
+                        className="w-full bg-white border border-slate-300 text-slate-900 text-xs font-bold rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-slate-500 outline-none transition"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[11px] font-bold text-blue-700 mb-1">Overtime</label>
+                      <input
+                        type="text"
+                        placeholder="0"
+                        value={editForm.ot ?? 0}
+                        onChange={(e) => setEditForm({ ...editForm, ot: e.target.value })}
+                        className="w-full bg-white border border-blue-200 text-blue-900 text-xs font-bold rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-blue-500 outline-none transition"
                       />
                     </div>
                   </div>
