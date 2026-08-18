@@ -273,26 +273,57 @@ export default function AttendancePage() {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as any[];
+
+        // 1. Dynamic Header Row Detection (supports title rows / metadata headers)
+        const rawRows: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' }) as any[][];
+        let headerRowIdx = 0;
+
+        for (let r = 0; r < Math.min(rawRows.length, 15); r++) {
+          const rowStr = rawRows[r].map(c => String(c).toLowerCase()).join(' ');
+          if (
+            /emp.*(?:id|code)|employee.*(?:id|code)|staff.*(?:id|code)/i.test(rowStr) ||
+            (rowStr.includes('name') && (rowStr.includes('present') || rowStr.includes('absent') || /\b1\b.*\b2\b.*\b3\b/.test(rowStr)))
+          ) {
+            headerRowIdx = r;
+            break;
+          }
+        }
+
+        const headerRow = rawRows[headerRowIdx].map((c: any) => String(c ?? '').trim().replace(/[\u00a0\r\n\t]/g, ' '));
+        const dataRows = rawRows.slice(headerRowIdx + 1);
+
+        const jsonData: any[] = [];
+        for (const row of dataRows) {
+          if (!row || row.every((c: any) => String(c ?? '').trim() === '')) continue;
+          const obj: Record<string, any> = {};
+          headerRow.forEach((h: string, colIdx: number) => {
+            if (h) {
+              obj[h] = row[colIdx] !== undefined ? row[colIdx] : '';
+            } else {
+              obj[`col_${colIdx}`] = row[colIdx] !== undefined ? row[colIdx] : '';
+            }
+          });
+          jsonData.push(obj);
+        }
 
         const codeMap: Record<string, string> = {
-          'P': 'PRESENT', 'PRESENT': 'PRESENT',
-          'A': 'ABSENT', 'ABSENT': 'ABSENT',
-          'CL': 'CASUAL_LEAVE', 'CASUAL LEAVE': 'CASUAL_LEAVE', 'CASUAL_LEAVE': 'CASUAL_LEAVE',
-          'SL': 'SICK_LEAVE', 'SICK LEAVE': 'SICK_LEAVE', 'SICK_LEAVE': 'SICK_LEAVE',
-          'H': 'HOLIDAY', 'HOLIDAY': 'HOLIDAY',
-          'WO': 'WEEKLY_OFF', 'WEEKLY OFF': 'WEEKLY_OFF', 'WEEKLY_OFF': 'WEEKLY_OFF', 'OFF': 'WEEKLY_OFF',
-          'OT': 'OVERTIME', 'OVERTIME': 'OVERTIME',
-          'WFH': 'WORK_FROM_HOME', 'WORK FROM HOME': 'WORK_FROM_HOME', 'WORK_FROM_HOME': 'WORK_FROM_HOME',
-          'HD': 'HALF_DAY', 'HALF DAY': 'HALF_DAY', 'HALF_DAY': 'HALF_DAY', 'HALF-DAY': 'HALF_DAY',
-          'EL': 'EARLY_LOGOUT', 'EARLY LOGOUT': 'EARLY_LOGOUT', 'EARLY_LOGOUT': 'EARLY_LOGOUT',
-          'LL': 'LATE_LOGIN', 'LATE LOGIN': 'LATE_LOGIN', 'LATE_LOGIN': 'LATE_LOGIN',
-          'E_L': 'EMERGENCY_LEAVE', 'EMERGENCY LEAVE': 'EMERGENCY_LEAVE', 'EMERGENCY_LEAVE': 'EMERGENCY_LEAVE',
-          'PL': 'PAID_LEAVE', 'PAID LEAVE': 'PAID_LEAVE', 'PAID_LEAVE': 'PAID_LEAVE',
-          'LLV': 'LONG_LEAVE', 'LONG LEAVE': 'LONG_LEAVE', 'LONG_LEAVE': 'LONG_LEAVE',
-          'NH': 'NATIONAL_HOLIDAY', 'NATIONAL HOLIDAY': 'NATIONAL_HOLIDAY', 'NATIONAL_HOLIDAY': 'NATIONAL_HOLIDAY',
-          'FH': 'FESTIVE_HOLIDAY', 'FESTIVE HOLIDAY': 'FESTIVE_HOLIDAY', 'FESTIVE_HOLIDAY': 'FESTIVE_HOLIDAY',
-          'T': 'TRAINING', 'TRAINING': 'TRAINING'
+          'P': 'PRESENT', 'PR': 'PRESENT', 'PRES': 'PRESENT', 'PRESENT': 'PRESENT', '1': 'PRESENT',
+          'A': 'ABSENT', 'AB': 'ABSENT', 'ABS': 'ABSENT', 'ABSENT': 'ABSENT', '0': 'ABSENT',
+          'CL': 'CASUAL_LEAVE', 'C.L': 'CASUAL_LEAVE', 'CASUAL': 'CASUAL_LEAVE', 'CASUAL LEAVE': 'CASUAL_LEAVE', 'CASUAL_LEAVE': 'CASUAL_LEAVE',
+          'SL': 'SICK_LEAVE', 'S.L': 'SICK_LEAVE', 'SICK': 'SICK_LEAVE', 'SICK LEAVE': 'SICK_LEAVE', 'SICK_LEAVE': 'SICK_LEAVE',
+          'H': 'HOLIDAY', 'HOL': 'HOLIDAY', 'HOLIDAY': 'HOLIDAY',
+          'WO': 'WEEKLY_OFF', 'W.O': 'WEEKLY_OFF', 'W/O': 'WEEKLY_OFF', 'OFF': 'WEEKLY_OFF', 'WEEKLY OFF': 'WEEKLY_OFF', 'WEEKLY_OFF': 'WEEKLY_OFF', 'WEEK OFF': 'WEEKLY_OFF',
+          'OT': 'OVERTIME', 'O.T': 'OVERTIME', 'OVERTIME': 'OVERTIME',
+          'WFH': 'WORK_FROM_HOME', 'W.F.H': 'WORK_FROM_HOME', 'WORK FROM HOME': 'WORK_FROM_HOME', 'WORK_FROM_HOME': 'WORK_FROM_HOME',
+          'HD': 'HALF_DAY', 'H.D': 'HALF_DAY', 'HALF DAY': 'HALF_DAY', 'HALF_DAY': 'HALF_DAY', 'HALF-DAY': 'HALF_DAY', '0.5': 'HALF_DAY', '0.5P': 'HALF_DAY',
+          'EL': 'EARLY_LOGOUT', 'E.L': 'EARLY_LOGOUT', 'EARLY LOGOUT': 'EARLY_LOGOUT', 'EARLY_LOGOUT': 'EARLY_LOGOUT', 'EARLY OUT': 'EARLY_LOGOUT',
+          'LL': 'LATE_LOGIN', 'L.L': 'LATE_LOGIN', 'LATE LOGIN': 'LATE_LOGIN', 'LATE_LOGIN': 'LATE_LOGIN', 'LATE IN': 'LATE_LOGIN',
+          'E_L': 'EMERGENCY_LEAVE', 'E.L.': 'EMERGENCY_LEAVE', 'EMERGENCY LEAVE': 'EMERGENCY_LEAVE', 'EMERGENCY_LEAVE': 'EMERGENCY_LEAVE', 'EMERGENCY': 'EMERGENCY_LEAVE',
+          'PL': 'PAID_LEAVE', 'P.L': 'PAID_LEAVE', 'PAID LEAVE': 'PAID_LEAVE', 'PAID_LEAVE': 'PAID_LEAVE',
+          'LLV': 'LONG_LEAVE', 'L.L.V': 'LONG_LEAVE', 'LONG LEAVE': 'LONG_LEAVE', 'LONG_LEAVE': 'LONG_LEAVE', 'LONG LEAVES': 'LONG_LEAVE',
+          'NH': 'NATIONAL_HOLIDAY', 'N.H': 'NATIONAL_HOLIDAY', 'NATIONAL HOLIDAY': 'NATIONAL_HOLIDAY', 'NATIONAL_HOLIDAY': 'NATIONAL_HOLIDAY',
+          'FH': 'FESTIVE_HOLIDAY', 'F.H': 'FESTIVE_HOLIDAY', 'FESTIVE HOLIDAY': 'FESTIVE_HOLIDAY', 'FESTIVE_HOLIDAY': 'FESTIVE_HOLIDAY',
+          'T': 'TRAINING', 'TR': 'TRAINING', 'TRAINING': 'TRAINING'
         };
 
         const formattedRecords: any[] = [];
@@ -300,26 +331,26 @@ export default function AttendancePage() {
         for (const row of jsonData) {
           const keys = Object.keys(row);
           
-          const empIdKey = keys.find(k => /^(employee\s*id|emp\s*id|id|employee\s*code|emp\s*code|code|emp_id|employee_id)$/i.test(k.trim().replace(/\u00a0/g, ' ')));
+          const empIdKey = keys.find(k => /^(employee\s*id|emp\s*id|id|employee\s*code|emp\s*code|code|emp_id|employee_id|emp_code|employee_code)$/i.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
           const rawEmpId = empIdKey ? row[empIdKey] : (row['Employee ID'] || row['ID'] || row['Emp ID'] || row['Employee Code'] || row['Emp Code'] || row['empId']);
 
-          const empNameKey = keys.find(k => /^(employee\s*name|emp\s*name|name|staff\s*name|full\s*name|employee|staff)$/i.test(k.trim().replace(/\u00a0/g, ' ')));
+          const empNameKey = keys.find(k => /^(employee\s*name|emp\s*name|name|staff\s*name|full\s*name|employee|staff|emp_name|employee_name)$/i.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
           const rawEmpName = empNameKey ? row[empNameKey] : (row['Employee Name'] || row['Name'] || row['Emp Name']);
 
           const empId = rawEmpId !== undefined && rawEmpId !== null && String(rawEmpId).trim() !== '' ? String(rawEmpId).trim() : '';
           const empName = rawEmpName !== undefined && rawEmpName !== null && String(rawEmpName).trim() !== '' ? String(rawEmpName).trim() : '';
 
-          const deptKey = keys.find(k => /^(department|dept|dept\s*name|department\s*name)$/i.test(k.trim().replace(/\u00a0/g, ' ')));
+          const deptKey = keys.find(k => /^(department|dept|dept\s*name|department\s*name)$/i.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
           const department = deptKey ? String(row[deptKey] ?? '').trim() : (row['Department'] || row['Dept'] || '');
 
-          const desigKey = keys.find(k => /^(designation|desig|designation\s*title|title|position)$/i.test(k.trim().replace(/\u00a0/g, ' ')));
+          const desigKey = keys.find(k => /^(designation|desig|designation\s*title|title|position)$/i.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
           const designation = desigKey ? String(row[desigKey] ?? '').trim() : (row['Designation'] || row['Desig'] || '');
 
-          const roleKey = keys.find(k => /^(role|user\s*role)$/i.test(k.trim().replace(/\u00a0/g, ' ')));
+          const roleKey = keys.find(k => /^(role|user\s*role)$/i.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
           const role = roleKey ? String(row[roleKey] ?? '').trim() : (row['Role'] || '');
 
           const findVal = (regex: RegExp) => {
-            const matchedKey = keys.find(k => regex.test(k.trim().replace(/\u00a0/g, ' ')));
+            const matchedKey = keys.find(k => regex.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
             return matchedKey !== undefined ? row[matchedKey] : undefined;
           };
 
@@ -331,8 +362,8 @@ export default function AttendancePage() {
             }
           };
 
-          checkAndSet('present', /^(present|total\s*present|present\s*count)$/i);
-          checkAndSet('absent', /^(absent|total\s*absent|absent\s*count)$/i);
+          checkAndSet('present', /^(present|total\s*present|present\s*count|present\s*days|total\s*p|p\s*days|no\.?\s*of\s*present)$/i);
+          checkAndSet('absent', /^(absent|total\s*absent|absent\s*count|absent\s*days|total\s*a|a\s*days|no\.?\s*of\s*absent)$/i);
           checkAndSet('earlyLogout', /^(early\s*logout|early\s*out|total\s*early\s*logout|el)$/i);
           checkAndSet('lateLogin', /^(late\s*login|late\s*in|total\s*late\s*login|ll)$/i);
           checkAndSet('sickLeave', /^(sick\s*leave|total\s*sick\s*leave|sl)$/i);
@@ -359,10 +390,11 @@ export default function AttendancePage() {
               const paddedDay = String(i).padStart(2, '0');
               
               const dayKey = keys.find(k => {
-                const cleanK = k.trim().replace(/\u00a0/g, ' ');
-                return cleanK === dayStr || 
-                       cleanK === paddedDay || 
-                       new RegExp(`^0?${i}[\\s\\-\\/]`, 'i').test(cleanK);
+                const cleanK = k.trim().replace(/[\u00a0\r\n\t]/g, ' ');
+                if (cleanK === dayStr || cleanK === paddedDay) return true;
+                const m = cleanK.match(/^(?:day\s*)?0?([1-9]|[12]\d|3[01])(?:\b|[^\d])/i);
+                if (m && parseInt(m[1], 10) === i) return true;
+                return false;
               });
 
               const rawVal = dayKey ? String(row[dayKey] ?? '').trim().toUpperCase() : '';

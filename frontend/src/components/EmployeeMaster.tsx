@@ -235,18 +235,26 @@ export function EmployeeMaster() {
         console.warn('CRM proxy fetch error, falling back to internal HRMS DB:', crmErr);
       }
 
-      // Fallback to internal HRMS database if CRM list is empty or failed
-      if (list.length === 0) {
-        try {
-          const internalRes = await apiRequest('/employees');
-          const internalList = Array.isArray(internalRes)
-            ? internalRes
-            : internalRes?.data && Array.isArray(internalRes.data)
-            ? internalRes.data
-            : [];
+      // Always merge internal HRMS database employees so all records are visible
+      try {
+        const internalRes = await apiRequest('/employees').catch(() => []);
+        const internalList = Array.isArray(internalRes)
+          ? internalRes
+          : internalRes?.data && Array.isArray(internalRes.data)
+          ? internalRes.data
+          : [];
 
-          if (internalList.length > 0) {
-            list = internalList.map((emp: any) => ({
+        if (internalList.length > 0) {
+          const existingEmails = new Set(list.map((c: any) => (c.email || c.officialEmail || '').toLowerCase().trim()).filter(Boolean));
+          const existingCodes = new Set(list.map((c: any) => String(c.employeeId || c.employeeCode || c.empCode || '').toLowerCase().trim()).filter(Boolean));
+
+          const mappedInternal = internalList
+            .filter((emp: any) => {
+              const email = (emp.user?.email || emp.email || '').toLowerCase().trim();
+              const code = String(emp.employeeCode || emp.id || '').toLowerCase().trim();
+              return (!email || !existingEmails.has(email)) && (!code || !existingCodes.has(code));
+            })
+            .map((emp: any) => ({
               id: emp.id,
               name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || 'Employee',
               email: emp.user?.email || emp.email || '',
@@ -266,10 +274,11 @@ export function EmployeeMaster() {
               isTeamLead: emp.isTeamLead || false,
               raw: emp,
             }));
-          }
-        } catch (dbErr) {
-          console.warn('Internal DB employee fetch error:', dbErr);
+
+          list = [...list, ...mappedInternal];
         }
+      } catch (dbErr) {
+        console.warn('Internal DB employee fetch error:', dbErr);
       }
 
       setEmployees(list);
@@ -648,14 +657,29 @@ export function EmployeeMaster() {
   };
 
   const getEmpStatus = (emp: EmployeeRecord) => {
-    if (emp.isActive !== undefined) {
+    // 1. If explicit string status is present, prioritize it
+    const raw = String(emp.status || emp.employeeStatus || '').trim().toUpperCase();
+    if (raw === 'ACTIVE' || raw === 'CONFIRMED' || raw === 'PROBATION') return 'ACTIVE';
+    if (raw === 'INACTIVE' || raw === 'TERMINATED' || raw === 'RESIGNED' || raw === 'EXITED') return 'INACTIVE';
+    if (raw.includes('LEAVE')) return 'ON_LEAVE';
+
+    // 2. Check boolean isActive
+    if (typeof emp.isActive === 'boolean') {
       return emp.isActive ? 'ACTIVE' : 'INACTIVE';
     }
-    const raw = String(emp.status || emp.employeeStatus || 'Active').toUpperCase();
+    if (emp.isActive === 1 || emp.isActive === '1' || String(emp.isActive).toLowerCase() === 'true') {
+      return 'ACTIVE';
+    }
+    if (emp.isActive === 0 || emp.isActive === '0' || String(emp.isActive).toLowerCase() === 'false') {
+      return 'INACTIVE';
+    }
+
+    // 3. Fallback matching
     if (raw.includes('ACT') || raw === '1' || raw === 'TRUE') return 'ACTIVE';
     if (raw.includes('INACT') || raw.includes('RESIGN') || raw.includes('EXIT') || raw === '0') return 'INACTIVE';
-    if (raw.includes('LEAVE')) return 'ON_LEAVE';
-    return raw;
+
+    // Default to ACTIVE for valid employees
+    return 'ACTIVE';
   };
 
   const getEmpJoiningDate = (emp: EmployeeRecord) => {
