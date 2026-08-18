@@ -68,7 +68,11 @@ interface EmployeeRecord {
   specialization?: string;
   teamId?: string;
   teamName?: string;
+  team?: any;
   reportingManager?: string;
+  manager?: string;
+  teamLeader?: string;
+  teamLead?: string;
   isActive?: boolean;
   status?: string;
   employeeStatus?: string;
@@ -90,6 +94,13 @@ interface EmployeeRecord {
   emergencyContactPhone?: string;
   notes?: string;
   probationPeriod?: string;
+  bloodGroup?: string;
+  permanentAddress?: string;
+  documents?: any[];
+  ojtStartDate?: string;
+  ojtEndDate?: string;
+  trainingStartDate?: string;
+  trainingEndDate?: string;
   createdAt?: string;
   updatedAt?: string;
   [key: string]: any;
@@ -313,6 +324,49 @@ export function EmployeeMaster() {
     setIsFormModalOpen(true);
   };
 
+  // Fetch full employee details with uploads from CRM
+  const fetchEmployeeDetails = async (emp: EmployeeRecord) => {
+    setSelectedEmployee(emp); // Show immediately with available data
+    
+    const tokenToUse =
+      customToken ||
+      (typeof window !== 'undefined'
+        ? localStorage.getItem('adyapan_crm_bearer_token') ||
+          localStorage.getItem('adyapan_access_token') ||
+          localStorage.getItem('token') ||
+          ''
+        : '');
+
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      'Content-Type': 'application/json',
+    };
+
+    if (tokenToUse) {
+      headers['Authorization'] = tokenToUse.startsWith('Bearer ')
+        ? tokenToUse
+        : `Bearer ${tokenToUse}`;
+    }
+
+    try {
+      const empId = emp.id || emp._id || '';
+      if (!empId) return;
+
+      const endpoint = `/api/crm/employees?id=${encodeURIComponent(String(empId))}&uploads=true${tokenToUse ? `&token=${encodeURIComponent(tokenToUse)}` : ''}`;
+      const res = await fetch(endpoint, { method: 'GET', headers });
+      const json = await res.json().catch(() => null);
+
+      if (res.ok && json) {
+        const detail = json.employee || json.data || json;
+        if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+          setSelectedEmployee({ ...emp, ...detail });
+        }
+      }
+    } catch (err) {
+      console.warn('Failed to fetch employee details:', err);
+    }
+  };
+
   // Open Edit Modal
   const handleOpenEditModal = (emp: EmployeeRecord) => {
     setFormMode('edit');
@@ -341,24 +395,24 @@ export function EmployeeMaster() {
       department: getEmpDept(emp) !== 'General' ? getEmpDept(emp) : '',
       teamName: getEmpTeam(emp) !== '—' ? getEmpTeam(emp) : '',
       teamId: emp.teamId || '',
-      reportingManager: emp.reportingManager || '',
+      reportingManager: emp.reportingManager || emp.manager || emp.teamLeader || '',
       isActive: getEmpStatus(emp) === 'ACTIVE',
       employmentType: sanitizeEmploymentType(emp.employmentType),
-      gender: sanitizeGender(emp.gender),
+      gender: emp.gender || '',
       dateOfBirth: formatDateForInput(emp.dateOfBirth),
       joiningDate: formatDateForInput(emp.joiningDate || emp.dateOfJoining),
       onboardingDate: formatDateForInput(emp.onboardingDate),
-      baseSalary: Number(emp.baseSalary || 0),
-      bankName: emp.bankName || '',
-      bankAccountNumber: emp.bankAccountNumber || '',
-      bankIfsc: emp.bankIfsc || '',
-      panNumber: emp.panNumber || '',
-      uanNumber: emp.uanNumber || '',
-      address: emp.address || '',
-      emergencyContactName: emp.emergencyContactName || '',
-      emergencyContactPhone: emp.emergencyContactPhone || '',
+      baseSalary: Number(emp.baseSalary || emp.salary || emp.ctc || 0),
+      bankName: emp.bankName || emp.bank || '',
+      bankAccountNumber: emp.bankAccountNumber || emp.accountNumber || emp.bankAccountNo || '',
+      bankIfsc: emp.bankIfsc || emp.ifsc || emp.ifscCode || '',
+      panNumber: emp.panNumber || emp.pan || '',
+      uanNumber: emp.uanNumber || emp.uan || '',
+      address: emp.address || emp.currentAddress || '',
+      emergencyContactName: emp.emergencyContactName || emp.emergencyContact || emp.emergencyName || '',
+      emergencyContactPhone: emp.emergencyContactPhone || emp.emergencyPhone || emp.emergencyMobile || '',
       notes: emp.notes || '',
-    });
+    } as any);
 
     setIsFormModalOpen(true);
   };
@@ -649,7 +703,10 @@ export function EmployeeMaster() {
   };
 
   const getEmpTeam = (emp: EmployeeRecord) => {
-    return emp.teamName || (emp.team && typeof emp.team === 'object' ? emp.team.name : '') || '—';
+    if (emp.teamName) return emp.teamName;
+    if (emp.team && typeof emp.team === 'object') return emp.team.name || '—';
+    if (emp.team && typeof emp.team === 'string') return emp.team;
+    return '—';
   };
 
   const getEmpDesignation = (emp: EmployeeRecord) => {
@@ -825,104 +882,39 @@ export function EmployeeMaster() {
 
   return (
     <div className="space-y-6">
-      {/* Top Banner & Action Header */}
-      <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 rounded-3xl p-6 lg:p-8 text-white shadow-xl shadow-indigo-950/20 border border-slate-800/80 relative overflow-hidden">
-        <div className="absolute right-0 top-0 w-96 h-96 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20" />
-        <div className="absolute left-1/3 bottom-0 w-64 h-64 bg-purple-500/10 rounded-full blur-2xl pointer-events-none -mb-20" />
-
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-2 px-3 py-1 bg-indigo-500/20 text-indigo-300 text-xs font-semibold rounded-full border border-indigo-500/30">
-              <Shield className="w-3.5 h-3.5" />
-              <span>HR Central Master Directory</span>
-            </div>
-            <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight text-white flex items-center gap-3">
-              Employee Master
-            </h1>
-            <p className="text-sm text-slate-300 max-w-xl">
-              Complete organizational employee roster with job roles, compensation, and direct record management.
-            </p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3">
-            <button
-              onClick={() => fetchEmployees()}
-              disabled={loading}
-              className="px-4 py-2.5 bg-slate-800/90 hover:bg-slate-700 text-slate-200 rounded-xl text-xs font-semibold border border-slate-700 transition flex items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
-              title="Refresh Master List"
-            >
-              <RefreshCw className={`w-3.5 h-3.5 ${loading ? 'animate-spin text-indigo-400' : ''}`} />
-              <span>Refresh</span>
-            </button>
-
-            <button
-              onClick={handleExportExcel}
-              disabled={employees.length === 0}
-              className="px-4 py-2.5 bg-slate-800/90 hover:bg-slate-700 text-emerald-300 rounded-xl text-xs font-semibold border border-slate-700 transition flex items-center gap-2 cursor-pointer shadow-sm disabled:opacity-50"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Export Excel</span>
-            </button>
-
-            <button
-              onClick={handleOpenCreateModal}
-              className="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow-lg shadow-indigo-600/30 border border-indigo-500/50"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Add Employee</span>
-            </button>
-          </div>
+      {/* Page Header - Clean & Simple */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Employees</h1>
+          <p className="text-sm text-slate-500">Live employee accounts, HR profiles, team assignments and compensation details.</p>
         </div>
+        
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => fetchEmployees()}
+            disabled={loading}
+            className="px-4 py-2 bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 transition flex items-center gap-2 font-semibold shadow-sm text-sm cursor-pointer disabled:opacity-50"
+          >
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            <span>Refresh</span>
+          </button>
 
-        {/* Live Metrics Grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8 pt-6 border-t border-slate-800/80">
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/50">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-indigo-500/20 flex items-center justify-center text-indigo-400 border border-indigo-500/30">
-                <Users className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="text-xl font-black text-white">{metrics.total}</div>
-                <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Total Staff</div>
-              </div>
-            </div>
-          </div>
+          <button
+            onClick={handleExportExcel}
+            disabled={employees.length === 0}
+            className="px-4 py-2 bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 transition flex items-center gap-2 font-semibold shadow-sm text-sm cursor-pointer disabled:opacity-50"
+          >
+            <Download className="w-4 h-4" />
+            <span>Export</span>
+          </button>
 
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/50">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400 border border-emerald-500/30">
-                <UserCheck className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="text-xl font-black text-emerald-400">{metrics.active}</div>
-                <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Active Staff</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/50">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-rose-500/20 flex items-center justify-center text-rose-400 border border-rose-500/30">
-                <UserX className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="text-xl font-black text-rose-400">{metrics.inactive}</div>
-                <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Inactive / Left</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-slate-800/50 backdrop-blur-sm rounded-2xl p-4 border border-slate-700/50">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-purple-500/20 flex items-center justify-center text-purple-400 border border-purple-500/30">
-                <Building2 className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="text-xl font-black text-purple-300">{metrics.departmentsCount}</div>
-                <div className="text-[11px] font-medium text-slate-400 uppercase tracking-wider">Departments</div>
-              </div>
-            </div>
-          </div>
+          <button
+            onClick={handleOpenCreateModal}
+            className="px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-xl transition flex items-center gap-2 font-semibold shadow-sm text-sm cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Add Employee</span>
+          </button>
         </div>
       </div>
 
@@ -968,68 +960,16 @@ export function EmployeeMaster() {
       )}
 
       {/* Filter and Search Bar */}
-      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200/80 flex flex-wrap gap-3 items-center justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          {/* Department Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Department:</span>
-            <select
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold text-slate-700 cursor-pointer"
-            >
-              <option value="ALL">All Departments ({departments.length})</option>
-              {departments.map((dept) => (
-                <option key={dept} value={dept}>
-                  {dept}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Team Filter */}
-          {teamListNames.length > 0 && (
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Team:</span>
-              <select
-                value={selectedTeam}
-                onChange={(e) => setSelectedTeam(e.target.value)}
-                className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold text-slate-700 cursor-pointer"
-              >
-                <option value="ALL">All Teams ({teamListNames.length})</option>
-                {teamListNames.map((team) => (
-                  <option key={team} value={team}>
-                    {team}
-                  </option>
-                ))}
-              </select>
-            </div>
-          )}
-
-          {/* Status Filter */}
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Status:</span>
-            <select
-              value={selectedStatus}
-              onChange={(e) => setSelectedStatus(e.target.value)}
-              className="px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold text-slate-700 cursor-pointer"
-            >
-              <option value="ALL">All Status</option>
-              <option value="ACTIVE">Active Staff</option>
-              <option value="INACTIVE">Inactive / Archived</option>
-            </select>
-          </div>
-        </div>
-
+      <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-100 flex flex-wrap gap-4 items-center justify-between">
         {/* Search Field */}
-        <div className="flex-1 min-w-[240px] max-w-md relative">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        <div className="flex-1 max-w-lg relative">
+          <Search className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
-            placeholder="Search by Name, Employee Code, Email, Role..."
+            placeholder="Search by name, employee ID, email, department or team"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-9 pr-8 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800 placeholder:text-slate-400"
+            className="w-full pl-10 pr-8 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800 placeholder:text-slate-400"
           />
           {search && (
             <button
@@ -1040,6 +980,17 @@ export function EmployeeMaster() {
             </button>
           )}
         </div>
+
+        {/* Status Filter */}
+        <select
+          value={selectedStatus}
+          onChange={(e) => setSelectedStatus(e.target.value)}
+          className="px-4 py-2.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm font-medium text-slate-700 cursor-pointer"
+        >
+          <option value="ALL">All Status</option>
+          <option value="ACTIVE">Active</option>
+          <option value="INACTIVE">Inactive</option>
+        </select>
       </div>
 
       {/* Filter Status Badge */}
@@ -1067,36 +1018,33 @@ export function EmployeeMaster() {
       )}
 
       {/* Main Employee Table */}
-      <div className="bg-white border border-slate-200/80 rounded-2xl shadow-sm overflow-hidden">
+      <div className="bg-white border border-slate-200 rounded-2xl shadow-sm overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse text-xs">
+          <table className="w-full text-left border-collapse text-sm">
             <thead>
-              <tr className="bg-slate-50/80 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                <th className="py-3.5 px-4 sticky left-0 bg-slate-50/95 z-10 min-w-[70px]">Sl No</th>
-                <th className="py-3.5 px-4 min-w-[110px]">Emp Code</th>
-                <th className="py-3.5 px-4 min-w-[200px]">Employee Name</th>
-                <th className="py-3.5 px-4 min-w-[150px]">Designation & Role</th>
-                <th className="py-3.5 px-4 min-w-[140px]">Department</th>
-                <th className="py-3.5 px-4 min-w-[130px]">Team</th>
-                <th className="py-3.5 px-4 min-w-[160px]">Contact Info</th>
-                <th className="py-3.5 px-4 min-w-[110px]">Joining Date</th>
-                <th className="py-3.5 px-4 min-w-[100px] text-center">Status</th>
-                <th className="py-3.5 px-4 text-center sticky right-0 bg-slate-50/95 z-10 min-w-[140px]">Actions</th>
+              <tr className="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th className="py-3 px-4 min-w-[250px]">Employee</th>
+                <th className="py-3 px-4 min-w-[150px]">Department</th>
+                <th className="py-3 px-4 min-w-[140px]">Team / Manager</th>
+                <th className="py-3 px-4 min-w-[100px]">Joined</th>
+                <th className="py-3 px-4 min-w-[100px]">Base Salary</th>
+                <th className="py-3 px-4 min-w-[90px] text-center">Status</th>
+                <th className="py-3 px-4 text-center min-w-[100px]">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-16">
+                  <td colSpan={7} className="text-center py-16">
                     <div className="flex flex-col items-center justify-center gap-3 text-slate-400">
-                      <Loader2 className="w-8 h-8 animate-spin text-indigo-600" />
-                      <span className="text-xs font-semibold text-slate-600">Loading master employee directory...</span>
+                      <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                      <span className="text-sm font-semibold text-slate-600">Loading employee data...</span>
                     </div>
                   </td>
                 </tr>
               ) : filteredEmployees.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="text-center py-16 text-slate-400">
+                  <td colSpan={7} className="text-center py-16 text-slate-400">
                     <div className="flex flex-col items-center justify-center gap-2">
                       <Users className="w-10 h-10 text-slate-300" />
                       <span className="text-sm font-bold text-slate-700">No employees found</span>
@@ -1106,11 +1054,9 @@ export function EmployeeMaster() {
                 </tr>
               ) : (
                 paginatedEmployees.map((emp, idx) => {
-                  const slNo = (page - 1) * PAGE_SIZE + idx + 1;
                   const empName = getEmpName(emp);
                   const empCode = getEmpCode(emp);
                   const empEmail = getEmpEmail(emp);
-                  const empPhone = getEmpPhone(emp);
                   const empDept = getEmpDept(emp);
                   const empTeam = getEmpTeam(emp);
                   const empDesig = getEmpDesignation(emp);
@@ -1121,118 +1067,73 @@ export function EmployeeMaster() {
                   return (
                     <tr
                       key={emp.id || emp._id || idx}
-                      className="hover:bg-indigo-50/30 transition-colors group text-slate-700"
+                      className="hover:bg-orange-50/30 transition-colors group cursor-pointer"
+                      onClick={() => fetchEmployeeDetails(emp)}
                     >
-                      {/* Sl No */}
-                      <td className="py-3 px-4 font-mono font-medium text-slate-400 sticky left-0 bg-white group-hover:bg-indigo-50/30 z-10">
-                        {slNo}
-                      </td>
-
-                      {/* Code */}
-                      <td className="py-3 px-4">
-                        <span className="font-mono font-bold text-indigo-900 bg-indigo-50/80 px-2 py-0.5 rounded-lg border border-indigo-100 text-[11px]">
-                          {empCode}
-                        </span>
-                      </td>
-
-                      {/* Name & Avatar */}
+                      {/* Employee */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
+                          <div className="w-9 h-9 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 text-white flex items-center justify-center font-bold text-xs shrink-0 shadow-sm">
                             {initials}
                           </div>
                           <div>
-                            <button
-                              onClick={() => setSelectedEmployee(emp)}
-                              className="font-bold text-slate-900 hover:text-indigo-600 transition text-left cursor-pointer flex items-center gap-1 group-hover:underline"
-                            >
-                              {empName}
-                            </button>
-                            <div className="text-[11px] text-slate-400">{emp.gender || 'Employee'}</div>
+                            <div className="font-bold text-slate-900 text-sm">{empName}</div>
+                            <div className="text-[11px] text-slate-400">
+                              {empCode !== 'N/A' ? empCode : 'No employee ID'} · {empEmail !== '—' ? empEmail : ''}
+                            </div>
                           </div>
                         </div>
-                      </td>
-
-                      {/* Designation */}
-                      <td className="py-3 px-4">
-                        <div className="font-semibold text-slate-800">{empDesig}</div>
-                        {emp.role && emp.role !== empDesig && (
-                          <div className="text-[10px] text-slate-400">{emp.role}</div>
-                        )}
                       </td>
 
                       {/* Department */}
                       <td className="py-3 px-4">
-                        <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-md bg-slate-100 text-slate-700 font-medium text-[11px]">
-                          <Building2 className="w-3 h-3 text-slate-400" />
-                          {empDept}
-                        </span>
+                        <div className="font-semibold text-slate-800 text-sm">{empDept}</div>
+                        <div className="text-[11px] text-slate-400">{empDesig}</div>
                       </td>
 
-                      {/* Team */}
+                      {/* Team / Manager */}
                       <td className="py-3 px-4">
-                        <span className="text-slate-600 font-medium text-[11px]">{empTeam}</span>
-                      </td>
-
-                      {/* Contact Info */}
-                      <td className="py-3 px-4">
-                        <div className="space-y-0.5">
-                          {empEmail !== '—' && (
-                            <div className="flex items-center gap-1.5 text-[11px] text-slate-600">
-                              <Mail className="w-3 h-3 text-slate-400" />
-                              <span className="truncate max-w-[150px]">{empEmail}</span>
-                            </div>
-                          )}
-                          {empPhone !== '—' && (
-                            <div className="flex items-center gap-1.5 text-[11px] text-slate-500 font-mono">
-                              <Phone className="w-3 h-3 text-slate-400" />
-                              <span>{empPhone}</span>
-                            </div>
-                          )}
-                        </div>
+                        <div className="text-sm text-slate-700">{empTeam !== '—' ? `Team ${empTeam}` : 'Unassigned'}</div>
+                        <div className="text-[11px] text-slate-400">{emp.reportingManager || emp.manager || emp.teamLeader || emp.teamLead || 'No manager'}</div>
                       </td>
 
                       {/* Joining Date */}
-                      <td className="py-3 px-4 text-slate-600 font-medium text-[11px]">
+                      <td className="py-3 px-4 text-sm text-slate-600">
                         {joiningDate}
+                      </td>
+
+                      {/* Base Salary */}
+                      <td className="py-3 px-4 text-sm font-semibold text-slate-700">
+                        ₹{Number(emp.baseSalary || emp.ctc || 15000).toLocaleString('en-IN')}
                       </td>
 
                       {/* Status */}
                       <td className="py-3 px-4 text-center">
                         {status === 'ACTIVE' ? (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold">
-                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                            ACTIVE
+                          <span className="inline-block px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-[10px] font-bold uppercase">
+                            Active
                           </span>
                         ) : (
-                          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-[10px] font-bold">
-                            <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
-                            INACTIVE
+                          <span className="inline-block px-2.5 py-1 rounded-full bg-slate-100 text-slate-500 border border-slate-200 text-[10px] font-bold uppercase">
+                            Inactive
                           </span>
                         )}
                       </td>
 
                       {/* Actions */}
-                      <td className="py-3 px-4 text-center sticky right-0 bg-white group-hover:bg-indigo-50/30 z-10">
-                        <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            onClick={() => setSelectedEmployee(emp)}
-                            className="p-1.5 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
-                            title="View Profile Details"
-                          >
-                            <Eye className="w-4 h-4" />
-                          </button>
+                      <td className="py-3 px-4 text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1">
                           <button
                             onClick={() => handleOpenEditModal(emp)}
-                            className="p-1.5 text-indigo-600 hover:text-indigo-800 hover:bg-indigo-50 rounded-lg transition cursor-pointer"
+                            className="p-1.5 text-slate-500 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition cursor-pointer"
                             title="Edit Employee"
                           >
                             <Pencil className="w-4 h-4" />
                           </button>
                           <button
                             onClick={() => setDeleteTarget(emp)}
-                            className="p-1.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition cursor-pointer"
-                            title="Delete Employee"
+                            className="p-1.5 text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition cursor-pointer"
+                            title="Remove Employee"
                           >
                             <Trash2 className="w-4 h-4" />
                           </button>
@@ -1245,512 +1146,249 @@ export function EmployeeMaster() {
             </tbody>
           </table>
         </div>
-
-        <Pagination
-          currentPage={page}
-          totalItems={filteredEmployees.length}
-          pageSize={PAGE_SIZE}
-          onPageChange={setPage}
-        />
       </div>
+      {/* Pagination */}
+      <Pagination
+        currentPage={page}
+        totalItems={filteredEmployees.length}
+        pageSize={PAGE_SIZE}
+        onPageChange={setPage}
+      />
 
-      {/* Add / Edit Employee Modal */}
+      {/* Add / Edit Employee Modal - Single Scroll */}
       {isFormModalOpen && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-2xl w-full shadow-2xl border border-slate-200 max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-3xl w-full shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
             {/* Modal Header */}
-            <div className="p-6 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold flex items-center gap-2 text-white">
-                  {formMode === 'create' ? <UserPlus className="w-5 h-5 text-indigo-400" /> : <Pencil className="w-5 h-5 text-indigo-400" />}
-                  {formMode === 'create' ? 'Add New Employee' : `Edit Employee: ${formData.name}`}
-                </h3>
-                <p className="text-xs text-slate-300 mt-0.5">
-                  {formMode === 'create'
-                    ? 'Enter employee details and default password to add to the Master Directory.'
-                    : 'Update employee information and roles.'}
-                </p>
-              </div>
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <h3 className="text-lg font-bold text-slate-900">
+                {formMode === 'create' ? 'Add Employee' : 'Edit Employee'}
+              </h3>
               <button
                 onClick={() => setIsFormModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-xl hover:bg-slate-800 transition cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Error Message inside Modal */}
+            {/* Error */}
             {formError && (
-              <div className="mx-6 mt-4 p-3.5 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2 font-medium">
+              <div className="mx-6 mt-4 p-3 bg-rose-50 border border-rose-200 text-rose-800 rounded-xl text-xs flex items-center gap-2 font-medium">
                 <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
                 <span>{formError}</span>
               </div>
             )}
 
-            {/* Form Tabs */}
-            <div className="px-6 pt-3 border-b border-slate-200 bg-slate-50/50 flex gap-2 overflow-x-auto">
-              {[
-                { id: 'basic', label: '1. Basic Info' },
-                { id: 'job', label: '2. Job & Department' },
-                { id: 'payroll', label: '3. Payroll & KYC' },
-                { id: 'contact', label: '4. Address & Notes' },
-              ].map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setActiveFormTab(tab.id as any)}
-                  className={`pb-2.5 px-3 text-xs font-bold border-b-2 transition cursor-pointer whitespace-nowrap ${
-                    activeFormTab === tab.id
-                      ? 'border-indigo-600 text-indigo-600'
-                      : 'border-transparent text-slate-500 hover:text-slate-800'
-                  }`}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-
-            {/* Form Content */}
-            <form onSubmit={handleFormSubmit} className="flex-1 overflow-y-auto p-6 space-y-4">
-              {/* Tab 1: Basic Info */}
-              {activeFormTab === 'basic' && (
-                <div className="space-y-4 animate-in fade-in duration-150">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Full Name <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.name}
-                        onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        placeholder="e.g. Rahul Sharma"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Employee ID / Code <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.employeeId}
-                        onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}
-                        placeholder="e.g. ADP0417"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-mono text-slate-800"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Email Address <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="email"
-                        required
-                        value={formData.email}
-                        onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                        placeholder="e.g. rahul@adyapan.com"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Password {formMode === 'create' && <span className="text-rose-500">*</span>}
-                      </label>
-                      <div className="relative">
-                        <input
-                          type={showPassword ? 'text' : 'password'}
-                          required={formMode === 'create'}
-                          value={formData.password}
-                          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                          placeholder={formMode === 'create' ? 'Default: Adyapan@123' : 'Leave empty to keep unchanged'}
-                          className="w-full pl-3.5 pr-10 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800 font-mono"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowPassword(!showPassword)}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
-                        >
-                          {showPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-                        </button>
-                      </div>
-                      <p className="text-[10px] text-slate-400 mt-1">
-                        {formMode === 'create' ? 'Default login password will be set for the employee.' : 'Enter new password only if you want to reset it.'}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Mobile Number
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.mobile}
-                        onChange={(e) => setFormData({ ...formData, mobile: e.target.value })}
-                        placeholder="e.g. 9876543210"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-mono text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Gender
-                      </label>
-                      <select
-                        value={formData.gender || 'MALE'}
-                        onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold text-slate-700 cursor-pointer"
-                      >
-                        <option value="MALE">Male</option>
-                        <option value="FEMALE">Female</option>
-                        <option value="OTHER">Other</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Date of Birth
-                      </label>
-                      <input
-                        type="date"
-                        value={formData.dateOfBirth}
-                        onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })}
-                        className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-700"
-                      />
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 2: Job & Department */}
-              {activeFormTab === 'job' && (
-                <div className="space-y-4 animate-in fade-in duration-150">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Department <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.department}
-                        onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                        placeholder="e.g. Sales, HR, Engineering"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Designation <span className="text-rose-500">*</span>
-                      </label>
-                      <input
-                        type="text"
-                        required
-                        value={formData.designation}
-                        onChange={(e) => setFormData({ ...formData, designation: e.target.value })}
-                        placeholder="e.g. Inside Sales Specialist"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Role <span className="text-rose-500">*</span>
-                      </label>
-                      <select
-                        value={formData.role || 'EMPLOYEE'}
-                        onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold text-slate-700 cursor-pointer"
-                      >
-                        <option value="EMPLOYEE">EMPLOYEE (Staff)</option>
-                        <option value="ADMIN">ADMIN (Administrator)</option>
-                        <option value="HR_ADMIN">HR_ADMIN (HR Admin)</option>
-                        <option value="HR_EXECUTIVE">HR_EXECUTIVE (HR Executive)</option>
-                        <option value="MANAGER">MANAGER (Manager)</option>
-                        <option value="TEAM_LEAD">TEAM_LEAD (Team Leader)</option>
-                        <option value="COUNSELOR">COUNSELOR (Counselor)</option>
-                        <option value="TELECALLER">TELECALLER (Telecaller)</option>
-                      </select>
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Team Name
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.teamName}
-                        onChange={(e) => setFormData({ ...formData, teamName: e.target.value })}
-                        placeholder="e.g. Team Alpha"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Reporting Manager
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.reportingManager}
-                        onChange={(e) => setFormData({ ...formData, reportingManager: e.target.value })}
-                        placeholder="e.g. Aravind / Pavitra"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Employment Type
-                      </label>
-                      <select
-                        value={formData.employmentType || 'FULL_TIME'}
-                        onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })}
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold text-slate-700 cursor-pointer"
-                      >
-                        <option value="FULL_TIME">Full Time</option>
-                        <option value="PART_TIME">Part Time</option>
-                        <option value="CONTRACT">Contract</option>
-                        <option value="INTERNSHIP">Internship</option>
-                        <option value="PROBATION">Probation</option>
-                      </select>
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Joining Date
-                      </label>
-                      <input
-                        type="date"
-                        value={formData.joiningDate}
-                        onChange={(e) => setFormData({ ...formData, joiningDate: e.target.value })}
-                        className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-700"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Status
-                      </label>
-                      <select
-                        value={formData.isActive ? 'ACTIVE' : 'INACTIVE'}
-                        onChange={(e) => setFormData({ ...formData, isActive: e.target.value === 'ACTIVE' })}
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-semibold text-slate-700 cursor-pointer"
-                      >
-                        <option value="ACTIVE">Active Staff</option>
-                        <option value="INACTIVE">Inactive / Resigned</option>
-                      </select>
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* Tab 3: Payroll & KYC */}
-              {activeFormTab === 'payroll' && (
-                <div className="space-y-4 animate-in fade-in duration-150">
+            {/* Form Content - Single Scroll */}
+            <form onSubmit={handleFormSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+              {/* Account & Employment */}
+              <div className="space-y-4">
+                <h4 className="text-sm font-bold text-slate-900">Account & Employment</h4>
+                <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Base Salary (Monthly / INR)
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.baseSalary}
-                      onChange={(e) => setFormData({ ...formData, baseSalary: Number(e.target.value) || 0 })}
-                      placeholder="e.g. 25000"
-                      className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-mono text-slate-800"
-                    />
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Full Name</label>
+                    <input type="text" required value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} placeholder="e.g. Abbu Veena" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Bank Name
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.bankName}
-                        onChange={(e) => setFormData({ ...formData, bankName: e.target.value })}
-                        placeholder="e.g. HDFC Bank"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Account Number
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.bankAccountNumber}
-                        onChange={(e) => setFormData({ ...formData, bankAccountNumber: e.target.value })}
-                        placeholder="e.g. 501002345678"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-mono text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        IFSC Code
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.bankIfsc}
-                        onChange={(e) => setFormData({ ...formData, bankIfsc: e.target.value.toUpperCase() })}
-                        placeholder="e.g. HDFC0001234"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-mono uppercase text-slate-800"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Email</label>
+                    <input type="email" required value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} placeholder="email@adyapan.com" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        PAN Number
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.panNumber}
-                        onChange={(e) => setFormData({ ...formData, panNumber: e.target.value.toUpperCase() })}
-                        placeholder="e.g. ABCDE1234F"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-mono uppercase text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        UAN / PF Number
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.uanNumber}
-                        onChange={(e) => setFormData({ ...formData, uanNumber: e.target.value })}
-                        placeholder="e.g. 101234567890"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-mono text-slate-800"
-                      />
-                    </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Mobile</label>
+                    <input type="text" value={formData.mobile} onChange={(e) => setFormData({ ...formData, mobile: e.target.value })} placeholder="9876543210" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
                   </div>
                 </div>
-              )}
-
-              {/* Tab 4: Address & Contact */}
-              {activeFormTab === 'contact' && (
-                <div className="space-y-4 animate-in fade-in duration-150">
+                <div className="grid grid-cols-3 gap-4">
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Residential Address
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={formData.address}
-                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                      placeholder="Full residential address..."
-                      className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800"
-                    />
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Employee ID</label>
+                    <input type="text" required value={formData.employeeId} onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })} placeholder="ADP0417" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800 font-mono" />
                   </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Emergency Contact Name
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.emergencyContactName}
-                        onChange={(e) => setFormData({ ...formData, emergencyContactName: e.target.value })}
-                        placeholder="e.g. Sunita Sharma (Mother)"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                        Emergency Contact Phone
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.emergencyContactPhone}
-                        onChange={(e) => setFormData({ ...formData, emergencyContactPhone: e.target.value })}
-                        placeholder="e.g. 9876543210"
-                        className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-mono text-slate-800"
-                      />
-                    </div>
-                  </div>
-
                   <div>
-                    <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                      Notes / Remarks
-                    </label>
-                    <textarea
-                      rows={2}
-                      value={formData.notes}
-                      onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                      placeholder="Any additional notes or HR remarks..."
-                      className="w-full px-3.5 py-2 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-slate-800"
-                    />
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Role</label>
+                    <select value={formData.role} onChange={(e) => setFormData({ ...formData, role: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800 cursor-pointer">
+                      <option value="EMPLOYEE">Employee</option>
+                      <option value="HR_EXECUTIVE">HR Executive</option>
+                      <option value="HR_ADMIN">HR Admin</option>
+                      <option value="SUPER_ADMIN">Super Admin</option>
+                      <option value="MANAGER">Manager</option>
+                      <option value="TEAM_LEAD">Team Lead</option>
+                      <option value="TELECALLER">Telecaller</option>
+                      <option value="COUNSELOR">Counselor</option>
+                      <option value="DEVELOPER">Developer</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Designation</label>
+                    <input type="text" value={formData.designation} onChange={(e) => setFormData({ ...formData, designation: e.target.value })} placeholder="HR Talent Acquisition" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
                   </div>
                 </div>
-              )}
-
-              {/* Modal Footer */}
-              <div className="pt-4 border-t border-slate-200 flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setIsFormModalOpen(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-
-                <div className="flex items-center gap-2">
-                  {activeFormTab !== 'contact' && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (activeFormTab === 'basic') setActiveFormTab('job');
-                        else if (activeFormTab === 'job') setActiveFormTab('payroll');
-                        else if (activeFormTab === 'payroll') setActiveFormTab('contact');
-                      }}
-                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <span>Next</span>
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-
-                  <button
-                    type="submit"
-                    disabled={formSubmitting}
-                    className="px-5 py-2 bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-500 hover:to-indigo-600 text-white rounded-xl text-xs font-bold transition flex items-center gap-2 shadow-lg shadow-indigo-600/30 cursor-pointer disabled:opacity-50"
-                  >
-                    {formSubmitting ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Saving...</span>
-                      </>
-                    ) : (
-                      <>
-                        <Save className="w-4 h-4" />
-                        <span>{formMode === 'create' ? 'Save Employee' : 'Update Record'}</span>
-                      </>
-                    )}
-                  </button>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Specialization</label>
+                    <input type="text" value={(formData as any).specialization || ''} onChange={(e) => setFormData({ ...formData, specialization: e.target.value } as any)} placeholder="HR" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Department</label>
+                    <input type="text" value={(formData as any).department || ''} onChange={(e) => setFormData({ ...formData, department: e.target.value } as any)} placeholder="HR" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Team</label>
+                    <select value={formData.teamName || ''} onChange={(e) => setFormData({ ...formData, teamName: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800 cursor-pointer">
+                      <option value="">Select Team</option>
+                      {teams.map((t: any) => <option key={t.id || t.name} value={t.name}>{t.name}</option>)}
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Joining Date</label>
+                    <input type="date" value={formData.joiningDate} onChange={(e) => setFormData({ ...formData, joiningDate: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Onboarding Date</label>
+                    <input type="date" value={formData.onboardingDate || ''} onChange={(e) => setFormData({ ...formData, onboardingDate: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Employment Type</label>
+                    <select value={formData.employmentType} onChange={(e) => setFormData({ ...formData, employmentType: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800 cursor-pointer">
+                      <option value="FULL_TIME">Full time</option>
+                      <option value="PART_TIME">Part time</option>
+                      <option value="INTERNSHIP">Intern</option>
+                      <option value="CONTRACT">Contract</option>
+                      <option value="PROBATION">Probation</option>
+                      <option value="FREELANCE">Freelance</option>
+                    </select>
+                  </div>
                 </div>
               </div>
+
+              {/* Training & Probation */}
+              <div className="space-y-4 border-t border-slate-100 pt-6">
+                <h4 className="text-sm font-bold text-slate-900">Training & Probation</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">OJT Start Date</label>
+                    <input type="date" value={(formData as any).ojtStartDate || ''} onChange={(e) => setFormData({ ...formData, ojtStartDate: e.target.value } as any)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">OJT End Date</label>
+                    <input type="date" value={(formData as any).ojtEndDate || ''} onChange={(e) => setFormData({ ...formData, ojtEndDate: e.target.value } as any)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Training Start Date</label>
+                    <input type="date" value={(formData as any).trainingStartDate || ''} onChange={(e) => setFormData({ ...formData, trainingStartDate: e.target.value } as any)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Training End Date</label>
+                    <input type="date" value={(formData as any).trainingEndDate || ''} onChange={(e) => setFormData({ ...formData, trainingEndDate: e.target.value } as any)} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Probation Period</label>
+                    <input type="text" value={(formData as any).probationPeriod || ''} onChange={(e) => setFormData({ ...formData, probationPeriod: e.target.value } as any)} placeholder="e.g. 3 months, 6 months" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Personal & Emergency */}
+              <div className="space-y-4 border-t border-slate-100 pt-6">
+                <h4 className="text-sm font-bold text-slate-900">Personal & Emergency</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Date of Birth</label>
+                    <input type="date" value={formData.dateOfBirth} onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Gender</label>
+                    <input type="text" value={formData.gender} onChange={(e) => setFormData({ ...formData, gender: e.target.value })} placeholder="Male / Female" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Emergency Contact</label>
+                    <input type="text" value={formData.emergencyContactName} onChange={(e) => setFormData({ ...formData, emergencyContactName: e.target.value })} placeholder="Name" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Emergency Phone</label>
+                    <input type="text" value={formData.emergencyContactPhone} onChange={(e) => setFormData({ ...formData, emergencyContactPhone: e.target.value })} placeholder="9876543210" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Current Address</label>
+                  <textarea value={formData.address} onChange={(e) => setFormData({ ...formData, address: e.target.value })} rows={3} placeholder="Current address" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800 resize-none" />
+                </div>
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Permanent Address</label>
+                  <textarea value={(formData as any).permanentAddress || ''} onChange={(e) => setFormData({ ...formData, permanentAddress: e.target.value } as any)} rows={3} placeholder="Permanent address" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800 resize-none" />
+                </div>
+              </div>
+
+              {/* Payroll & Statutory */}
+              <div className="space-y-4 border-t border-slate-100 pt-6">
+                <h4 className="text-sm font-bold text-slate-900">Payroll & Statutory</h4>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Base Salary</label>
+                    <input type="number" value={formData.baseSalary} onChange={(e) => setFormData({ ...formData, baseSalary: Number(e.target.value) })} placeholder="15000" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Bank Name</label>
+                    <input type="text" value={formData.bankName} onChange={(e) => setFormData({ ...formData, bankName: e.target.value })} placeholder="HDFC" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Account Number</label>
+                    <input type="text" value={formData.bankAccountNumber} onChange={(e) => setFormData({ ...formData, bankAccountNumber: e.target.value })} placeholder="Account number" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">IFSC</label>
+                    <input type="text" value={formData.bankIfsc} onChange={(e) => setFormData({ ...formData, bankIfsc: e.target.value })} placeholder="HDFC0000864" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">PAN</label>
+                    <input type="text" value={formData.panNumber} onChange={(e) => setFormData({ ...formData, panNumber: e.target.value })} placeholder="CBBPV1902N" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">UAN</label>
+                    <input type="text" value={formData.uanNumber} onChange={(e) => setFormData({ ...formData, uanNumber: e.target.value })} placeholder="572104310119" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800" />
+                  </div>
+                </div>
+              </div>
+
+              {/* Internal Notes */}
+              <div className="space-y-4 border-t border-slate-100 pt-6">
+                <div>
+                  <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Internal Notes</label>
+                  <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} rows={3} placeholder="Team: HR | Team Leader: Nandini | Type: Intern | Location: Hyderabad" className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800 resize-none" />
+                </div>
+
+                {/* Active Checkbox */}
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input type="checkbox" checked={formData.isActive} onChange={(e) => setFormData({ ...formData, isActive: e.target.checked })} className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-400 cursor-pointer" />
+                  <span className="text-sm text-slate-700">Employee account is active</span>
+                </label>
+              </div>
             </form>
+
+            {/* Modal Footer */}
+            <div className="p-5 border-t border-slate-100 flex items-center justify-end gap-3 shrink-0 bg-white">
+              <button type="button" onClick={() => setIsFormModalOpen(false)} className="px-5 py-2.5 text-sm font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer">
+                Cancel
+              </button>
+              <button
+                type="submit"
+                form="empForm"
+                disabled={formSubmitting}
+                onClick={(e) => { e.preventDefault(); handleFormSubmit(e as any); }}
+                className="px-5 py-2.5 bg-orange-500 hover:bg-orange-600 text-white rounded-xl text-sm font-bold transition flex items-center gap-2 cursor-pointer shadow-md disabled:opacity-50"
+              >
+                {formSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
+                <span>{formSubmitting ? 'Saving...' : 'Save Changes'}</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -1796,192 +1434,182 @@ export function EmployeeMaster() {
         </div>
       )}
 
-      {/* Employee Detail Drawer */}
+      {/* Employee Profile Modal - Centered */}
       {selectedEmployee && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex justify-end">
-          <div className="bg-white w-full max-w-lg h-full shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
-            {/* Drawer Header */}
-            <div className="p-6 bg-gradient-to-r from-slate-900 to-indigo-950 text-white flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-indigo-500 to-purple-600 text-white flex items-center justify-center font-black text-base shadow-md">
-                  {getEmpInitials(getEmpName(selectedEmployee))}
-                </div>
-                <div>
-                  <h3 className="font-extrabold text-base text-white">{getEmpName(selectedEmployee)}</h3>
-                  <div className="flex items-center gap-2 mt-0.5">
-                    <span className="font-mono text-xs text-indigo-300 bg-indigo-900/60 px-2 py-0.5 rounded border border-indigo-700/50">
-                      {getEmpCode(selectedEmployee)}
-                    </span>
-                    <span
-                      className={`text-[10px] font-bold px-2 py-0.5 rounded ${
-                        getEmpStatus(selectedEmployee) === 'ACTIVE'
-                          ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
-                          : 'bg-slate-500/20 text-slate-300 border border-slate-500/30'
-                      }`}
-                    >
-                      {getEmpStatus(selectedEmployee)}
-                    </span>
-                  </div>
-                </div>
-              </div>
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl w-full max-w-3xl shadow-2xl max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-slate-100 flex items-center justify-between shrink-0">
+              <h3 className="text-lg font-bold text-slate-900">Employee Profile</h3>
               <button
                 onClick={() => setSelectedEmployee(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition cursor-pointer"
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg hover:bg-slate-100 transition cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            {/* Drawer Content */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Actions row inside drawer */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    handleOpenEditModal(selectedEmployee);
-                  }}
-                  className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer shadow-md shadow-indigo-600/20"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  <span>Edit Profile</span>
-                </button>
-                <button
-                  onClick={() => {
-                    setDeleteTarget(selectedEmployee);
-                  }}
-                  className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition cursor-pointer border border-rose-200"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                  <span>Delete</span>
-                </button>
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {/* Profile Banner */}
+              <div className="p-4 bg-orange-50 rounded-2xl border border-orange-100">
+                <div className="flex items-center gap-4">
+                  <div className="w-12 h-12 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 text-white flex items-center justify-center font-black text-base shadow-md">
+                    {getEmpInitials(getEmpName(selectedEmployee))}
+                  </div>
+                  <div className="flex-1">
+                    <h4 className="font-bold text-slate-900 text-base">{getEmpName(selectedEmployee)}</h4>
+                    <p className="text-xs text-slate-500">{getEmpDesignation(selectedEmployee)} · {getEmpCode(selectedEmployee)}</p>
+                    <span className={`inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                      getEmpStatus(selectedEmployee) === 'ACTIVE'
+                        ? 'bg-emerald-100 text-emerald-700 border border-emerald-200'
+                        : 'bg-slate-100 text-slate-500 border border-slate-200'
+                    }`}>
+                      {getEmpStatus(selectedEmployee)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleOpenEditModal(selectedEmployee)}
+                    className="px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer flex items-center gap-1.5"
+                  >
+                    <Pencil className="w-3 h-3" /> Edit
+                  </button>
+                </div>
               </div>
 
-              {/* Organization & Role */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Organization & Job Role
-                </h4>
-                <div className="bg-slate-50 rounded-2xl p-4 space-y-3 border border-slate-100">
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <span className="text-slate-400 text-[11px] block">Designation</span>
-                      <span className="font-bold text-slate-900">{getEmpDesignation(selectedEmployee)}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[11px] block">Department</span>
-                      <span className="font-bold text-slate-900">{getEmpDept(selectedEmployee)}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[11px] block">Team</span>
-                      <span className="font-bold text-slate-900">{getEmpTeam(selectedEmployee)}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[11px] block">Role</span>
-                      <span className="font-bold text-slate-900">{selectedEmployee.role || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[11px] block">Reporting Manager</span>
-                      <span className="font-bold text-slate-900">{selectedEmployee.reportingManager || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[11px] block">Joining Date</span>
-                      <span className="font-bold text-slate-900">{getEmpJoiningDate(selectedEmployee)}</span>
-                    </div>
+              {/* Contact & Employment */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="border border-slate-200 rounded-xl p-4 space-y-2">
+                  <h5 className="text-[11px] font-bold text-orange-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <Mail className="w-3.5 h-3.5" /> Contact
+                  </h5>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between"><span className="text-slate-400">Email</span><span className="font-semibold text-slate-800 text-right max-w-[180px] truncate">{getEmpEmail(selectedEmployee)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Mobile</span><span className="font-semibold text-slate-800">{getEmpPhone(selectedEmployee)}</span></div>
+                  </div>
+                </div>
+                <div className="border border-slate-200 rounded-xl p-4 space-y-2">
+                  <h5 className="text-[11px] font-bold text-orange-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <Briefcase className="w-3.5 h-3.5" /> Employment
+                  </h5>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between"><span className="text-slate-400">Department</span><span className="font-semibold text-slate-800">{getEmpDept(selectedEmployee)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Specialization</span><span className="font-semibold text-slate-800">{selectedEmployee.specialization || getEmpDept(selectedEmployee)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Employment Type</span><span className="font-semibold text-slate-800">{selectedEmployee.employmentType || 'FULL_TIME'}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Joining Date</span><span className="font-semibold text-orange-600">{getEmpJoiningDate(selectedEmployee)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Onboarding Date</span><span className="font-semibold text-orange-600">{selectedEmployee.onboardingDate ? new Date(selectedEmployee.onboardingDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span></div>
                   </div>
                 </div>
               </div>
 
-              {/* Contact Information */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Contact Information
-                </h4>
-                <div className="bg-slate-50 rounded-2xl p-4 space-y-3 border border-slate-100">
-                  <div className="space-y-2 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Official Email</span>
-                      <span className="font-mono font-semibold text-slate-800">{getEmpEmail(selectedEmployee)}</span>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-500">Mobile Phone</span>
-                      <span className="font-mono font-semibold text-slate-800">{getEmpPhone(selectedEmployee)}</span>
-                    </div>
-                    {selectedEmployee.address && (
-                      <div className="pt-2 border-t border-slate-200/60">
-                        <span className="text-slate-400 text-[11px] block">Address</span>
-                        <span className="text-slate-700">{selectedEmployee.address}</span>
-                      </div>
-                    )}
+              {/* Team & Personal */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="border border-slate-200 rounded-xl p-4 space-y-2">
+                  <h5 className="text-[11px] font-bold text-rose-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5" /> Team
+                  </h5>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between"><span className="text-slate-400">Team</span><span className="font-semibold text-slate-800">{getEmpTeam(selectedEmployee)}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Reporting Manager</span><span className="font-semibold text-slate-800">{selectedEmployee.reportingManager || selectedEmployee.manager || selectedEmployee.teamLeader || '—'}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Role</span><span className="font-semibold text-slate-800">{getEmpDesignation(selectedEmployee)}</span></div>
+                  </div>
+                </div>
+                <div className="border border-slate-200 rounded-xl p-4 space-y-2">
+                  <h5 className="text-[11px] font-bold text-rose-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Calendar className="w-3.5 h-3.5" /> Personal
+                  </h5>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between"><span className="text-slate-400">Date of Birth</span><span className="font-semibold text-slate-800">{selectedEmployee.dateOfBirth ? new Date(selectedEmployee.dateOfBirth).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Gender</span><span className="font-semibold text-slate-800">{selectedEmployee.gender || '—'}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Blood Group</span><span className="font-semibold text-slate-800">{selectedEmployee.bloodGroup || '—'}</span></div>
                   </div>
                 </div>
               </div>
 
-              {/* Banking & KYC */}
-              <div className="space-y-3">
-                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                  Payroll, Banking & KYC
-                </h4>
-                <div className="bg-slate-50 rounded-2xl p-4 space-y-3 border border-slate-100">
-                  <div className="grid grid-cols-2 gap-3 text-xs">
-                    <div>
-                      <span className="text-slate-400 text-[11px] block">Base Salary</span>
-                      <span className="font-mono font-bold text-emerald-700">
-                        ₹{Number(selectedEmployee.baseSalary || 0).toLocaleString('en-IN')}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[11px] block">Bank Name</span>
-                      <span className="font-bold text-slate-900">{selectedEmployee.bankName || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[11px] block">Account Number</span>
-                      <span className="font-mono font-bold text-slate-900">{selectedEmployee.bankAccountNumber || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[11px] block">IFSC Code</span>
-                      <span className="font-mono font-bold text-slate-900">{selectedEmployee.bankIfsc || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[11px] block">PAN Number</span>
-                      <span className="font-mono font-bold text-slate-900">{selectedEmployee.panNumber || '—'}</span>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 text-[11px] block">UAN Number</span>
-                      <span className="font-mono font-bold text-slate-900">{selectedEmployee.uanNumber || '—'}</span>
-                    </div>
+              {/* Address */}
+              <div className="border border-slate-200 rounded-xl p-4 space-y-2">
+                <h5 className="text-[11px] font-bold text-green-600 uppercase tracking-wider flex items-center gap-1.5">
+                  <MapPin className="w-3.5 h-3.5" /> Address
+                </h5>
+                <p className="text-xs text-slate-700">
+                  {(selectedEmployee.permanentAddress || selectedEmployee.permanent_address) ? `Permanent: ${selectedEmployee.permanentAddress || selectedEmployee.permanent_address}` : ''}
+                  {(selectedEmployee.address || selectedEmployee.currentAddress || selectedEmployee.current_address) ? `${(selectedEmployee.permanentAddress || selectedEmployee.permanent_address) ? ' | ' : ''}Current: ${selectedEmployee.address || selectedEmployee.currentAddress || selectedEmployee.current_address}` : ''}
+                  {!selectedEmployee.address && !selectedEmployee.permanentAddress && !selectedEmployee.currentAddress && !selectedEmployee.current_address && !selectedEmployee.permanent_address && '—'}
+                </p>
+              </div>
+
+              {/* Emergency Contact & Bank Details */}
+              <div className="grid grid-cols-2 gap-4">
+                <div className="border border-slate-200 rounded-xl p-4 space-y-2">
+                  <h5 className="text-[11px] font-bold text-rose-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Phone className="w-3.5 h-3.5" /> Emergency Contact
+                  </h5>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between"><span className="text-slate-400">Name</span><span className="font-semibold text-slate-800">{selectedEmployee.emergencyContactName || selectedEmployee.emergencyContact || selectedEmployee.emergencyName || '—'}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Phone</span><span className="font-semibold text-slate-800">{selectedEmployee.emergencyContactPhone || selectedEmployee.emergencyPhone || selectedEmployee.emergencyMobile || '—'}</span></div>
+                  </div>
+                </div>
+                <div className="border border-slate-200 rounded-xl p-4 space-y-2">
+                  <h5 className="text-[11px] font-bold text-green-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <CreditCard className="w-3.5 h-3.5" /> Bank Details
+                  </h5>
+                  <div className="space-y-1.5 text-xs">
+                    <div className="flex justify-between"><span className="text-slate-400">Bank</span><span className="font-semibold text-slate-800">{selectedEmployee.bankName || selectedEmployee.bank || '—'}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">Account</span><span className="font-semibold text-slate-800">{selectedEmployee.bankAccountNumber || selectedEmployee.accountNumber || selectedEmployee.bankAccountNo || '—'}</span></div>
+                    <div className="flex justify-between"><span className="text-slate-400">IFSC</span><span className="font-semibold text-slate-800">{selectedEmployee.bankIfsc || selectedEmployee.ifsc || selectedEmployee.ifscCode || '—'}</span></div>
                   </div>
                 </div>
               </div>
 
-              {/* Emergency Contact */}
-              {selectedEmployee.emergencyContactName && (
-                <div className="space-y-3">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-                    Emergency Contact
-                  </h4>
-                  <div className="bg-rose-50/50 rounded-2xl p-4 border border-rose-100 text-xs">
-                    <div className="flex items-center justify-between">
-                      <span className="text-slate-600">{selectedEmployee.emergencyContactName}</span>
-                      <span className="font-mono font-bold text-slate-900">{selectedEmployee.emergencyContactPhone || '—'}</span>
-                    </div>
-                  </div>
+              {/* Statutory */}
+              <div className="border border-slate-200 rounded-xl p-4 space-y-2 max-w-sm">
+                <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5" /> Statutory
+                </h5>
+                <div className="space-y-1.5 text-xs">
+                  <div className="flex justify-between"><span className="text-slate-400">PAN</span><span className="font-mono font-bold text-slate-800">{selectedEmployee.panNumber || selectedEmployee.pan || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">UAN</span><span className="font-mono font-bold text-slate-800">{selectedEmployee.uanNumber || selectedEmployee.uan || '—'}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Base Salary</span><span className="font-bold text-slate-800">₹{Number(selectedEmployee.baseSalary || selectedEmployee.salary || selectedEmployee.ctc || 0).toLocaleString('en-IN')}</span></div>
                 </div>
-              )}
+              </div>
 
               {/* Notes */}
               {selectedEmployee.notes && (
-                <div className="space-y-2">
-                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Notes</h4>
-                  <p className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                    {selectedEmployee.notes}
-                  </p>
+                <div className="border border-slate-200 rounded-xl p-4 space-y-2">
+                  <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5" /> Notes
+                  </h5>
+                  <p className="text-xs text-slate-700">{selectedEmployee.notes}</p>
+                </div>
+              )}
+
+              {/* Documents & Certificates */}
+              {((selectedEmployee.documents && Array.isArray(selectedEmployee.documents) && selectedEmployee.documents.length > 0) || (selectedEmployee.uploads && Array.isArray(selectedEmployee.uploads) && selectedEmployee.uploads.length > 0)) && (
+                <div className="border border-slate-200 rounded-xl p-4 space-y-3">
+                  <h5 className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <Layers className="w-3.5 h-3.5" /> Documents & Certificates
+                  </h5>
+                  <div className="divide-y divide-slate-100">
+                    {(selectedEmployee.uploads || selectedEmployee.documents || []).map((doc: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between py-2">
+                        <div>
+                          <div className="text-xs font-bold text-slate-800">{doc.title || doc.name || doc.fileName || doc.originalName || 'Document'}</div>
+                          <div className="text-[10px] text-slate-400 uppercase">{doc.category || doc.type || doc.documentType || ''}</div>
+                        </div>
+                        {(doc.fileUrl || doc.url || doc.path) && (
+                          <a href={doc.fileUrl || doc.url || doc.path} target="_blank" rel="noopener noreferrer" className="text-xs font-semibold text-orange-600 hover:text-orange-700 flex items-center gap-1">
+                            <Eye className="w-3 h-3" /> Open
+                          </a>
+                        )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>
           </div>
         </div>
       )}
-
       {/* Auth Key Modal */}
       {showTokenModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 
-const CRM_API_ENDPOINT = 'https://adyapancrm.in/api/hr/employees';
+const CRM_API_ENDPOINT = 'https://adyapancrm.in/api/hr/employee';
 
 function getAuthHeaders(request: NextRequest) {
   const authHeader = request.headers.get('authorization') || '';
@@ -24,8 +24,19 @@ function getAuthHeaders(request: NextRequest) {
 export async function GET(request: NextRequest) {
   try {
     const headers = getAuthHeaders(request);
+    const url = new URL(request.url);
+    const id = url.searchParams.get('id') || '';
+    const uploads = url.searchParams.get('uploads') || '';
 
-    const crmResponse = await fetch(CRM_API_ENDPOINT, {
+    let targetUrl = CRM_API_ENDPOINT;
+    if (id) {
+      targetUrl = `${CRM_API_ENDPOINT}/${id}`;
+      if (uploads) {
+        targetUrl += `?uploads=${uploads}`;
+      }
+    }
+
+    const crmResponse = await fetch(targetUrl, {
       method: 'GET',
       headers,
       cache: 'no-store',
