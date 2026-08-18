@@ -56,11 +56,11 @@ export default function DashboardPage() {
         setMetrics(data);
       } catch (err) {
         setMetrics({
-          totalEmployees: 115,
-          todayPresent: 102,
-          todayLate: 4,
-          pendingLeaves: 3,
-          openJobs: 5,
+          totalEmployees: 0,
+          todayPresent: 0,
+          todayLate: 0,
+          pendingLeaves: 0,
+          openJobs: 0,
         });
       }
     }

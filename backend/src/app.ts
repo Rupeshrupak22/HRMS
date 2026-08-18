@@ -203,47 +203,12 @@ app.get('/api/overall-report', authenticate, getOverallReportsHandler);
 app.post('/api/v1/overall-report', authenticate, postOverallReportHandler);
 app.post('/api/overall-report', authenticate, postOverallReportHandler);
 
-// Public payroll read endpoint (no auth required - for manager reports)
-const defaultPayrollRecords = [
-  {
-    id: 'pay-1',
-    employeeId: 'EMP-101',
-    employeeName: 'Rahul Sharma',
-    department: 'Engineering',
-    workingDays: '26',
-    leavesTaken: '1',
-    lopDays: '0',
-    lopDeduction: '0',
-    newSalary: '65000',
-    netPay: '65000',
-    verifiedBy: 'Charitha (Payroll)',
-    createdAt: new Date().toISOString(),
-  },
-  {
-    id: 'pay-2',
-    employeeId: 'EMP-102',
-    employeeName: 'Priya Singh',
-    department: 'Marketing',
-    workingDays: '25',
-    leavesTaken: '2',
-    lopDays: '1',
-    lopDeduction: '1800',
-    newSalary: '55000',
-    netPay: '53200',
-    verifiedBy: 'Charitha (Payroll)',
-    createdAt: new Date().toISOString(),
-  },
-];
-
 const getPayrollPublicHandler = async (_req: express.Request, res: express.Response) => {
   try {
     const records = await prisma.manualPayrollRecord.findMany({ orderBy: { createdAt: 'desc' } });
-    if (records && records.length > 0) {
-      return res.json(records);
-    }
-    return res.json(defaultPayrollRecords);
+    return res.json(records || []);
   } catch {
-    return res.json(defaultPayrollRecords);
+    return res.json([]);
   }
 };
 
