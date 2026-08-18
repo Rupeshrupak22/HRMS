@@ -65,13 +65,15 @@ app.use(cors({
 }));
 app.use(cookieParser(env.COOKIE_SECRET));
 
-// Global rate limiting: 200 requests per IP per 15 minutes
+// Global rate limiting: high throughput for enterprise HRMS operations
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 5000, // 5000 requests per 15 minutes to comfortably support dashboards & specialists
   message: { success: false, message: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,
+  validate: false,
+  skip: (req) => req.method === 'OPTIONS' || req.path === '/api/health',
 });
 app.use(globalLimiter);
 
