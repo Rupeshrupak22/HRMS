@@ -1,7 +1,24 @@
 'use client';
 
-import React, { useState, useRef, useEffect } from 'react';
-import { Download, Upload, Plus, FileSpreadsheet, X, Edit2, Trash2, AlertCircle, Loader2, Users, FileText, DollarSign, TrendingDown, CheckCircle2 } from 'lucide-react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
+import {
+  Download,
+  Upload,
+  Plus,
+  FileSpreadsheet,
+  X,
+  Edit2,
+  Trash2,
+  AlertCircle,
+  Loader2,
+  Users,
+  FileText,
+  DollarSign,
+  TrendingDown,
+  CheckCircle2,
+  Search,
+  Calendar,
+} from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { apiRequest } from '@/lib/api';
 
@@ -29,7 +46,7 @@ const HEADERS = [
   'Verification Date',
   'Head Approval',
   'Head Approval Date',
-  'Head Signature'
+  'Head Signature',
 ];
 
 const headerToDBField: Record<string, string> = {
@@ -59,6 +76,67 @@ const headerToDBField: Record<string, string> = {
   'Head Signature': 'headSignature',
 };
 
+function parseRecordDate(record: any): { fullDate: string; yyyyMm: string } {
+  // Extract date from entry/import timestamp or explicit record date (NOT join date)
+  const candidateDates = [
+    record.entryDate,
+    record.date,
+    record.recordDate,
+    record.importDate,
+    record.createdAt,
+    record.updatedAt,
+    record['Verification Date'],
+    record['Salary Change Date'],
+  ];
+
+  for (const raw of candidateDates) {
+    if (!raw) continue;
+    const str = String(raw).trim();
+    if (!str || str === '-') continue;
+
+    // ISO String e.g. 2026-08-19T10:15:30.000Z
+    if (str.includes('T') && str.length >= 10) {
+      const yyyy = str.slice(0, 4);
+      const mm = str.slice(5, 7);
+      const dd = str.slice(8, 10);
+      return { fullDate: `${yyyy}-${mm}-${dd}`, yyyyMm: `${yyyy}-${mm}` };
+    }
+
+    // YYYY-MM-DD
+    const ymd = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+    if (ymd) {
+      const yyyy = ymd[1];
+      const mm = ymd[2].padStart(2, '0');
+      const dd = ymd[3].padStart(2, '0');
+      return { fullDate: `${yyyy}-${mm}-${dd}`, yyyyMm: `${yyyy}-${mm}` };
+    }
+
+    // DD-MM-YYYY
+    const dmy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+    if (dmy) {
+      const dd = dmy[1].padStart(2, '0');
+      const mm = dmy[2].padStart(2, '0');
+      let yyyy = dmy[3];
+      if (yyyy.length === 2) yyyy = '20' + yyyy;
+      return { fullDate: `${yyyy}-${mm}-${dd}`, yyyyMm: `${yyyy}-${mm}` };
+    }
+
+    // YYYY-MM
+    const ym = str.match(/^(\d{4})[\/\-](\d{1,2})$/);
+    if (ym) {
+      const yyyy = ym[1];
+      const mm = ym[2].padStart(2, '0');
+      return { fullDate: `${yyyy}-${mm}-01`, yyyyMm: `${yyyy}-${mm}` };
+    }
+  }
+
+  const now = new Date();
+  const yyyy = now.getFullYear().toString();
+  const mm = String(now.getMonth() + 1).padStart(2, '0');
+  const dd = String(now.getDate()).padStart(2, '0');
+  return { fullDate: `${yyyy}-${mm}-${dd}`, yyyyMm: `${yyyy}-${mm}` };
+}
+
 const mapToDB = (entry: any) => {
   const dbRecord: any = {};
   for (const header of HEADERS) {
@@ -71,7 +149,7 @@ const mapToDB = (entry: any) => {
 };
 
 const mapFromDB = (record: any) => {
-  const entry: any = { id: record.id };
+  const entry: any = { id: record.id, createdAt: record.createdAt, updatedAt: record.updatedAt };
   for (const header of HEADERS) {
     const field = headerToDBField[header];
     entry[header] = record[field] || '';
@@ -83,6 +161,9 @@ export default function PayrollManagementPage() {
   const [entries, setEntries] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('2026-08');
+  const [filterDate, setFilterDate] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Modal State
@@ -91,12 +172,17 @@ export default function PayrollManagementPage() {
   const [currentEntry, setCurrentEntry] = useState<any>({});
 
   // Confirm Modal State
-  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; type: 'EDIT' | 'DELETE'; index: number | null }>({ isOpen: false, type: 'DELETE', index: null });
+  const [confirmModal, setConfirmModal] = useState<{ isOpen: boolean; type: 'EDIT' | 'DELETE'; index: number | null }>({
+    isOpen: false,
+    type: 'DELETE',
+    index: null,
+  });
 
   const fetchRecords = async () => {
     try {
       setLoading(true);
-      const data = await apiRequest('/payroll/manual');
+      const res = await apiRequest('/payroll/manual');
+      const data = Array.isArray(res) ? res : res?.data && Array.isArray(res.data) ? res.data : [];
       setEntries(data.map(mapFromDB));
     } catch (error) {
       console.error('Failed to fetch records:', error);
@@ -109,11 +195,42 @@ export default function PayrollManagementPage() {
     fetchRecords();
   }, []);
 
+  // Filter entries based on Add/Import Date (createdAt) & Search
+  const filteredEntries = useMemo(() => {
+    return entries.filter((e) => {
+      const q = searchTerm.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        (e['Employee Name'] || '').toLowerCase().includes(q) ||
+        (e['Employee ID'] || '').toLowerCase().includes(q) ||
+        (e['Department'] || '').toLowerCase().includes(q) ||
+        (e['Performance Rating'] || '').toLowerCase().includes(q) ||
+        (e['Performance Comment'] || '').toLowerCase().includes(q) ||
+        (e['Verified By'] || '').toLowerCase().includes(q);
+
+      const parsed = parseRecordDate(e);
+
+      // Month filter based on add/import date
+      let matchesMonth = true;
+      if (selectedMonth) {
+        matchesMonth = parsed.yyyyMm === selectedMonth;
+      }
+
+      // Day filter based on add/import date
+      let matchesDay = true;
+      if (filterDate) {
+        matchesDay = parsed.fullDate === filterDate;
+      }
+
+      return matchesSearch && matchesMonth && matchesDay;
+    });
+  }, [entries, searchTerm, selectedMonth, filterDate]);
+
   const handleDownloadTemplate = () => {
     const ws = XLSX.utils.aoa_to_sheet([HEADERS]);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Template');
-    XLSX.writeFile(wb, 'Payroll_Import_Template.xlsx');
+    XLSX.writeFile(wb, `Payroll_Import_Template_${selectedMonth || '2026-08'}.xlsx`);
   };
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -126,7 +243,7 @@ export default function PayrollManagementPage() {
         setLoading(true);
         const dataBuffer = evt.target?.result;
         if (!dataBuffer || typeof dataBuffer === 'string') return;
-        
+
         const dataArr = new Uint8Array(dataBuffer as ArrayBuffer);
         const wb = XLSX.read(dataArr, { type: 'array' });
         const wsname = wb.SheetNames[0];
@@ -141,17 +258,18 @@ export default function PayrollManagementPage() {
             });
             return entry;
           });
-          
+
           const dbRecords = rows.map(mapToDB);
           await apiRequest('/payroll/manual/bulk', {
             method: 'POST',
             body: JSON.stringify(dbRecords),
           });
           await fetchRecords();
+          alert(`Successfully imported ${dbRecords.length} payroll record(s)!`);
         }
       } catch (error) {
         console.error('Failed to import records:', error);
-        alert('Failed to import records. Check console for details.');
+        alert('Failed to import records.');
       } finally {
         setLoading(false);
         if (fileInputRef.current) fileInputRef.current.value = '';
@@ -169,7 +287,7 @@ export default function PayrollManagementPage() {
   };
 
   const openEditModal = (index: number) => {
-    setCurrentEntry({ ...entries[index] });
+    setCurrentEntry({ ...filteredEntries[index] });
     setEditingIndex(index);
     setIsModalOpen(true);
   };
@@ -178,83 +296,63 @@ export default function PayrollManagementPage() {
     setCurrentEntry({ ...currentEntry, [header]: value });
   };
 
-  const handleModalSave = async () => {
-    try {
-      setIsSubmitting(true);
-      const dbData = mapToDB(currentEntry);
-      
-      if (editingIndex !== null) {
-        const id = currentEntry.id;
-        const updatedRecord = await apiRequest(`/payroll/manual/${id}`, {
-          method: 'PUT',
-          body: JSON.stringify(dbData),
-        });
-        const updated = [...entries];
-        updated[editingIndex] = mapFromDB(updatedRecord);
-        setEntries(updated);
-      } else {
-        const newRecord = await apiRequest('/payroll/manual', {
-          method: 'POST',
-          body: JSON.stringify(dbData),
-        });
-        setEntries([mapFromDB(newRecord), ...entries]);
-      }
-      setIsModalOpen(false);
-    } catch (error) {
-      console.error('Failed to save record:', error);
-      alert('Failed to save record.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const handlePreSave = () => {
-    if (editingIndex !== null) {
-      setConfirmModal({ isOpen: true, type: 'EDIT', index: editingIndex });
-    } else {
-      handleModalSave();
-    }
+    setConfirmModal({ isOpen: true, type: 'EDIT', index: editingIndex });
   };
 
   const handleConfirmAction = async () => {
-    if (confirmModal.type === 'DELETE' && confirmModal.index !== null) {
-      try {
-        setIsSubmitting(true);
-        const id = entries[confirmModal.index].id;
-        if (id) {
-          await apiRequest(`/payroll/manual/${id}`, { method: 'DELETE' });
+    try {
+      setIsSubmitting(true);
+      if (confirmModal.type === 'DELETE') {
+        if (confirmModal.index !== null) {
+          const target = filteredEntries[confirmModal.index];
+          if (target?.id) {
+            await apiRequest(`/payroll/manual/${target.id}`, { method: 'DELETE' });
+            await fetchRecords();
+          }
         }
-        const newEntries = [...entries];
-        newEntries.splice(confirmModal.index, 1);
-        setEntries(newEntries);
-      } catch (error) {
-        console.error('Failed to delete record:', error);
-        alert('Failed to delete record.');
-      } finally {
-        setIsSubmitting(false);
+      } else if (confirmModal.type === 'EDIT') {
+        const dbData = mapToDB(currentEntry);
+        if (editingIndex !== null) {
+          const id = currentEntry.id;
+          await apiRequest(`/payroll/manual/${id}`, {
+            method: 'PUT',
+            body: JSON.stringify(dbData),
+          });
+          await fetchRecords();
+        } else {
+          await apiRequest('/payroll/manual', {
+            method: 'POST',
+            body: JSON.stringify(dbData),
+          });
+          await fetchRecords();
+        }
+        setIsModalOpen(false);
       }
-    } else if (confirmModal.type === 'EDIT') {
-      await handleModalSave();
+    } catch (error) {
+      console.error('Action failed:', error);
+      alert('Operation failed. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+      setConfirmModal({ isOpen: false, type: 'DELETE', index: null });
     }
-    setConfirmModal({ ...confirmModal, isOpen: false });
   };
 
-  // KPI Calculation
-  const totalEmployees = entries.length;
+  // KPI Calculations for filtered month
+  const totalEmployees = filteredEntries.length;
   let totalLopDays = 0;
   let totalLopDeduction = 0;
   let totalNetPay = 0;
-  let totalGross = 0;
 
-  entries.forEach(entry => {
+  filteredEntries.forEach((entry) => {
     totalLopDays += parseFloat(entry['LOP Days'] || '0') || 0;
     totalLopDeduction += parseFloat(entry['LOP Deduction'] || '0') || 0;
     totalNetPay += parseFloat(entry['NET Pay'] || '0') || 0;
-    totalGross += parseFloat(entry['New Salary'] || entry['Old Salary'] || '0') || 0;
   });
 
   return (
     <div className="space-y-6">
+      {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
@@ -280,7 +378,11 @@ export default function PayrollManagementPage() {
             disabled={loading}
             className="px-3.5 py-2.5 rounded-xl bg-orange-50 hover:bg-orange-100 text-orange-700 border border-orange-200 text-xs font-bold transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
           >
-            {loading && fileInputRef.current?.value ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
+            {loading && fileInputRef.current?.value ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <Upload className="w-4 h-4" />
+            )}
             <span>Import (XLSX/CSV)</span>
           </button>
           <input
@@ -310,7 +412,7 @@ export default function PayrollManagementPage() {
           <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Total Employees</div>
           <div className="text-3xl font-black text-slate-900">{totalEmployees}</div>
           <div className="text-[11px] text-emerald-600 mt-2 font-bold flex items-center gap-1">
-            <CheckCircle2 className="w-3 h-3" /> Records Uploaded
+            <CheckCircle2 className="w-3 h-3" /> Records in {selectedMonth || 'All Months'}
           </div>
         </div>
 
@@ -328,7 +430,9 @@ export default function PayrollManagementPage() {
             <FileText className="w-16 h-16 text-amber-600" />
           </div>
           <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Total LOP Deduction</div>
-          <div className="text-3xl font-black text-amber-600">₹{totalLopDeduction.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div className="text-3xl font-black text-amber-600">
+            ₹{totalLopDeduction.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
           <div className="text-[11px] text-slate-500 mt-2 font-medium">Deducted from Gross</div>
         </div>
 
@@ -337,13 +441,78 @@ export default function PayrollManagementPage() {
             <DollarSign className="w-16 h-16 text-emerald-600" />
           </div>
           <div className="text-xs text-slate-500 font-bold uppercase tracking-wider mb-2">Net Pay Disbursement</div>
-          <div className="text-3xl font-black text-emerald-600">₹{totalNetPay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</div>
+          <div className="text-3xl font-black text-emerald-600">
+            ₹{totalNetPay.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          </div>
           <div className="text-[11px] text-emerald-600 mt-2 font-bold flex items-center gap-1">
             <CheckCircle2 className="w-3 h-3" /> Ready for Credit
           </div>
         </div>
       </div>
 
+      {/* Filter Bar (Search + Month Picker + Date Picker) */}
+      <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
+          {/* Search Box */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search employee, ID, department..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="pl-8 pr-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 w-56 sm:w-64"
+            />
+          </div>
+
+          {/* Month Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+            <Calendar className="w-3.5 h-3.5 text-orange-500" />
+            <span className="text-[10px] font-bold text-slate-500 uppercase">Month:</span>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => setSelectedMonth(e.target.value)}
+              className="bg-transparent text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
+            />
+            {selectedMonth && (
+              <button
+                onClick={() => setSelectedMonth('')}
+                className="text-[10px] text-slate-400 hover:text-slate-600 font-bold ml-0.5 cursor-pointer"
+                title="All Months"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          {/* Date Filter */}
+          <div className="flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200">
+            <span className="text-[10px] font-bold text-slate-500 uppercase">Date:</span>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              className="bg-transparent text-xs font-semibold text-slate-700 focus:outline-none cursor-pointer"
+            />
+            {filterDate && (
+              <button
+                onClick={() => setFilterDate('')}
+                className="text-[10px] text-slate-400 hover:text-slate-600 font-bold ml-0.5 cursor-pointer"
+                title="Clear Date"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+        </div>
+
+        <span className="text-xs text-slate-400 font-semibold">
+          Showing {filteredEntries.length} of {entries.length} records
+        </span>
+      </div>
+
+      {/* Responsive Table with Sticky Actions */}
       <div className="bg-white border border-slate-200 shadow-sm rounded-2xl overflow-hidden flex flex-col min-h-[400px]">
         {loading && entries.length === 0 ? (
           <div className="flex-1 flex flex-col items-center justify-center py-20 text-slate-400">
@@ -366,30 +535,30 @@ export default function PayrollManagementPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {entries.length === 0 ? (
+                {filteredEntries.length === 0 ? (
                   <tr>
                     <td colSpan={HEADERS.length + 1} className="px-4 py-16 text-center text-slate-500">
                       <div className="flex flex-col items-center justify-center">
                         <FileSpreadsheet className="w-10 h-10 text-slate-300 mb-3" />
-                        <p className="font-medium text-sm text-slate-600">No payroll entries found.</p>
+                        <p className="font-medium text-sm text-slate-600">No payroll entries found for {selectedMonth || 'selected filters'}.</p>
                         <p className="mt-1 text-xs">Add manually or import from a file to get started.</p>
                       </div>
                     </td>
                   </tr>
                 ) : (
-                  entries.map((entry, rowIndex) => (
+                  filteredEntries.map((entry, rowIndex) => (
                     <tr key={entry.id || rowIndex} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-2 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-slate-100 flex items-center gap-1 min-w-[90px]">
                         <button
                           onClick={() => openEditModal(rowIndex)}
-                          className="p-1.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer"
                           title="Edit Entry"
                         >
                           <Edit2 className="w-4 h-4" />
                         </button>
                         <button
                           onClick={() => setConfirmModal({ isOpen: true, type: 'DELETE', index: rowIndex })}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
                           title="Delete Entry"
                         >
                           <Trash2 className="w-4 h-4" />
@@ -416,14 +585,18 @@ export default function PayrollManagementPage() {
             <div className="p-5 border-b border-slate-100 flex items-center justify-between">
               <h2 className="text-lg font-black text-slate-900 flex items-center gap-2">
                 {editingIndex !== null ? (
-                  <><Edit2 className="w-5 h-5 text-orange-600" /> Edit Payroll Entry</>
+                  <>
+                    <Edit2 className="w-5 h-5 text-orange-600" /> Edit Payroll Entry
+                  </>
                 ) : (
-                  <><Plus className="w-5 h-5 text-orange-600" /> Add Payroll Entry</>
+                  <>
+                    <Plus className="w-5 h-5 text-orange-600" /> Add Payroll Entry
+                  </>
                 )}
               </h2>
               <button
                 onClick={() => setIsModalOpen(false)}
-                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                className="p-2 rounded-xl text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -431,11 +604,11 @@ export default function PayrollManagementPage() {
 
             <div className="p-6 overflow-y-auto flex-1 bg-slate-50/50">
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
-                {HEADERS.map(header => (
+                {HEADERS.map((header) => (
                   <div key={header} className="space-y-1.5">
                     <label className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">{header}</label>
                     <input
-                      type="text"
+                      type={header.includes('Date') ? 'date' : 'text'}
                       value={currentEntry[header] || ''}
                       onChange={(e) => handleModalChange(header, e.target.value)}
                       className="w-full px-3 py-2 text-sm bg-white border border-slate-200 rounded-xl focus:ring-orange-500/20 focus:border-orange-500 transition-all placeholder-slate-500 shadow-sm"
@@ -450,14 +623,14 @@ export default function PayrollManagementPage() {
               <button
                 onClick={() => setIsModalOpen(false)}
                 disabled={isSubmitting}
-                className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors disabled:opacity-50"
+                className="px-5 py-2.5 rounded-xl text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors disabled:opacity-50 cursor-pointer"
               >
                 Cancel
               </button>
               <button
                 onClick={handlePreSave}
                 disabled={isSubmitting}
-                className="px-6 py-2.5 rounded-xl text-xs font-bold text-white saffron-gradient shadow-md shadow-orange-500/20 hover:shadow-orange-500/40 transition-all disabled:opacity-50 flex items-center gap-2"
+                className="px-6 py-2.5 rounded-xl text-xs font-bold text-white saffron-gradient shadow-md shadow-orange-500/20 hover:shadow-orange-500/40 transition-all disabled:opacity-50 flex items-center gap-2 cursor-pointer"
               >
                 {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
                 {editingIndex !== null ? 'Save Changes' : 'Add Entry'}
@@ -482,23 +655,23 @@ export default function PayrollManagementPage() {
               {confirmModal.type === 'DELETE' ? 'Delete Entry?' : 'Save Changes?'}
             </h3>
             <p className="text-sm text-slate-500 mb-6">
-              {confirmModal.type === 'DELETE' 
+              {confirmModal.type === 'DELETE'
                 ? 'Are you sure you want to delete this payroll entry? This action cannot be undone.'
                 : 'Are you sure you want to apply these changes to the payroll entry?'}
             </p>
             <div className="flex items-center gap-3 w-full">
-              <button 
+              <button
                 onClick={() => setConfirmModal({ ...confirmModal, isOpen: false })}
                 disabled={isSubmitting}
-                className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors disabled:opacity-50"
+                className="flex-1 px-4 py-2.5 rounded-xl text-xs font-bold text-slate-700 bg-slate-100 hover:bg-slate-200 transition-colors disabled:opacity-50 cursor-pointer"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={handleConfirmAction}
                 disabled={isSubmitting}
-                className={`flex-1 px-4 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md disabled:opacity-50 ${
-                  confirmModal.type === 'DELETE' 
+                className={`flex-1 px-4 py-2.5 rounded-xl text-xs font-bold text-white transition-all shadow-md disabled:opacity-50 cursor-pointer ${
+                  confirmModal.type === 'DELETE'
                     ? 'bg-red-600 hover:bg-red-700 shadow-red-500/20'
                     : 'saffron-gradient shadow-orange-500/20'
                 }`}
