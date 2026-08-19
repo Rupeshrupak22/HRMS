@@ -51,7 +51,8 @@ export default function EmployeePerformancePage() {
   }, []);
 
   const filteredRecords = useMemo(() => {
-    return records.filter((r) => {
+    // First get records matching the selected month
+    let monthRecords = records.filter((r) => {
       const q = searchTerm.toLowerCase().trim();
       const matchesSearch = !q || (
         (r.employeeName || '').toLowerCase().includes(q) ||
@@ -73,6 +74,59 @@ export default function EmployeePerformancePage() {
       }
       return matchesSearch && matchesMonth && matchesDate;
     });
+
+    // Auto-populate: if a month is selected, show skeleton rows for employees 
+    // who have records in OTHER months but not in this month
+    if (selectedMonth && !selectedDate) {
+      const existingEmpIds = new Set(monthRecords.map(r => r.employeeId).filter(Boolean));
+      
+      // Get all unique employees from all records
+      const allEmployees = new Map<string, any>();
+      records.forEach(r => {
+        if (r.employeeId && !allEmployees.has(r.employeeId)) {
+          allEmployees.set(r.employeeId, {
+            employeeName: r.employeeName || '',
+            employeeId: r.employeeId || '',
+            department: r.department || '',
+            designation: r.designation || '',
+            kpi: r.kpi || '',
+            joiningDate: r.joiningDate || '',
+          });
+        }
+      });
+
+      // Add skeleton rows for missing employees
+      allEmployees.forEach((emp, empId) => {
+        if (!existingEmpIds.has(empId)) {
+          const q = searchTerm.toLowerCase().trim();
+          const matchesSearch = !q || (
+            emp.employeeName.toLowerCase().includes(q) ||
+            emp.employeeId.toLowerCase().includes(q) ||
+            emp.department.toLowerCase().includes(q) ||
+            emp.designation.toLowerCase().includes(q) ||
+            emp.kpi.toLowerCase().includes(q)
+          );
+          if (matchesSearch) {
+            monthRecords.push({
+              ...emp,
+              performanceMonth: selectedMonth,
+              dailyPerformance: '',
+              weeklyPerformance: '',
+              monthlyPerformance: '',
+              dailyRevenue: '',
+              weeklyRevenue: '',
+              monthlyRevenue: '',
+              pipCase: '',
+              furtherActions: '',
+              monthPerformance: '',
+              _isPlaceholder: true,
+            });
+          }
+        }
+      });
+    }
+
+    return monthRecords;
   }, [records, searchTerm, selectedMonth, selectedDate]);
 
   const paginatedRecords = useMemo(() => {
@@ -119,7 +173,7 @@ export default function EmployeePerformancePage() {
       managerRemark: rest.managerRemark || '',
       finalRemark: rest.finalRemark || '',
     });
-    setEditingId(id || _id);
+    setEditingId(record._isPlaceholder ? null : (id || _id));
     setShowForm(true);
   };
 
@@ -553,8 +607,8 @@ export default function EmployeePerformancePage() {
                   </td>
                 </tr>
               ) : (
-                paginatedRecords.map((r) => (
-                  <tr key={r.id || r._id} className="border-b border-slate-100 hover:bg-orange-50/30">
+                paginatedRecords.map((r, idx) => (
+                  <tr key={r.id || r._id || `placeholder-${r.employeeId}-${idx}`} className={`border-b border-slate-100 ${r._isPlaceholder ? 'bg-slate-50/50' : 'hover:bg-orange-50/30'}`}>
                     <td className="px-4 py-3 font-semibold text-slate-800">{r.employeeName}</td>
                     <td className="px-4 py-3 text-slate-700">{r.employeeId}</td>
                     <td className="px-4 py-3">
@@ -569,26 +623,36 @@ export default function EmployeePerformancePage() {
                     </td>
                     <td className="px-4 py-3 text-slate-700">{r.designation}</td>
                     <td className="px-4 py-3 text-slate-700">{r.kpi}</td>
-                    <td className="px-4 py-3 text-slate-700">{r.dailyPerformance || '—'}</td>
-                    <td className="px-4 py-3 text-slate-700">{r.weeklyPerformance || '—'}</td>
-                    <td className="px-4 py-3 text-slate-700">{r.monthlyPerformance}</td>
-                    <td className="px-4 py-3 text-slate-700 font-mono">{r.dailyRevenue || '—'}</td>
-                    <td className="px-4 py-3 text-slate-700 font-mono">{r.weeklyRevenue || '—'}</td>
-                    <td className="px-4 py-3 text-slate-700 font-mono">{r.monthlyRevenue || '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{r.dailyPerformance || <span className="text-slate-300">—</span>}</td>
+                    <td className="px-4 py-3 text-slate-700">{r.weeklyPerformance || <span className="text-slate-300">—</span>}</td>
+                    <td className="px-4 py-3 text-slate-700">{r.monthlyPerformance || <span className="text-slate-300">—</span>}</td>
+                    <td className="px-4 py-3 text-slate-700 font-mono">{r.dailyRevenue || <span className="text-slate-300">—</span>}</td>
+                    <td className="px-4 py-3 text-slate-700 font-mono">{r.weeklyRevenue || <span className="text-slate-300">—</span>}</td>
+                    <td className="px-4 py-3 text-slate-700 font-mono">{r.monthlyRevenue || <span className="text-slate-300">—</span>}</td>
                     <td className="px-4 py-3">
-                      <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.pipCase === 'Yes' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
-                        {r.pipCase}
-                      </span>
+                      {r.pipCase ? (
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${r.pipCase === 'Yes' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                          {r.pipCase}
+                        </span>
+                      ) : <span className="text-slate-300">—</span>}
                     </td>
-                    <td className="px-4 py-3 text-slate-700">{r.monthPerformance || '—'}</td>
-                    <td className="px-4 py-3 text-slate-700 max-w-[150px] truncate" title={r.furtherActions}>{r.furtherActions || '—'}</td>
+                    <td className="px-4 py-3 text-slate-700">{r.monthPerformance || <span className="text-slate-300">—</span>}</td>
+                    <td className="px-4 py-3 text-slate-700 max-w-[150px] truncate" title={r.furtherActions}>{r.furtherActions || <span className="text-slate-300">—</span>}</td>
                     <td className="px-4 py-3">
-                      <button onClick={() => handleEdit(r)} className="p-1.5 rounded-lg hover:bg-orange-100 text-orange-600 transition-colors cursor-pointer" title="Edit">
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
-                      <button onClick={() => handleDelete(r.id || r._id)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500 transition-colors cursor-pointer" title="Delete">
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
+                      {r._isPlaceholder ? (
+                        <button onClick={() => handleEdit(r)} className="px-2 py-1 rounded-lg bg-orange-100 text-orange-700 text-[10px] font-bold hover:bg-orange-200 transition-colors cursor-pointer">
+                          Fill Data
+                        </button>
+                      ) : (
+                        <>
+                          <button onClick={() => handleEdit(r)} className="p-1.5 rounded-lg hover:bg-orange-100 text-orange-600 transition-colors cursor-pointer" title="Edit">
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button onClick={() => handleDelete(r.id || r._id)} className="p-1.5 rounded-lg hover:bg-red-100 text-red-500 transition-colors cursor-pointer" title="Delete">
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))
