@@ -62,9 +62,11 @@ export default function EmployeePerformancePage() {
         (r.kpi || '').toLowerCase().includes(q)
       );
       // Month filter - use performanceMonth field (the month when data was assigned)
+      // Records without performanceMonth are shown in all months
       let matchesMonth = true;
       if (selectedMonth) {
-        matchesMonth = (r.performanceMonth || '') === selectedMonth;
+        const recMonth = r.performanceMonth || '';
+        matchesMonth = recMonth === selectedMonth || recMonth === '';
       }
       // Date filter
       let matchesDate = true;
@@ -76,9 +78,15 @@ export default function EmployeePerformancePage() {
     });
 
     // Auto-populate: if a month is selected, show skeleton rows for employees 
-    // who have records in OTHER months but not in this month
+    // who have records in OTHER months but not specifically in this month
     if (selectedMonth && !selectedDate) {
-      const existingEmpIds = new Set(monthRecords.map(r => r.employeeId).filter(Boolean));
+      // Employees who already have a record with this specific month OR have no month set (shown in all)
+      const existingEmpIds = new Set(
+        monthRecords
+          .filter(r => (r.performanceMonth === selectedMonth) || !r.performanceMonth)
+          .map(r => r.employeeId)
+          .filter(Boolean)
+      );
       
       // Get all unique employees from all records
       const allEmployees = new Map<string, any>();
