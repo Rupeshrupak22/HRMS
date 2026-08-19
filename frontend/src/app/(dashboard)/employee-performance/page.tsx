@@ -35,6 +35,8 @@ export default function EmployeePerformancePage() {
     monthlyRevenue: '',
     pipCase: '',
     furtherActions: '',
+    monthPerformance: '',
+    performanceMonth: '',
     // PIP Yes fields
     reasonForPip: '',
     performanceGap: '',
@@ -58,11 +60,10 @@ export default function EmployeePerformancePage() {
         (r.designation || '').toLowerCase().includes(q) ||
         (r.kpi || '').toLowerCase().includes(q)
       );
-      // Month filter
+      // Month filter - use performanceMonth field (the month when data was assigned)
       let matchesMonth = true;
-      if (selectedMonth && r.createdAt) {
-        const recMonth = r.createdAt.slice(0, 7);
-        matchesMonth = recMonth === selectedMonth;
+      if (selectedMonth) {
+        matchesMonth = (r.performanceMonth || '') === selectedMonth;
       }
       // Date filter
       let matchesDate = true;
@@ -84,6 +85,7 @@ export default function EmployeePerformancePage() {
       employeeName: '', joiningDate: '', employeeId: '', department: '', designation: '',
       kpi: '', dailyPerformance: '', weeklyPerformance: '', monthlyPerformance: '',
       dailyRevenue: '', weeklyRevenue: '', monthlyRevenue: '', pipCase: '', furtherActions: '',
+      monthPerformance: '', performanceMonth: '',
       reasonForPip: '', performanceGap: '', currentPerformance: '', improvementAction: '',
       managerRemark: '', finalRemark: '',
     });
@@ -108,6 +110,8 @@ export default function EmployeePerformancePage() {
       monthlyRevenue: rest.monthlyRevenue || '',
       pipCase: rest.pipCase || '',
       furtherActions: rest.furtherActions || '',
+      monthPerformance: rest.monthPerformance || '',
+      performanceMonth: rest.performanceMonth || '',
       reasonForPip: rest.reasonForPip || '',
       performanceGap: rest.performanceGap || '',
       currentPerformance: rest.currentPerformance || '',
@@ -137,6 +141,8 @@ export default function EmployeePerformancePage() {
       // Sales and Operation get weekly and monthly revenue
       weeklyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.weeklyRevenue : '',
       monthlyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.monthlyRevenue : '',
+      // Track which month this performance belongs to
+      performanceMonth: form.performanceMonth || selectedMonth || '',
     };
     if (editingId) {
       let updated: any = { id: editingId, ...payload };
@@ -249,15 +255,37 @@ export default function EmployeePerformancePage() {
           <div className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs">
             <Calendar className="w-3.5 h-3.5 text-slate-400" />
             <span className="text-slate-500 font-medium">MONTH:</span>
-            <input
-              type="month"
+            <select
               value={selectedMonth}
               onChange={(e) => { setSelectedMonth(e.target.value); setSelectedDate(''); setPage(1); }}
               className="border-none outline-none text-xs font-semibold text-slate-700 bg-transparent cursor-pointer"
-            />
-            {selectedMonth && (
-              <button onClick={() => setSelectedMonth('')} className="text-slate-400 hover:text-red-500 ml-1 cursor-pointer"><X className="w-3 h-3" /></button>
-            )}
+            >
+              <option value="">All Months</option>
+              <option value="2026-01">January 2026</option>
+              <option value="2026-02">February 2026</option>
+              <option value="2026-03">March 2026</option>
+              <option value="2026-04">April 2026</option>
+              <option value="2026-05">May 2026</option>
+              <option value="2026-06">June 2026</option>
+              <option value="2026-07">July 2026</option>
+              <option value="2026-08">August 2026</option>
+              <option value="2026-09">September 2026</option>
+              <option value="2026-10">October 2026</option>
+              <option value="2026-11">November 2026</option>
+              <option value="2026-12">December 2026</option>
+              <option value="2025-01">January 2025</option>
+              <option value="2025-02">February 2025</option>
+              <option value="2025-03">March 2025</option>
+              <option value="2025-04">April 2025</option>
+              <option value="2025-05">May 2025</option>
+              <option value="2025-06">June 2025</option>
+              <option value="2025-07">July 2025</option>
+              <option value="2025-08">August 2025</option>
+              <option value="2025-09">September 2025</option>
+              <option value="2025-10">October 2025</option>
+              <option value="2025-11">November 2025</option>
+              <option value="2025-12">December 2025</option>
+            </select>
           </div>
 
           <div className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs">
@@ -412,6 +440,52 @@ export default function EmployeePerformancePage() {
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Performance Month <span className="text-slate-400 font-normal">(Select month for this record)</span></label>
+              <select
+                value={form.performanceMonth || ''}
+                onChange={(e) => setForm({ ...form, performanceMonth: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
+              >
+                <option value="">-- Select Month --</option>
+                <option value="2026-01">January 2026</option>
+                <option value="2026-02">February 2026</option>
+                <option value="2026-03">March 2026</option>
+                <option value="2026-04">April 2026</option>
+                <option value="2026-05">May 2026</option>
+                <option value="2026-06">June 2026</option>
+                <option value="2026-07">July 2026</option>
+                <option value="2026-08">August 2026</option>
+                <option value="2026-09">September 2026</option>
+                <option value="2026-10">October 2026</option>
+                <option value="2026-11">November 2026</option>
+                <option value="2026-12">December 2026</option>
+                <option value="2025-01">January 2025</option>
+                <option value="2025-02">February 2025</option>
+                <option value="2025-03">March 2025</option>
+                <option value="2025-04">April 2025</option>
+                <option value="2025-05">May 2025</option>
+                <option value="2025-06">June 2025</option>
+                <option value="2025-07">July 2025</option>
+                <option value="2025-08">August 2025</option>
+                <option value="2025-09">September 2025</option>
+                <option value="2025-10">October 2025</option>
+                <option value="2025-11">November 2025</option>
+                <option value="2025-12">December 2025</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-600 mb-1">Month Performance <span className="text-slate-400 font-normal">(Optional)</span></label>
+              <input
+                type="text"
+                placeholder="e.g. Good, Average, Below Average"
+                value={form.monthPerformance}
+                onChange={(e) => setForm({ ...form, monthPerformance: e.target.value })}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
           </div>
 
           {form.pipCase === 'Yes' && (
@@ -466,6 +540,7 @@ export default function EmployeePerformancePage() {
                 <th className="px-4 py-3 text-left font-bold text-slate-600">Weekly Rev</th>
                 <th className="px-4 py-3 text-left font-bold text-slate-600">Monthly Rev</th>
                 <th className="px-4 py-3 text-left font-bold text-slate-600">PIP</th>
+                <th className="px-4 py-3 text-left font-bold text-slate-600">Month Performance</th>
                 <th className="px-4 py-3 text-left font-bold text-slate-600">Further Actions</th>
                 <th className="px-4 py-3 text-left font-bold text-slate-600">Actions</th>
               </tr>
@@ -473,7 +548,7 @@ export default function EmployeePerformancePage() {
             <tbody>
               {paginatedRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={14} className="px-4 py-8 text-center text-slate-400">
+                  <td colSpan={15} className="px-4 py-8 text-center text-slate-400">
                     No performance records found. Click &quot;Add Performance Record&quot; to create one.
                   </td>
                 </tr>
@@ -505,6 +580,7 @@ export default function EmployeePerformancePage() {
                         {r.pipCase}
                       </span>
                     </td>
+                    <td className="px-4 py-3 text-slate-700">{r.monthPerformance || '—'}</td>
                     <td className="px-4 py-3 text-slate-700 max-w-[150px] truncate" title={r.furtherActions}>{r.furtherActions || '—'}</td>
                     <td className="px-4 py-3">
                       <button onClick={() => handleEdit(r)} className="p-1.5 rounded-lg hover:bg-orange-100 text-orange-600 transition-colors cursor-pointer" title="Edit">
