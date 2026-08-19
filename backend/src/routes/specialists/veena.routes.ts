@@ -53,7 +53,21 @@ function sanitizeOnboarding(item: any, userEmail: string) {
   };
 }
 
-// Helper for 100% pure Database CRUD with ownership handling
+// User Rule: Candidates qualify for onboarding if status is one of: Active, Selected, Joined, Onboarding
+function qualifiesForOnboarding(stageRaw: string = '', statusRaw: string = ''): boolean {
+  const stage = (stageRaw || '').toLowerCase().trim();
+  const status = (statusRaw || '').toLowerCase().trim();
+
+  // If dropped or rejected, never qualify for onboarding
+  if (status === 'rejected' || status === 'dropped' || status === 'dropout' || stage === 'rejected' || stage === 'dropped') {
+    return false;
+  }
+
+  const validStatuses = ['active', 'selected', 'joined', 'onboarding'];
+  return validStatuses.includes(status);
+}
+
+// Helper for pure Database CRUD
 function crud(model: any) {
   return {
     getAll: async (req: AuthRequest, res: Response) => {
@@ -118,7 +132,7 @@ function crud(model: any) {
 // ----------------------------------------------------
 const onboardingCrud = crud(prisma.onboardingTracker);
 
-// GET /onboarding with auto-fetch of candidates from Recruitment where stage=Joining & status=Active
+// GET /onboarding with auto-sync of recruitment candidates having status in Active, Selected, Joined, Onboarding
 router.get('/onboarding', async (req: AuthRequest, res: Response) => {
   try {
     const where: any = {};
@@ -136,24 +150,20 @@ router.get('/onboarding', async (req: AuthRequest, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    // 2. Fetch recruitment candidates that qualify (stage = joining & status = active)
+    // 2. Fetch all recruitment candidates
     const recCandidates = await prisma.recruitmentTracker.findMany({
-      where: {
-        AND: [
-          { currentStage: { equals: 'Joining', mode: 'insensitive' } },
-          { status: { equals: 'Active', mode: 'insensitive' } },
-        ],
-      },
       orderBy: { createdAt: 'desc' },
     });
 
-    // 3. Auto-sync any qualifying recruitment candidate into onboarding if not already present
+    // 3. Filter candidates who qualify (status in Active, Selected, Joined, Onboarding)
+    const qualifying = recCandidates.filter((r) => qualifiesForOnboarding(r.currentStage || '', r.status || ''));
+
     const existingKeys = new Set(
       onboardingList.map((o) => `${(o.candidateName || '').toLowerCase().trim()}_${(o.phoneNumber || '').trim()}`)
     );
 
     const newlyCreated: any[] = [];
-    for (const rec of recCandidates) {
+    for (const rec of qualifying) {
       const key = `${(rec.candidateName || '').toLowerCase().trim()}_${(rec.phoneNumber || '').trim()}`;
       if (!existingKeys.has(key) && rec.candidateName) {
         try {
@@ -169,8 +179,8 @@ router.get('/onboarding', async (req: AuthRequest, res: Response) => {
               roleApplied: rec.roleApplied || 'Sales',
               recruiter: rec.recruiter || 'Abbu Veena',
               applicationDate: rec.applicationDate || '',
-              currentStage: 'Joining',
-              status: 'Active',
+              currentStage: rec.currentStage || 'Joining',
+              status: rec.status || 'Active',
               interviews: rec.interviews || '',
               selection: rec.selection || 'Selected',
               offers: rec.offers || '',
@@ -227,7 +237,6 @@ router.post('/onboarding/bulk', async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'No valid records with Candidate Name found' });
     }
 
-    // Insert batch into DB
     let count = 0;
     for (const item of sanitized) {
       try {
@@ -269,7 +278,7 @@ const recruitmentCrud = crud(prisma.recruitmentTracker);
 
 router.get('/recruitment', recruitmentCrud.getAll);
 
-// POST recruitment with auto-sync to onboarding if stage=Joining & status=Active
+// POST recruitment with auto-sync to onboarding if status in Active, Selected, Joined, Onboarding
 router.post('/recruitment', async (req: AuthRequest, res: Response) => {
   try {
     const data = sanitizeRecruitment(req.body, req.user!.email);
@@ -279,10 +288,7 @@ router.post('/recruitment', async (req: AuthRequest, res: Response) => {
 
     const dbCreated = await prisma.recruitmentTracker.create({ data });
 
-    const isJoining = (dbCreated.currentStage || '').toLowerCase().trim() === 'joining';
-    const isActive = (dbCreated.status || '').toLowerCase().trim() === 'active';
-
-    if (isJoining && isActive) {
+    if (qualifiesForOnboarding(dbCreated.currentStage || '', dbCreated.status || '')) {
       try {
         await prisma.onboardingTracker.create({
           data: {
@@ -296,8 +302,8 @@ router.post('/recruitment', async (req: AuthRequest, res: Response) => {
             roleApplied: dbCreated.roleApplied || 'Sales',
             recruiter: dbCreated.recruiter || 'Abbu Veena',
             applicationDate: dbCreated.applicationDate || '',
-            currentStage: 'Joining',
-            status: 'Active',
+            currentStage: dbCreated.currentStage || 'Joining',
+            status: dbCreated.status || 'Active',
             interviews: dbCreated.interviews || '',
             selection: dbCreated.selection || 'Selected',
             offers: dbCreated.offers || '',
@@ -341,10 +347,7 @@ router.post('/recruitment/bulk', async (req: AuthRequest, res: Response) => {
         const created = await prisma.recruitmentTracker.create({ data: item });
         count++;
 
-        // Auto sync if stage=Joining & status=Active
-        const isJoining = (created.currentStage || '').toLowerCase().trim() === 'joining';
-        const isActive = (created.status || '').toLowerCase().trim() === 'active';
-        if (isJoining && isActive) {
+        if (qualifiesForOnboarding(created.currentStage || '', created.status || '')) {
           try {
             await prisma.onboardingTracker.create({
               data: {
@@ -358,8 +361,8 @@ router.post('/recruitment/bulk', async (req: AuthRequest, res: Response) => {
                 roleApplied: created.roleApplied || 'Sales',
                 recruiter: created.recruiter || 'Abbu Veena',
                 applicationDate: created.applicationDate || '',
-                currentStage: 'Joining',
-                status: 'Active',
+                currentStage: created.currentStage || 'Joining',
+                status: created.status || 'Active',
                 interviews: created.interviews || '',
                 selection: created.selection || 'Selected',
                 offers: created.offers || '',
@@ -383,7 +386,7 @@ router.post('/recruitment/bulk', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// PUT recruitment with auto-sync to onboarding if updated to stage=Joining & status=Active
+// PUT recruitment with auto-sync to onboarding if updated to status in Active, Selected, Joined, Onboarding
 router.put('/recruitment/:id', async (req: AuthRequest, res: Response) => {
   try {
     const id = String(req.params.id);
@@ -393,10 +396,7 @@ router.put('/recruitment/:id', async (req: AuthRequest, res: Response) => {
       data,
     });
 
-    const isJoining = (updated.currentStage || '').toLowerCase().trim() === 'joining';
-    const isActive = (updated.status || '').toLowerCase().trim() === 'active';
-
-    if (isJoining && isActive) {
+    if (qualifiesForOnboarding(updated.currentStage || '', updated.status || '')) {
       try {
         const existing = await prisma.onboardingTracker.findFirst({
           where: {
@@ -417,8 +417,8 @@ router.put('/recruitment/:id', async (req: AuthRequest, res: Response) => {
               roleApplied: updated.roleApplied || 'Sales',
               recruiter: updated.recruiter || 'Abbu Veena',
               applicationDate: updated.applicationDate || '',
-              currentStage: 'Joining',
-              status: 'Active',
+              currentStage: updated.currentStage || 'Joining',
+              status: updated.status || 'Active',
               interviews: updated.interviews || '',
               selection: updated.selection || 'Selected',
               offers: updated.offers || '',

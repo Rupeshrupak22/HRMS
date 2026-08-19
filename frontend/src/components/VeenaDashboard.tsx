@@ -182,6 +182,8 @@ export function VeenaDashboard() {
     offerRemarks: '',
   });
 
+  const [onboardingList, setOnboardingList] = useState<any[]>([]);
+
   const loadAllData = async () => {
     setLoading(true);
     try {
@@ -193,7 +195,15 @@ export function VeenaDashboard() {
         setCandidates([]);
       }
 
-      // 2. Dropouts strictly from DB
+      // 2. Onboarding Records strictly from DB
+      try {
+        const onbRes = await veenaApi.getOnboarding();
+        setOnboardingList(Array.isArray(onbRes) ? onbRes : []);
+      } catch {
+        setOnboardingList([]);
+      }
+
+      // 3. Dropouts strictly from DB
       try {
         const dropRes = await veenaApi.getDropouts();
         setDropouts(Array.isArray(dropRes) ? dropRes : []);
@@ -201,7 +211,7 @@ export function VeenaDashboard() {
         setDropouts([]);
       }
 
-      // 3. Daily Reports strictly from DB
+      // 4. Daily Reports strictly from DB
       try {
         const repRes = await veenaApi.getDailyReports();
         setDailyReports(Array.isArray(repRes) ? repRes : []);
@@ -294,10 +304,12 @@ export function VeenaDashboard() {
     {
       name: 'Selection',
       count: candidates.filter((c) => {
-        const stg = (c.currentStage || '').toLowerCase().trim();
-        const sel = (c.selection || '').toLowerCase().trim();
         const st = (c.status || '').toLowerCase().trim();
-        return stg === 'selection' || stg === 'selected' || sel === 'selected' || st === 'selected';
+        const sel = (c.selection || '').toLowerCase().trim();
+        if (st === 'rejected' || st === 'dropped' || st === 'dropout' || sel === 'not selected' || sel === 'rejected') {
+          return false;
+        }
+        return st === 'selected';
       }).length,
     },
     {
@@ -317,10 +329,14 @@ export function VeenaDashboard() {
     },
     {
       name: 'Onboarding',
-      count: candidates.filter((c) => {
-        const stg = (c.currentStage || '').toLowerCase().trim();
-        return stg === 'onboarding';
-      }).length,
+      count: onboardingList.length > 0
+        ? onboardingList.length
+        : candidates.filter((c) => {
+            const stg = (c.currentStage || '').toLowerCase().trim();
+            const st = (c.status || '').toLowerCase().trim();
+            if (st === 'rejected' || st === 'dropped' || st === 'dropout') return false;
+            return stg === 'onboarding' || ['active', 'selected', 'joined', 'onboarding'].includes(st);
+          }).length,
     },
     {
       name: 'Completed',
@@ -360,13 +376,15 @@ export function VeenaDashboard() {
         } else if (targetStage === 'interview') {
           matchesCard = stage === 'interview' || stage === 'interviews';
         } else if (targetStage === 'selection') {
-          matchesCard = stage === 'selection' || stage === 'selected' || sel === 'selected' || status === 'selected';
+          const isNotRejected = status !== 'rejected' && status !== 'dropped' && sel !== 'not selected' && sel !== 'rejected';
+          matchesCard = status === 'selected' && isNotRejected;
         } else if (targetStage === 'offer') {
           matchesCard = stage === 'offer' || stage === 'offers';
         } else if (targetStage === 'joining') {
           matchesCard = stage === 'joining' || (join === 'yes' && stage !== 'onboarding' && stage !== 'completed' && stage !== 'joined');
         } else if (targetStage === 'onboarding') {
-          matchesCard = stage === 'onboarding';
+          const isNotRejected = status !== 'rejected' && status !== 'dropped';
+          matchesCard = (stage === 'onboarding' || ['active', 'selected', 'joined', 'onboarding'].includes(status)) && isNotRejected;
         } else if (targetStage === 'completed') {
           matchesCard = stage === 'completed' || stage === 'joined' || status === 'joined';
         } else {
