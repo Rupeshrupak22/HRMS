@@ -24,9 +24,16 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
 
   // Origin validation — check that request comes from allowed origin
   const origin = req.headers.origin || req.headers.referer;
-  const allowedOrigin = process.env.CORS_ORIGIN || 'http://localhost:3000';
+  const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+    .split(',')
+    .map(o => o.trim());
 
-  if (origin && !origin.startsWith(allowedOrigin)) {
+  const isOriginAllowed = (o: string | undefined) => {
+    if (!o) return false;
+    return allowedOrigins.some(allowed => o.startsWith(allowed));
+  };
+
+  if (origin && !isOriginAllowed(origin)) {
     res.status(403).json({ success: false, message: 'CSRF validation failed: invalid origin' });
     return;
   }
@@ -42,7 +49,7 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
   }
 
   // Fallback: Allow if request has valid origin header matching CORS
-  if (origin && origin.startsWith(allowedOrigin)) {
+  if (origin && isOriginAllowed(origin)) {
     next();
     return;
   }

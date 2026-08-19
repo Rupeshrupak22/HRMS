@@ -196,7 +196,7 @@ router.get('/my-logs', async (req: AuthRequest, res: Response, next) => {
     const formatted = records.map((r) => ({
       empId: req.user!.employeeCode || '',
       empName: `${req.user!.firstName} ${req.user!.lastName}`,
-      date: r.date.toISOString().split('T')[0],
+      date: `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}-${String(r.date.getDate()).padStart(2, '0')}`,
       checkInTime: r.checkInTime ? r.checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
       checkOutTime: r.checkOutTime ? r.checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
       workHours: r.workHours,
@@ -254,7 +254,7 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EM
         role: metadata.role || r.employee?.user?.role || 'EMPLOYEE',
         department: metadata.department || r.employee?.department?.name || '-',
         designation: metadata.designation || r.employee?.designation?.title || '-',
-        date: r.date.toISOString().split('T')[0],
+        date: `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}-${String(r.date.getDate()).padStart(2, '0')}`,
         checkInTime: r.checkInTime ? r.checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
         checkOutTime: r.checkOutTime ? r.checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
         workHours: r.workHours,
@@ -580,6 +580,22 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
     let updated = 0;
     let created = 0;
 
+    // Delete all existing records for this employee in the target month first
+    // This ensures status changes and cleared days are always properly reflected
+    const [yearPart, monthPart] = month.split('-');
+    const monthStart = new Date(parseInt(yearPart, 10), parseInt(monthPart, 10) - 1, 1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthEnd = new Date(parseInt(yearPart, 10), parseInt(monthPart, 10), 0, 23, 59, 59, 999);
+
+    const deleted = await prisma.attendanceRecord.deleteMany({
+      where: {
+        employeeId: employee.id,
+        date: { gte: monthStart, lte: monthEnd },
+      },
+    });
+    if (deleted.count > 0) updated = deleted.count;
+
+    // Create fresh records for all days that have a status
     for (const record of records) {
       try {
         const dateStr = record.date; // "2026-08-01"
@@ -596,40 +612,23 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
           ? Math.round(((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)) * 100) / 100
           : 0;
 
-        const existing = await prisma.attendanceRecord.findUnique({
-          where: { employeeId_date: { employeeId: employee.id, date: dateObj } },
-        });
+        const notesToStore = record.remarks || null;
 
-        if (existing) {
-          await prisma.attendanceRecord.update({
-            where: { id: existing.id },
-            data: {
-              status: record.status || 'PRESENT',
-              checkInTime,
-              checkOutTime,
-              workHours,
-              notes: record.remarks || existing.notes,
-              source: 'ADMIN',
-            },
-          });
-          updated++;
-        } else {
-          await prisma.attendanceRecord.create({
-            data: {
-              employeeId: employee.id,
-              date: dateObj,
-              status: record.status || 'PRESENT',
-              checkInTime,
-              checkOutTime,
-              workHours,
-              notes: record.remarks || null,
-              source: 'ADMIN',
-            },
-          });
-          created++;
-        }
-      } catch {
-        // Skip individual record errors
+        await prisma.attendanceRecord.create({
+          data: {
+            employeeId: employee.id,
+            date: dateObj,
+            status: record.status || 'PRESENT',
+            checkInTime,
+            checkOutTime,
+            workHours,
+            notes: notesToStore,
+            source: 'ADMIN',
+          },
+        });
+        created++;
+      } catch (e) {
+        console.error('monthly-update record error:', record.date, (e as any)?.message || e);
       }
     }
 

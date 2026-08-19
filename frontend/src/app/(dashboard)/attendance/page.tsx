@@ -99,7 +99,7 @@ export default function AttendancePage() {
           festiveHolidayCount: 0,
           holidayCount: 0,
           trainingCount: 0,
-          wo: 0, ot: 0, wfh: 0, hd: 0
+          wo: 0, ot: 0, wfh: 0, hd: 0, lopCount: 0, personalLeaveCount: 0
         });
       }
       const emp = empMap.get(key)!;
@@ -150,6 +150,8 @@ export default function AttendancePage() {
           else if (log.status === 'OVERTIME') emp.ot++;
           else if (log.status === 'WORK_FROM_HOME') emp.wfh++;
           else if (log.status === 'HALF_DAY') emp.hd++;
+          else if (log.status === 'LOP') emp.lopCount++;
+          else if (log.status === 'PERSONAL_LEAVE') emp.personalLeaveCount++;
         }
       }
     }
@@ -185,6 +187,8 @@ export default function AttendancePage() {
         festiveHoliday: resolveSummaryVal(cs.festiveHoliday, emp.festiveHolidayCount),
         holiday: resolveSummaryVal(cs.holiday, emp.holidayCount),
         training: resolveSummaryVal(cs.training, emp.trainingCount),
+        lop: resolveSummaryVal(cs.lop, emp.lopCount),
+        personalLeave: resolveSummaryVal(cs.personalLeave, emp.personalLeaveCount),
       };
     });
   }, [allLogs, daysInMonth]);
@@ -323,7 +327,9 @@ export default function AttendancePage() {
           'LLV': 'LONG_LEAVE', 'L.L.V': 'LONG_LEAVE', 'LONG LEAVE': 'LONG_LEAVE', 'LONG_LEAVE': 'LONG_LEAVE', 'LONG LEAVES': 'LONG_LEAVE',
           'NH': 'NATIONAL_HOLIDAY', 'N.H': 'NATIONAL_HOLIDAY', 'NATIONAL HOLIDAY': 'NATIONAL_HOLIDAY', 'NATIONAL_HOLIDAY': 'NATIONAL_HOLIDAY',
           'FH': 'FESTIVE_HOLIDAY', 'F.H': 'FESTIVE_HOLIDAY', 'FESTIVE HOLIDAY': 'FESTIVE_HOLIDAY', 'FESTIVE_HOLIDAY': 'FESTIVE_HOLIDAY',
-          'T': 'TRAINING', 'TR': 'TRAINING', 'TRAINING': 'TRAINING'
+          'T': 'TRAINING', 'TR': 'TRAINING', 'TRAINING': 'TRAINING',
+          'LOP': 'LOP', 'L.O.P': 'LOP', 'LOSS OF PAY': 'LOP', 'LOSS_OF_PAY': 'LOP',
+          'PEL': 'PERSONAL_LEAVE', 'PERSONAL LEAVE': 'PERSONAL_LEAVE', 'PERSONAL_LEAVE': 'PERSONAL_LEAVE'
         };
 
         const formattedRecords: any[] = [];
@@ -483,24 +489,47 @@ export default function AttendancePage() {
   const handleSaveEdit = async () => {
     setSaving(true);
     try {
+      // Auto-calculate counters from day-wise statuses before saving
+      let p = 0, a = 0, el = 0, ll = 0, sl = 0, ecl = 0, pl = 0, llv = 0, cl = 0, nh = 0, fh = 0, h = 0, t = 0, lop = 0, personalLeave = 0;
+      for (let i = 1; i <= daysInMonth; i++) {
+        const s = editForm[i];
+        if (s === 'PRESENT' || s === 'P') p++;
+        else if (s === 'ABSENT' || s === 'A') a++;
+        else if (s === 'EARLY_LOGOUT' || s === 'EL') el++;
+        else if (s === 'LATE_LOGIN' || s === 'LL') ll++;
+        else if (s === 'SICK_LEAVE' || s === 'SL') sl++;
+        else if (s === 'EMERGENCY_LEAVE' || s === 'E_L') ecl++;
+        else if (s === 'PAID_LEAVE') pl++;
+        else if (s === 'LONG_LEAVE' || s === 'LLV') llv++;
+        else if (s === 'CASUAL_LEAVE' || s === 'CL') cl++;
+        else if (s === 'NATIONAL_HOLIDAY' || s === 'NH') nh++;
+        else if (s === 'FESTIVE_HOLIDAY' || s === 'FH') fh++;
+        else if (s === 'HOLIDAY' || s === 'H') h++;
+        else if (s === 'TRAINING' || s === 'T') t++;
+        else if (s === 'LOP') lop++;
+        else if (s === 'PERSONAL_LEAVE') personalLeave++;
+      }
+
       const summaryPayload: Record<string, any> = {
-        present: editForm.present,
-        absent: editForm.absent,
-        earlyLogout: editForm.earlyLogout,
-        lateLogin: editForm.lateLogin,
-        sickLeave: editForm.sickLeave,
-        emergencyLeave: editForm.emergencyLeave,
-        paidLeave: editForm.paidLeave,
-        longLeave: editForm.longLeave,
+        present: p,
+        absent: a,
+        earlyLogout: el,
+        lateLogin: ll,
+        sickLeave: sl,
+        emergencyLeave: ecl,
+        paidLeave: pl,
+        longLeave: llv,
         mailReceived: editForm.mailReceived,
         mailNotReceived: editForm.mailNotReceived,
-        casualLeave: editForm.casualLeave,
+        casualLeave: cl,
         approvedBy: editForm.approvedBy,
         notApproved: editForm.notApproved,
-        nationalHoliday: editForm.nationalHoliday,
-        festiveHoliday: editForm.festiveHoliday,
-        holiday: editForm.holiday,
-        training: editForm.training,
+        nationalHoliday: nh,
+        festiveHoliday: fh,
+        holiday: h,
+        training: t,
+        lop,
+        personalLeave,
         department: editForm.department,
         designation: editForm.designation,
         role: editForm.role,
@@ -596,6 +625,15 @@ export default function AttendancePage() {
     if (!emp.isNew && emp.days) {
       for (let i = 1; i <= daysInMonth; i++) {
         form[i] = emp.days[i] || '';
+      }
+    }
+    // Restore per-day approvedBy values from customSummary
+    if (emp.customSummary) {
+      for (let i = 1; i <= daysInMonth; i++) {
+        const dayApproved = emp.customSummary[`approvedBy_day_${i}`];
+        if (dayApproved && String(dayApproved).trim() !== '') {
+          form[`approvedBy_${i}`] = dayApproved;
+        }
       }
     }
     setEditForm(form);
@@ -843,14 +881,16 @@ export default function AttendancePage() {
                   <th className="py-2.5 px-2 text-center bg-lime-50 min-w-[60px]">Festive Holiday</th>
                   <th className="py-2.5 px-2 text-center bg-slate-100 min-w-[45px]">Holiday</th>
                   <th className="py-2.5 px-2 text-center bg-yellow-50 min-w-[45px]">Training</th>
+                  <th className="py-2.5 px-2 text-center bg-gray-100 min-w-[45px]">LOP</th>
+                  <th className="py-2.5 px-2 text-center bg-fuchsia-50 min-w-[60px]">Personal Leave</th>
                   <th className="py-2.5 px-2 text-center bg-slate-50 min-w-[130px] sticky right-0 z-20">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
-                  <tr><td colSpan={daysInMonth + 7} className="text-center p-8 text-slate-400">Loading attendance data...</td></tr>
+                  <tr><td colSpan={daysInMonth + 26} className="text-center p-8 text-slate-400">Loading attendance data...</td></tr>
                 ) : filteredEmployees.length === 0 ? (
-                  <tr><td colSpan={daysInMonth + 7} className="text-center p-8 text-slate-400">No records found for {selectedMonth}.</td></tr>
+                  <tr><td colSpan={daysInMonth + 26} className="text-center p-8 text-slate-400">No records found for {selectedMonth}.</td></tr>
                 ) : (
                   paginatedEmployees.map((emp, index) => {
                     const slNo = (page - 1) * PAGE_SIZE + index + 1;
@@ -883,6 +923,8 @@ export default function AttendancePage() {
                         else if (s === 'NATIONAL_HOLIDAY' || s === 'NH') { color = 'bg-cyan-100 text-cyan-800 font-bold'; label = 'NH'; }
                         else if (s === 'FESTIVE_HOLIDAY' || s === 'FH') { color = 'bg-lime-100 text-lime-800 font-bold'; label = 'FH'; }
                         else if (s === 'TRAINING' || s === 'T') { color = 'bg-violet-100 text-violet-800 font-bold'; label = 'T'; }
+                        else if (s === 'LOP') { color = 'bg-gray-200 text-gray-800 font-bold'; label = 'LOP'; }
+                        else if (s === 'PERSONAL_LEAVE') { color = 'bg-fuchsia-100 text-fuchsia-800 font-bold'; label = 'PeL'; }
 
                         return (
                           <td key={i} className="p-1 border-l border-slate-50">
@@ -909,6 +951,8 @@ export default function AttendancePage() {
                       <td className="p-2 text-center font-bold text-lime-700 bg-lime-50/30">{emp.festiveHoliday}</td>
                       <td className="p-2 text-center font-bold text-slate-700 bg-slate-50/30">{emp.holiday}</td>
                       <td className="p-2 text-center font-bold text-yellow-700 bg-yellow-50/30">{emp.training}</td>
+                      <td className="p-2 text-center font-bold text-gray-700 bg-gray-50/30">{emp.lop}</td>
+                      <td className="p-2 text-center font-bold text-fuchsia-700 bg-fuchsia-50/30">{emp.personalLeave}</td>
                       <td className="p-2 sticky right-0 bg-slate-50 z-10 text-center border-l border-slate-100">
                         {isAdmin && (
                           <div className="flex justify-center gap-1">
@@ -1128,7 +1172,7 @@ export default function AttendancePage() {
                     else if (currentVal === 'WORK_FROM_HOME') badgeColor = 'bg-teal-50 border-teal-300 text-teal-700 font-bold';
                     else if (currentVal) badgeColor = 'bg-violet-50 border-violet-300 text-violet-700 font-bold';
 
-                    const isLeaveStatus = ['CASUAL_LEAVE', 'SICK_LEAVE', 'EMERGENCY_LEAVE', 'PAID_LEAVE', 'LONG_LEAVE', 'LOP', 'HALF_DAY'].includes(currentVal);
+                    const isLeaveStatus = ['CASUAL_LEAVE', 'SICK_LEAVE', 'EMERGENCY_LEAVE', 'PAID_LEAVE', 'LONG_LEAVE', 'LOP', 'HALF_DAY', 'PERSONAL_LEAVE', 'WORK_FROM_HOME', 'LATE_LOGIN', 'EARLY_LOGOUT'].includes(currentVal);
 
                     return (
                       <div key={i} className={`flex flex-col gap-1 p-2 rounded-xl border transition ${badgeColor}`}>
