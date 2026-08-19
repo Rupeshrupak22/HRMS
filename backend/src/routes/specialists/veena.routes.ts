@@ -53,17 +53,16 @@ function sanitizeOnboarding(item: any, userEmail: string) {
   };
 }
 
-// User Rule: Candidates qualify for onboarding if status is one of: Active, Selected, Joined, Onboarding
-function qualifiesForOnboarding(stageRaw: string = '', statusRaw: string = ''): boolean {
-  const stage = (stageRaw || '').toLowerCase().trim();
+// User Rule: Candidates qualify for onboarding if recruitment status is one of: active, selected, joining, joined, onboarding
+function qualifiesForOnboarding(statusRaw: string = ''): boolean {
   const status = (statusRaw || '').toLowerCase().trim();
 
-  // If dropped or rejected, never qualify for onboarding
-  if (status === 'rejected' || status === 'dropped' || status === 'dropout' || stage === 'rejected' || stage === 'dropped') {
+  // If rejected or dropped, never qualify for onboarding
+  if (status === 'rejected' || status === 'dropped' || status === 'dropout' || status === 'not selected') {
     return false;
   }
 
-  const validStatuses = ['active', 'selected', 'joined', 'onboarding'];
+  const validStatuses = ['active', 'selected', 'joining', 'joined', 'onboarding'];
   return validStatuses.includes(status);
 }
 
@@ -132,7 +131,7 @@ function crud(model: any) {
 // ----------------------------------------------------
 const onboardingCrud = crud(prisma.onboardingTracker);
 
-// GET /onboarding with auto-sync of recruitment candidates having status in Active, Selected, Joined, Onboarding
+// GET /onboarding with auto-sync of recruitment candidates having status in Active, Selected, Joining, Joined, Onboarding without duplicates
 router.get('/onboarding', async (req: AuthRequest, res: Response) => {
   try {
     const where: any = {};
@@ -145,7 +144,7 @@ router.get('/onboarding', async (req: AuthRequest, res: Response) => {
     }
 
     // 1. Fetch current onboarding tracker records
-    const onboardingList = await prisma.onboardingTracker.findMany({
+    const rawOnboarding = await prisma.onboardingTracker.findMany({
       where,
       orderBy: { createdAt: 'desc' },
     });
@@ -155,17 +154,36 @@ router.get('/onboarding', async (req: AuthRequest, res: Response) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    // 3. Filter candidates who qualify (status in Active, Selected, Joined, Onboarding)
-    const qualifying = recCandidates.filter((r) => qualifiesForOnboarding(r.currentStage || '', r.status || ''));
+    // Deduplicate existing onboarding records by candidate name
+    const seenNames = new Set<string>();
+    const deduplicatedOnboarding: any[] = [];
+    const duplicateIdsToDelete: string[] = [];
 
-    const existingKeys = new Set(
-      onboardingList.map((o) => `${(o.candidateName || '').toLowerCase().trim()}_${(o.phoneNumber || '').trim()}`)
-    );
+    for (const item of rawOnboarding) {
+      const normName = (item.candidateName || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (!normName) continue;
+      if (seenNames.has(normName)) {
+        duplicateIdsToDelete.push(item.id);
+      } else {
+        seenNames.add(normName);
+        deduplicatedOnboarding.push(item);
+      }
+    }
 
-    const newlyCreated: any[] = [];
-    for (const rec of qualifying) {
-      const key = `${(rec.candidateName || '').toLowerCase().trim()}_${(rec.phoneNumber || '').trim()}`;
-      if (!existingKeys.has(key) && rec.candidateName) {
+    if (duplicateIdsToDelete.length > 0) {
+      prisma.onboardingTracker
+        .deleteMany({ where: { id: { in: duplicateIdsToDelete } } })
+        .catch((e) => console.error('Error cleaning duplicate onboarding rows:', e));
+    }
+
+    // 3. Auto-sync any qualifying recruitment candidate that is not yet in onboarding
+    const qualifyingRec = recCandidates.filter((r) => qualifiesForOnboarding(r.status || ''));
+
+    for (const rec of qualifyingRec) {
+      const normName = (rec.candidateName || '').toLowerCase().replace(/\s+/g, ' ').trim();
+      if (!normName) continue;
+
+      if (!seenNames.has(normName)) {
         try {
           const created = await prisma.onboardingTracker.create({
             data: {
@@ -190,16 +208,15 @@ router.get('/onboarding', async (req: AuthRequest, res: Response) => {
               createdByEmail: rec.createdByEmail || req.user!.email,
             },
           });
-          newlyCreated.push(created);
-          existingKeys.add(key);
+          seenNames.add(normName);
+          deduplicatedOnboarding.push(created);
         } catch (err) {
           console.error('Failed to auto-sync recruitment candidate to onboarding:', err);
         }
       }
     }
 
-    const finalList = [...newlyCreated, ...onboardingList];
-    return res.json(finalList);
+    return res.json(deduplicatedOnboarding);
   } catch (e: any) {
     console.error('Database onboarding query error:', e?.message);
     return res.status(500).json({ error: 'Database query failed' });
@@ -278,7 +295,7 @@ const recruitmentCrud = crud(prisma.recruitmentTracker);
 
 router.get('/recruitment', recruitmentCrud.getAll);
 
-// POST recruitment with auto-sync to onboarding if status in Active, Selected, Joined, Onboarding
+// POST recruitment with auto-sync to onboarding if status in Active, Selected, Joining, Joined, Onboarding
 router.post('/recruitment', async (req: AuthRequest, res: Response) => {
   try {
     const data = sanitizeRecruitment(req.body, req.user!.email);
@@ -288,31 +305,37 @@ router.post('/recruitment', async (req: AuthRequest, res: Response) => {
 
     const dbCreated = await prisma.recruitmentTracker.create({ data });
 
-    if (qualifiesForOnboarding(dbCreated.currentStage || '', dbCreated.status || '')) {
+    if (qualifiesForOnboarding(dbCreated.status || '')) {
       try {
-        await prisma.onboardingTracker.create({
-          data: {
-            employeeId: '',
-            candidateName: dbCreated.candidateName,
-            phoneNumber: dbCreated.phoneNumber || '',
-            email: dbCreated.email || '',
-            college: dbCreated.college || '',
-            location: dbCreated.location || '',
-            source: dbCreated.source || 'Recruitment',
-            roleApplied: dbCreated.roleApplied || 'Sales',
-            recruiter: dbCreated.recruiter || 'Abbu Veena',
-            applicationDate: dbCreated.applicationDate || '',
-            currentStage: dbCreated.currentStage || 'Joining',
-            status: dbCreated.status || 'Active',
-            interviews: dbCreated.interviews || '',
-            selection: dbCreated.selection || 'Selected',
-            offers: dbCreated.offers || '',
-            joining: dbCreated.joining || 'Yes',
-            onboarding: dbCreated.onboarding || 'Pending',
-            offerRemarks: dbCreated.offerRemarks || '',
-            createdByEmail: req.user!.email,
-          },
+        const normName = (dbCreated.candidateName || '').trim();
+        const existing = await prisma.onboardingTracker.findFirst({
+          where: { candidateName: { equals: normName, mode: 'insensitive' } },
         });
+        if (!existing) {
+          await prisma.onboardingTracker.create({
+            data: {
+              employeeId: '',
+              candidateName: dbCreated.candidateName,
+              phoneNumber: dbCreated.phoneNumber || '',
+              email: dbCreated.email || '',
+              college: dbCreated.college || '',
+              location: dbCreated.location || '',
+              source: dbCreated.source || 'Recruitment',
+              roleApplied: dbCreated.roleApplied || 'Sales',
+              recruiter: dbCreated.recruiter || 'Abbu Veena',
+              applicationDate: dbCreated.applicationDate || '',
+              currentStage: dbCreated.currentStage || 'Joining',
+              status: dbCreated.status || 'Active',
+              interviews: dbCreated.interviews || '',
+              selection: dbCreated.selection || 'Selected',
+              offers: dbCreated.offers || '',
+              joining: dbCreated.joining || 'Yes',
+              onboarding: dbCreated.onboarding || 'Pending',
+              offerRemarks: dbCreated.offerRemarks || '',
+              createdByEmail: req.user!.email,
+            },
+          });
+        }
       } catch (syncErr) {
         console.error('Auto-sync to onboarding on recruitment create failed:', syncErr);
       }
@@ -347,31 +370,37 @@ router.post('/recruitment/bulk', async (req: AuthRequest, res: Response) => {
         const created = await prisma.recruitmentTracker.create({ data: item });
         count++;
 
-        if (qualifiesForOnboarding(created.currentStage || '', created.status || '')) {
+        if (qualifiesForOnboarding(created.status || '')) {
           try {
-            await prisma.onboardingTracker.create({
-              data: {
-                employeeId: '',
-                candidateName: created.candidateName,
-                phoneNumber: created.phoneNumber || '',
-                email: created.email || '',
-                college: created.college || '',
-                location: created.location || '',
-                source: created.source || 'Recruitment',
-                roleApplied: created.roleApplied || 'Sales',
-                recruiter: created.recruiter || 'Abbu Veena',
-                applicationDate: created.applicationDate || '',
-                currentStage: created.currentStage || 'Joining',
-                status: created.status || 'Active',
-                interviews: created.interviews || '',
-                selection: created.selection || 'Selected',
-                offers: created.offers || '',
-                joining: created.joining || 'Yes',
-                onboarding: created.onboarding || 'Pending',
-                offerRemarks: created.offerRemarks || '',
-                createdByEmail: req.user!.email,
-              },
+            const normName = (created.candidateName || '').trim();
+            const existing = await prisma.onboardingTracker.findFirst({
+              where: { candidateName: { equals: normName, mode: 'insensitive' } },
             });
+            if (!existing) {
+              await prisma.onboardingTracker.create({
+                data: {
+                  employeeId: '',
+                  candidateName: created.candidateName,
+                  phoneNumber: created.phoneNumber || '',
+                  email: created.email || '',
+                  college: created.college || '',
+                  location: created.location || '',
+                  source: created.source || 'Recruitment',
+                  roleApplied: created.roleApplied || 'Sales',
+                  recruiter: created.recruiter || 'Abbu Veena',
+                  applicationDate: created.applicationDate || '',
+                  currentStage: created.currentStage || 'Joining',
+                  status: created.status || 'Active',
+                  interviews: created.interviews || '',
+                  selection: created.selection || 'Selected',
+                  offers: created.offers || '',
+                  joining: created.joining || 'Yes',
+                  onboarding: created.onboarding || 'Pending',
+                  offerRemarks: created.offerRemarks || '',
+                  createdByEmail: req.user!.email,
+                },
+              });
+            }
           } catch {}
         }
       } catch (err) {
@@ -386,7 +415,7 @@ router.post('/recruitment/bulk', async (req: AuthRequest, res: Response) => {
   }
 });
 
-// PUT recruitment with auto-sync to onboarding if updated to status in Active, Selected, Joined, Onboarding
+// PUT recruitment with auto-sync to onboarding if updated to status in Active, Selected, Joining, Joined, Onboarding
 router.put('/recruitment/:id', async (req: AuthRequest, res: Response) => {
   try {
     const id = String(req.params.id);
@@ -396,13 +425,11 @@ router.put('/recruitment/:id', async (req: AuthRequest, res: Response) => {
       data,
     });
 
-    if (qualifiesForOnboarding(updated.currentStage || '', updated.status || '')) {
+    if (qualifiesForOnboarding(updated.status || '')) {
       try {
+        const normName = (updated.candidateName || '').trim();
         const existing = await prisma.onboardingTracker.findFirst({
-          where: {
-            candidateName: updated.candidateName,
-            phoneNumber: updated.phoneNumber || undefined,
-          },
+          where: { candidateName: { equals: normName, mode: 'insensitive' } },
         });
         if (!existing) {
           await prisma.onboardingTracker.create({

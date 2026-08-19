@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
@@ -589,11 +590,10 @@ export default function RecruitmentTrackerPage() {
             </div>
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                showFilters
+              className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${showFilters
                   ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
                   : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
-              }`}
+                }`}
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
               Filters

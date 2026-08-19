@@ -195,29 +195,38 @@ export default function OnboardingPage() {
     try {
       const data = await veenaApi.getOnboarding();
       if (Array.isArray(data)) {
-        setRecords(
-          data.map((c: any) => ({
-            id: c.id,
-            employeeId: c.employeeId || c.candidateId || '',
-            candidateName: c.candidateName || c.employeeName || '',
-            phoneNumber: c.phoneNumber || c.mobileNumber || '',
-            email: c.email || '',
-            college: c.college || c.collegeUniversity || '',
-            location: c.location || '',
-            source: c.source || 'Direct',
-            roleApplied: c.roleApplied || 'Sales',
-            recruiter: c.recruiter || 'Abbu Veena',
-            applicationDate: c.applicationDate || c.joiningDate || '',
-            currentStage: c.currentStage || 'Joining',
-            status: c.status || 'Active',
-            interviews: c.interviews || '',
-            selection: c.selection || 'Selected',
-            offers: c.offers || '',
-            joining: c.joining || '',
-            onboarding: c.onboarding || '',
-            offerRemarks: c.offerRemarks || c.remarks || '',
-          }))
-        );
+        const seen = new Set<string>();
+        const unique: OnboardingRecord[] = [];
+        for (const c of data) {
+          const name = String(c.candidateName || c.employeeName || '').trim();
+          if (!name) continue;
+          const key = name.toLowerCase();
+          if (!seen.has(key)) {
+            seen.add(key);
+            unique.push({
+              id: c.id,
+              employeeId: c.employeeId || c.candidateId || '',
+              candidateName: name,
+              phoneNumber: c.phoneNumber || c.mobileNumber || '',
+              email: c.email || '',
+              college: c.college || c.collegeUniversity || '',
+              location: c.location || '',
+              source: c.source || 'Direct',
+              roleApplied: c.roleApplied || 'Sales',
+              recruiter: c.recruiter || 'Abbu Veena',
+              applicationDate: c.applicationDate || c.joiningDate || '',
+              currentStage: c.currentStage || 'Joining',
+              status: c.status || 'Active',
+              interviews: c.interviews || '',
+              selection: c.selection || 'Selected',
+              offers: c.offers || '',
+              joining: c.joining || '',
+              onboarding: c.onboarding || '',
+              offerRemarks: c.offerRemarks || c.remarks || '',
+            });
+          }
+        }
+        setRecords(unique);
       } else {
         setRecords([]);
       }
