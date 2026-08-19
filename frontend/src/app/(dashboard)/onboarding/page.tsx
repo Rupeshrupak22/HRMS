@@ -481,12 +481,18 @@ export default function OnboardingPage() {
     setImporting(true);
     try {
       let count = 0;
-      for (const item of importData) {
-        try {
-          await veenaApi.createOnboarding(item);
-          count++;
-        } catch (err) {
-          console.error('Failed to import onboarding record:', err);
+      try {
+        const res = await veenaApi.createOnboardingBulk(importData);
+        count = res?.count ?? importData.length;
+      } catch (bulkErr) {
+        console.warn('Bulk import failed, attempting sequential fallback:', bulkErr);
+        for (const item of importData) {
+          try {
+            await veenaApi.createOnboarding(item);
+            count++;
+          } catch (err) {
+            console.error('Failed to import onboarding record:', err);
+          }
         }
       }
       loadRecords();

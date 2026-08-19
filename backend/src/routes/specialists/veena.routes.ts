@@ -6,6 +6,53 @@ import { AuthRequest } from '../../types';
 const router = Router();
 router.use(authenticate);
 
+function sanitizeRecruitment(item: any, userEmail: string) {
+  return {
+    candidateName: String(item.candidateName || item.employeeName || item.name || '').trim(),
+    phoneNumber: item.phoneNumber ? String(item.phoneNumber).trim() : '',
+    email: item.email ? String(item.email).trim() : '',
+    college: item.college ? String(item.college).trim() : '',
+    location: item.location ? String(item.location).trim() : '',
+    source: item.source ? String(item.source).trim() : 'Direct',
+    roleApplied: item.roleApplied ? String(item.roleApplied).trim() : 'Sales',
+    recruiter: item.recruiter ? String(item.recruiter).trim() : 'Abbu Veena',
+    applicationDate: item.applicationDate ? String(item.applicationDate).trim() : '',
+    currentStage: item.currentStage ? String(item.currentStage).trim() : 'Application',
+    status: item.status ? String(item.status).trim() : 'Pending',
+    interviews: item.interviews ? String(item.interviews).trim() : '',
+    selection: item.selection ? String(item.selection).trim() : '',
+    offers: item.offers ? String(item.offers).trim() : '',
+    joining: item.joining ? String(item.joining).trim() : '',
+    onboarding: item.onboarding ? String(item.onboarding).trim() : '',
+    offerRemarks: item.offerRemarks ? String(item.offerRemarks).trim() : (item.remarks ? String(item.remarks).trim() : ''),
+    createdByEmail: userEmail,
+  };
+}
+
+function sanitizeOnboarding(item: any, userEmail: string) {
+  return {
+    employeeId: item.employeeId ? String(item.employeeId).trim() : '',
+    candidateName: String(item.candidateName || item.employeeName || item.name || '').trim(),
+    phoneNumber: item.phoneNumber ? String(item.phoneNumber).trim() : '',
+    email: item.email ? String(item.email).trim() : '',
+    college: item.college ? String(item.college).trim() : '',
+    location: item.location ? String(item.location).trim() : '',
+    source: item.source ? String(item.source).trim() : 'Direct',
+    roleApplied: item.roleApplied ? String(item.roleApplied).trim() : 'Sales',
+    recruiter: item.recruiter ? String(item.recruiter).trim() : 'Abbu Veena',
+    applicationDate: item.applicationDate ? String(item.applicationDate).trim() : (item.joiningDate ? String(item.joiningDate).trim() : ''),
+    currentStage: item.currentStage ? String(item.currentStage).trim() : 'Joining',
+    status: item.status ? String(item.status).trim() : 'Active',
+    interviews: item.interviews ? String(item.interviews).trim() : '',
+    selection: item.selection ? String(item.selection).trim() : 'Selected',
+    offers: item.offers ? String(item.offers).trim() : '',
+    joining: item.joining ? String(item.joining).trim() : 'Yes',
+    onboarding: item.onboarding ? String(item.onboarding).trim() : 'Pending',
+    offerRemarks: item.offerRemarks ? String(item.offerRemarks).trim() : (item.remarks ? String(item.remarks).trim() : ''),
+    createdByEmail: userEmail,
+  };
+}
+
 // Helper for 100% pure Database CRUD with ownership handling
 function crud(model: any) {
   return {
@@ -149,8 +196,70 @@ router.get('/onboarding', async (req: AuthRequest, res: Response) => {
   }
 });
 
-router.post('/onboarding', onboardingCrud.create);
-router.put('/onboarding/:id', onboardingCrud.update);
+// POST /onboarding (single)
+router.post('/onboarding', async (req: AuthRequest, res: Response) => {
+  try {
+    const data = sanitizeOnboarding(req.body, req.user!.email);
+    if (!data.candidateName) {
+      return res.status(400).json({ error: 'Candidate Name is required' });
+    }
+    const dbCreated = await prisma.onboardingTracker.create({ data });
+    return res.status(201).json(dbCreated);
+  } catch (e: any) {
+    console.error('Database onboarding create error:', e?.message);
+    return res.status(500).json({ error: e?.message || 'Database create failed' });
+  }
+});
+
+// POST /onboarding/bulk (fast batch import)
+router.post('/onboarding/bulk', async (req: AuthRequest, res: Response) => {
+  try {
+    const rawItems: any[] = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.items) ? req.body.items : []);
+    if (rawItems.length === 0) {
+      return res.json({ success: true, count: 0, message: 'No items provided' });
+    }
+
+    const sanitized = rawItems
+      .map((item) => sanitizeOnboarding(item, req.user!.email))
+      .filter((item) => Boolean(item.candidateName));
+
+    if (sanitized.length === 0) {
+      return res.status(400).json({ error: 'No valid records with Candidate Name found' });
+    }
+
+    // Insert batch into DB
+    let count = 0;
+    for (const item of sanitized) {
+      try {
+        await prisma.onboardingTracker.create({ data: item });
+        count++;
+      } catch (err) {
+        console.error('Error inserting single onboarding record in bulk:', err);
+      }
+    }
+
+    return res.status(201).json({ success: true, count, message: `Successfully saved ${count} record(s) to Database` });
+  } catch (e: any) {
+    console.error('Database onboarding bulk error:', e?.message);
+    return res.status(500).json({ error: e?.message || 'Database bulk import failed' });
+  }
+});
+
+router.put('/onboarding/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const data = sanitizeOnboarding(req.body, req.user!.email);
+    const updated = await prisma.onboardingTracker.update({
+      where: { id },
+      data,
+    });
+    return res.json(updated);
+  } catch (e: any) {
+    console.error('Database onboarding update error:', e?.message);
+    return res.status(500).json({ error: e?.message || 'Database update failed' });
+  }
+});
+
 router.delete('/onboarding/:id', onboardingCrud.remove);
 
 // ----------------------------------------------------
@@ -163,12 +272,12 @@ router.get('/recruitment', recruitmentCrud.getAll);
 // POST recruitment with auto-sync to onboarding if stage=Joining & status=Active
 router.post('/recruitment', async (req: AuthRequest, res: Response) => {
   try {
-    const dbCreated = await prisma.recruitmentTracker.create({
-      data: {
-        ...req.body,
-        createdByEmail: req.user!.email,
-      },
-    });
+    const data = sanitizeRecruitment(req.body, req.user!.email);
+    if (!data.candidateName) {
+      return res.status(400).json({ error: 'Candidate Name is required' });
+    }
+
+    const dbCreated = await prisma.recruitmentTracker.create({ data });
 
     const isJoining = (dbCreated.currentStage || '').toLowerCase().trim() === 'joining';
     const isActive = (dbCreated.status || '').toLowerCase().trim() === 'active';
@@ -210,13 +319,78 @@ router.post('/recruitment', async (req: AuthRequest, res: Response) => {
   }
 });
 
+// POST /recruitment/bulk (fast batch import)
+router.post('/recruitment/bulk', async (req: AuthRequest, res: Response) => {
+  try {
+    const rawItems: any[] = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.items) ? req.body.items : []);
+    if (rawItems.length === 0) {
+      return res.json({ success: true, count: 0, message: 'No items provided' });
+    }
+
+    const sanitized = rawItems
+      .map((item) => sanitizeRecruitment(item, req.user!.email))
+      .filter((item) => Boolean(item.candidateName));
+
+    if (sanitized.length === 0) {
+      return res.status(400).json({ error: 'No valid records with Candidate Name found' });
+    }
+
+    let count = 0;
+    for (const item of sanitized) {
+      try {
+        const created = await prisma.recruitmentTracker.create({ data: item });
+        count++;
+
+        // Auto sync if stage=Joining & status=Active
+        const isJoining = (created.currentStage || '').toLowerCase().trim() === 'joining';
+        const isActive = (created.status || '').toLowerCase().trim() === 'active';
+        if (isJoining && isActive) {
+          try {
+            await prisma.onboardingTracker.create({
+              data: {
+                employeeId: '',
+                candidateName: created.candidateName,
+                phoneNumber: created.phoneNumber || '',
+                email: created.email || '',
+                college: created.college || '',
+                location: created.location || '',
+                source: created.source || 'Recruitment',
+                roleApplied: created.roleApplied || 'Sales',
+                recruiter: created.recruiter || 'Abbu Veena',
+                applicationDate: created.applicationDate || '',
+                currentStage: 'Joining',
+                status: 'Active',
+                interviews: created.interviews || '',
+                selection: created.selection || 'Selected',
+                offers: created.offers || '',
+                joining: created.joining || 'Yes',
+                onboarding: created.onboarding || 'Pending',
+                offerRemarks: created.offerRemarks || '',
+                createdByEmail: req.user!.email,
+              },
+            });
+          } catch {}
+        }
+      } catch (err) {
+        console.error('Error inserting single recruitment record in bulk:', err);
+      }
+    }
+
+    return res.status(201).json({ success: true, count, message: `Successfully saved ${count} candidate(s) to Database` });
+  } catch (e: any) {
+    console.error('Database recruitment bulk error:', e?.message);
+    return res.status(500).json({ error: e?.message || 'Database bulk import failed' });
+  }
+});
+
 // PUT recruitment with auto-sync to onboarding if updated to stage=Joining & status=Active
 router.put('/recruitment/:id', async (req: AuthRequest, res: Response) => {
   try {
     const id = String(req.params.id);
+    const data = sanitizeRecruitment(req.body, req.user!.email);
     const updated = await prisma.recruitmentTracker.update({
       where: { id },
-      data: req.body,
+      data,
     });
 
     const isJoining = (updated.currentStage || '').toLowerCase().trim() === 'joining';

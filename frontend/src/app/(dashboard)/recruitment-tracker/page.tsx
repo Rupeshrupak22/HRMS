@@ -384,21 +384,35 @@ export default function RecruitmentTrackerPage() {
         const formatted = jsonData
           .map((row) => ({
             candidateName: String(
-              findRowValue(row, ['Candidate Name', 'CandidateName', 'candidate_name', 'Employee Name', 'Name', 'Applicant Name']) || ''
+              findRowValue(row, [
+                'Candidate Name',
+                'CandidateName',
+                'candidate_name',
+                'Employee Name',
+                'EmployeeName',
+                'employee_name',
+                'Name',
+                'name',
+                'Applicant Name',
+                'Candidate',
+                'candidate',
+                'Full Name',
+                'NAME',
+              ]) || ''
             ).trim(),
             phoneNumber: String(
-              findRowValue(row, ['Phone', 'Mobile Number', 'Phone Number', 'phone', 'Mobile', 'Contact']) || ''
+              findRowValue(row, ['Phone', 'Mobile Number', 'Phone Number', 'phone', 'Mobile', 'MobileNumber', 'mobile_number', 'Contact', 'mobile']) || ''
             ).trim(),
-            email: String(findRowValue(row, ['Email', 'EMAIL', 'email', 'Email Address']) || '').trim(),
+            email: String(findRowValue(row, ['Email', 'EMAIL', 'email', 'Email Address', 'Official Email']) || '').trim(),
             college: String(
-              findRowValue(row, ['College', 'College/University', 'COLLEGE', 'college', 'University']) || ''
+              findRowValue(row, ['College', 'College/University', 'COLLEGE', 'college', 'University', 'College University', 'Institute']) || ''
             ).trim(),
-            location: String(findRowValue(row, ['Location', 'LOCATION', 'location', 'City']) || '').trim(),
-            source: String(findRowValue(row, ['Source', 'SOURCE', 'source']) || 'Direct').trim(),
-            roleApplied: String(findRowValue(row, ['Role Applied', 'Role', 'role', 'Position', 'Designation']) || 'Sales').trim(),
-            recruiter: String(findRowValue(row, ['Recruiter', 'RECRUITER', 'recruiter']) || 'Abbu Veena').trim(),
+            location: String(findRowValue(row, ['Location', 'LOCATION', 'location', 'City', 'Work Location']) || '').trim(),
+            source: String(findRowValue(row, ['Source', 'SOURCE', 'source', 'Channel']) || 'Direct').trim(),
+            roleApplied: String(findRowValue(row, ['Role Applied', 'ROLE APPLIED', 'Role', 'role', 'Position', 'Designation', 'Job Profile']) || 'Sales').trim(),
+            recruiter: String(findRowValue(row, ['Recruiter', 'RECRUITER', 'recruiter', 'HR']) || 'Abbu Veena').trim(),
             applicationDate: formatExcelDate(
-              findRowValue(row, ['App Date', 'Application Date', 'AppDate', 'Date', 'date', 'Applied Date'])
+              findRowValue(row, ['App Date', 'Application Date', 'AppDate', 'Date', 'date', 'Applied Date', 'Joining Date', 'DOJ'])
             ),
             currentStage: String(findRowValue(row, ['Stage', 'Current Stage', 'stage', 'current_stage']) || 'Application').trim(),
             status: String(findRowValue(row, ['Status', 'STATUS', 'status']) || 'Pending').trim(),
@@ -414,7 +428,7 @@ export default function RecruitmentTrackerPage() {
           .filter((r) => r.candidateName);
 
         if (formatted.length === 0) {
-          alert('No valid candidate records found in file. Please ensure Candidate Name column exists.');
+          alert('No valid candidate records found in file. Please ensure Candidate Name / Name column exists.');
           return;
         }
 
@@ -432,12 +446,18 @@ export default function RecruitmentTrackerPage() {
     setImporting(true);
     try {
       let count = 0;
-      for (const item of importData) {
-        try {
-          await veenaApi.createRecruitment(item);
-          count++;
-        } catch (err) {
-          console.error('Failed to import recruitment candidate:', err);
+      try {
+        const res = await veenaApi.createRecruitmentBulk(importData);
+        count = res?.count ?? importData.length;
+      } catch (bulkErr) {
+        console.warn('Bulk import failed, attempting sequential fallback:', bulkErr);
+        for (const item of importData) {
+          try {
+            await veenaApi.createRecruitment(item);
+            count++;
+          } catch (err) {
+            console.error('Failed to import recruitment candidate:', err);
+          }
         }
       }
       loadEntries();
