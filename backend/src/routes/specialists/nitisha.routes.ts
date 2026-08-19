@@ -70,6 +70,51 @@ function crud(model: any) {
 const performance = crud(prisma.employeePerformance);
 router.get('/performance', performance.getAll);
 router.post('/performance', performance.create);
+router.post('/performance/bulk', async (req: AuthRequest, res: Response) => {
+  try {
+    const rawItems: any[] = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.items) ? req.body.items : []);
+    if (rawItems.length === 0) {
+      return res.json({ success: true, count: 0 });
+    }
+    let count = 0;
+    for (const item of rawItems) {
+      if (!item.employeeName && !item.employeeId) continue;
+      try {
+        await prisma.employeePerformance.create({
+          data: {
+            employeeName: String(item.employeeName || item.name || '').trim(),
+            joiningDate: String(item.joiningDate || '').trim(),
+            employeeId: String(item.employeeId || item.empId || '').trim(),
+            department: String(item.department || 'Sales').trim(),
+            designation: String(item.designation || 'Associate').trim(),
+            kpi: String(item.kpi || '').trim(),
+            dailyPerformance: String(item.dailyPerformance || '').trim(),
+            weeklyPerformance: String(item.weeklyPerformance || '').trim(),
+            monthlyPerformance: String(item.monthlyPerformance || '').trim(),
+            dailyRevenue: String(item.dailyRevenue || '').trim(),
+            weeklyRevenue: String(item.weeklyRevenue || '').trim(),
+            monthlyRevenue: String(item.monthlyRevenue || '').trim(),
+            pipCase: String(item.pipCase || 'No').trim(),
+            reasonForPip: String(item.reasonForPip || '').trim(),
+            performanceGap: String(item.performanceGap || '').trim(),
+            currentPerformance: String(item.currentPerformance || '').trim(),
+            improvementAction: String(item.improvementAction || '').trim(),
+            managerRemark: String(item.managerRemark || '').trim(),
+            finalRemark: String(item.finalRemark || '').trim(),
+            furtherActions: String(item.furtherActions || '').trim(),
+            createdByEmail: req.user!.email,
+          },
+        });
+        count++;
+      } catch (e) {
+        console.error('Error inserting performance item:', e);
+      }
+    }
+    return res.status(201).json({ success: true, count, message: `Successfully saved ${count} records` });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'Bulk import failed' });
+  }
+});
 router.put('/performance/:id', performance.update);
 router.delete('/performance/:id', performance.remove);
 
