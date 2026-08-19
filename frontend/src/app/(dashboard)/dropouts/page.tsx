@@ -36,6 +36,27 @@ const ROLE_OPTIONS = ['Sales', 'HR', 'Operational Team', 'Tech', 'Team Leader'];
 const SOURCE_OPTIONS = ['College', 'LinkedIn', 'Naukri', 'Referral', 'Job Portal', 'Other'];
 const DROPOUT_STAGE_OPTIONS = ['Selection', 'Interview', 'Offer Letter', 'Joining', 'Onboarding', 'Termination', 'Resignation'];
 const DROPOUT_REASON_OPTIONS = ['Not Interested', 'Salary Issue', 'Accepted Another Offer', 'Personal Reason', 'No Response', 'Failed Interview', 'Other'];
+function formatDisplayDate(val: any): string {
+  if (!val || val === '-') return '-';
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return '-';
+    const isEndOfDay = val.getHours() === 23 && val.getMinutes() >= 45;
+    const adjusted = new Date(val.getTime() + (isEndOfDay ? 20 * 60 * 1000 : 0));
+    return `${String(adjusted.getDate()).padStart(2, '0')}-${String(adjusted.getMonth() + 1).padStart(2, '0')}-${adjusted.getFullYear()}`;
+  }
+  const str = String(val).trim();
+  if (str.includes('GMT') || str.includes('India Standard Time') || (str.includes('T') && str.length > 10)) {
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      const isEndOfDay = parsed.getHours() === 23 && parsed.getMinutes() >= 45;
+      const adjusted = new Date(parsed.getTime() + (isEndOfDay ? 20 * 60 * 1000 : 0));
+      return `${String(adjusted.getDate()).padStart(2, '0')}-${String(adjusted.getMonth() + 1).padStart(2, '0')}-${adjusted.getFullYear()}`;
+    }
+  }
+  const yyyymmdd = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (yyyymmdd) return `${yyyymmdd[3].padStart(2, '0')}-${yyyymmdd[2].padStart(2, '0')}-${yyyymmdd[1]}`;
+  return str;
+}
 
 export default function DropoutTrackerPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -279,7 +300,7 @@ export default function DropoutTrackerPage() {
                   <td className="py-3 px-4">
                     <span className="px-2 py-0.5 bg-violet-50 text-violet-700 text-[10px] font-semibold rounded">{drop.source}</span>
                   </td>
-                  <td className="py-3 px-4 text-slate-700 font-medium">{drop.dropoutDate}</td>
+                  <td className="py-3 px-4 text-slate-700 font-medium">{formatDisplayDate(drop.dropoutDate)}</td>
                   <td className="py-3 px-4">
                     <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-[10px] font-semibold rounded">{drop.dropoutStage}</span>
                   </td>

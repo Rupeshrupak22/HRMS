@@ -98,9 +98,9 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   // Veena-specific navigation (Onboarding & Hiring)
   const veenaNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { label: 'Recruitment', href: '/onboarding', icon: UserPlus },
+    { label: 'Recruitment Tracker', href: '/recruitment-tracker', icon: UserPlus },
     { label: 'Interviews & Candidates', href: '/interviews', icon: Users },
-    { label: 'Onboarding', href: '/recruitment-tracker', icon: Target },
+    { label: 'Onboarding Pipeline', href: '/onboarding', icon: Target },
     { label: 'Dropout Tracker', href: '/dropouts', icon: UserX },
     { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
   ];
@@ -134,7 +134,6 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Charitha Report', href: '/reports/charitha', icon: FileText },
     { label: 'Veena Report', href: '/reports/veena', icon: FileText },
     { label: 'Daily Reports', href: '/reports/all-daily', icon: ClipboardList },
-    { label: 'HR Manager Report', href: '/reports/hr-manager', icon: BarChart3 },
     { label: 'Overall Report', href: '/reports/overall', icon: BarChart3 },
   ];
 
