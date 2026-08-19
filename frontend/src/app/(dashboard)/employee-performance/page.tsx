@@ -1,17 +1,24 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, X, Pencil, Trash2, TrendingUp, Search } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Plus, X, Pencil, Trash2, TrendingUp, Search, Download, Upload, Calendar } from 'lucide-react';
 import { nitishaApi } from '@/lib/nitisha-api';
 import { Pagination } from '@/components/Pagination';
+import * as XLSX from 'xlsx';
 
 export default function EmployeePerformancePage() {
   const [records, setRecords] = useState<any[]>([]);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
+  const [selectedDate, setSelectedDate] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [form, setForm] = useState({
     employeeName: '',
@@ -44,16 +51,28 @@ export default function EmployeePerformancePage() {
   const filteredRecords = useMemo(() => {
     return records.filter((r) => {
       const q = searchTerm.toLowerCase().trim();
-      if (!q) return true;
-      return (
+      const matchesSearch = !q || (
         (r.employeeName || '').toLowerCase().includes(q) ||
         (r.employeeId || '').toLowerCase().includes(q) ||
         (r.department || '').toLowerCase().includes(q) ||
         (r.designation || '').toLowerCase().includes(q) ||
         (r.kpi || '').toLowerCase().includes(q)
       );
+      // Month filter
+      let matchesMonth = true;
+      if (selectedMonth && r.createdAt) {
+        const recMonth = r.createdAt.slice(0, 7);
+        matchesMonth = recMonth === selectedMonth;
+      }
+      // Date filter
+      let matchesDate = true;
+      if (selectedDate && r.createdAt) {
+        const recDate = r.createdAt.slice(0, 10);
+        matchesDate = recDate === selectedDate;
+      }
+      return matchesSearch && matchesMonth && matchesDate;
     });
-  }, [records, searchTerm]);
+  }, [records, searchTerm, selectedMonth, selectedDate]);
 
   const paginatedRecords = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -139,28 +158,71 @@ export default function EmployeePerformancePage() {
   const isRevenueDept = form.department === 'Sales' || form.department === 'Operation';
   const showDailyWeeklyPerf = form.department !== 'Tech' && form.department !== 'HR';
 
+  const handleDownloadTemplate = () => {
+    const headers = ['Employee Name', 'Employee ID', 'Department', 'Designation', 'KPI', 'Daily Performance', 'Weekly Performance', 'Monthly Performance', 'Daily Revenue', 'Weekly Revenue', 'Monthly Revenue', 'PIP Case', 'Further Actions'];
+    const sample = ['John Doe', 'EMP-001', 'Sales', 'Team Lead', 'Revenue Target', '5 calls', '25 calls', '100 calls', '₹5,000', '₹25,000', '₹1,00,000', 'No', ''];
+    const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Performance_Template');
+    XLSX.writeFile(wb, `Performance_Template_${selectedMonth}.xlsx`);
+  };
+
+  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const jsonData: any[] = XLSX.utils.sheet_to_json(sheet);
+        
+        for (const row of jsonData) {
+          const payload = {
+            employeeName: row['Employee Name'] || '',
+            employeeId: row['Employee ID'] || '',
+            department: row['Department'] || '',
+            designation: row['Designation'] || '',
+            kpi: row['KPI'] || '',
+            dailyPerformance: row['Daily Performance'] || '',
+            weeklyPerformance: row['Weekly Performance'] || '',
+            monthlyPerformance: row['Monthly Performance'] || '',
+            dailyRevenue: row['Daily Revenue'] || '',
+            weeklyRevenue: row['Weekly Revenue'] || '',
+            monthlyRevenue: row['Monthly Revenue'] || '',
+            pipCase: row['PIP Case'] || 'No',
+            furtherActions: row['Further Actions'] || '',
+            joiningDate: row['Joining Date'] || '',
+            reasonForPip: '', performanceGap: '', currentPerformance: '',
+            improvementAction: '', managerRemark: '', finalRemark: '',
+          };
+          try {
+            const created = await nitishaApi.createPerformance(payload);
+            setRecords(prev => [created, ...prev]);
+          } catch {}
+        }
+      } catch {
+        alert('Failed to parse file. Please use the template format.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            <TrendingUp className="w-5 h-5 text-orange-500" />
-            <span>Employee Performance & Discipline</span>
-          </h1>
-          <p className="text-xs text-slate-500 mt-1">
-            Track KPIs, performance reviews, PIP cases, and disciplinary actions
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="text"
-              placeholder="Search performance..."
-              value={searchTerm}
-              onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
-              className="pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-xs"
-            />
+      {/* Header */}
+      <div>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-orange-500" />
+              <span>Employee Performance & Discipline</span>
+            </h1>
+            <p className="text-xs text-slate-500 mt-1">
+              Track KPIs, performance reviews, PIP cases, and disciplinary actions
+            </p>
           </div>
           <button
             onClick={() => { if (showForm) resetForm(); else setShowForm(true); }}
@@ -169,6 +231,62 @@ export default function EmployeePerformancePage() {
             {showForm ? <X className="w-4 h-4" /> : <Plus className="w-4 h-4" />}
             {showForm ? 'Cancel' : 'Add Performance Record'}
           </button>
+        </div>
+
+        {/* Filters Row */}
+        <div className="flex flex-wrap items-center gap-3 mt-4">
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              placeholder="Search performance..."
+              value={searchTerm}
+              onChange={(e) => { setSearchTerm(e.target.value); setPage(1); }}
+              className="pl-8 pr-3 py-2 bg-white border border-slate-200 rounded-xl text-xs focus:outline-none focus:ring-2 focus:ring-orange-500 shadow-xs w-48"
+            />
+          </div>
+
+          <div className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs">
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-slate-500 font-medium">MONTH:</span>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => { setSelectedMonth(e.target.value); setSelectedDate(''); setPage(1); }}
+              className="border-none outline-none text-xs font-semibold text-slate-700 bg-transparent cursor-pointer"
+            />
+            {selectedMonth && (
+              <button onClick={() => setSelectedMonth('')} className="text-slate-400 hover:text-red-500 ml-1 cursor-pointer"><X className="w-3 h-3" /></button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs">
+            <Calendar className="w-3.5 h-3.5 text-slate-400" />
+            <span className="text-slate-500 font-medium">DATE:</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => { setSelectedDate(e.target.value); setPage(1); }}
+              className="border-none outline-none text-xs font-semibold text-slate-700 bg-transparent cursor-pointer"
+            />
+            {selectedDate && (
+              <button onClick={() => setSelectedDate('')} className="text-slate-400 hover:text-red-500 ml-1 cursor-pointer"><X className="w-3 h-3" /></button>
+            )}
+          </div>
+
+          <button
+            onClick={handleDownloadTemplate}
+            className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+          >
+            <Download className="w-3.5 h-3.5" />
+            Template
+          </button>
+
+          <label className="flex items-center gap-1.5 px-3 py-2 bg-white border border-slate-200 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-50 transition cursor-pointer">
+            <Upload className="w-3.5 h-3.5" />
+            Import
+            <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImport} className="hidden" />
+          </label>
         </div>
       </div>
 
