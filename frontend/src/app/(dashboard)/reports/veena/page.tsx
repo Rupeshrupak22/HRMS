@@ -23,53 +23,28 @@ export default function VeenaReportPage() {
   const PAGE_SIZE = 20;
 
   useEffect(() => {
-    // 1. Recruitment Tracker candidates
-    const savedRec = typeof window !== 'undefined' ? localStorage.getItem('adyapan_recruitment_candidates') : null;
-    let recList: any[] = [];
-    try { recList = savedRec ? JSON.parse(savedRec) : []; } catch { recList = []; }
-
-    // 2. Onboarding Pipeline candidates
-    veenaApi.getOnboarding().then((res) => {
+    // 1. Recruitment candidates strictly from DB
+    veenaApi.getRecruitment().then((res) => {
       const list = Array.isArray(res) ? res : [];
-      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_onboarding_candidates') : null;
-      let localList: any[] = [];
-      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
-
-      const existingNames = new Set(list.map((c: any) => (c.candidateName || c.name || '').toLowerCase().trim()));
-      const uniqueLocal = localList.filter((c: any) => !existingNames.has((c.candidateName || c.name || '').toLowerCase().trim()));
-
-      const combinedOnb = [...list, ...uniqueLocal];
-      setOnboarding(combinedOnb);
-
-      if (recList.length === 0) {
-        setRecruitment(combinedOnb);
-      } else {
-        setRecruitment(recList);
-      }
+      setRecruitment(list);
     }).catch(() => {
-      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_onboarding_candidates') : null;
-      let localList: any[] = [];
-      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
-      setOnboarding(localList);
-      setRecruitment(recList.length > 0 ? recList : localList);
+      setRecruitment([]);
     });
 
-    // 3. Dropout candidates
+    // 2. Onboarding employees strictly from DB
+    veenaApi.getOnboarding().then((res) => {
+      const list = Array.isArray(res) ? res : [];
+      setOnboarding(list);
+    }).catch(() => {
+      setOnboarding([]);
+    });
+
+    // 3. Dropout candidates strictly from DB
     veenaApi.getDropouts().then((res) => {
       const list = Array.isArray(res) ? res : [];
-      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_dropout_candidates') : null;
-      let localList: any[] = [];
-      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
-
-      const existingNames = new Set(list.map((c: any) => (c.candidateName || c.name || '').toLowerCase().trim()));
-      const uniqueLocal = localList.filter((c: any) => !existingNames.has((c.candidateName || c.name || '').toLowerCase().trim()));
-
-      setDropouts([...list, ...uniqueLocal]);
+      setDropouts(list);
     }).catch(() => {
-      const savedLocal = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_dropout_candidates') : null;
-      let localList: any[] = [];
-      try { localList = savedLocal ? JSON.parse(savedLocal) : []; } catch { localList = []; }
-      setDropouts(localList);
+      setDropouts([]);
     });
 
     // 4. Daily reports

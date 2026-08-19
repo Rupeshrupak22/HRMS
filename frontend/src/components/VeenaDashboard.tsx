@@ -31,6 +31,7 @@ import { Pagination } from '@/components/Pagination';
 
 interface CandidateRecord {
   id: string;
+  candidateId?: string;
   candidateName: string;
   phoneNumber: string;
   email: string;
@@ -52,48 +53,42 @@ interface CandidateRecord {
 
 function formatExcelDate(val: any): string {
   if (val === null || val === undefined || val === '' || val === '-') return '-';
-  
+
   if (val instanceof Date) {
     if (isNaN(val.getTime())) return '-';
-    const adjusted = new Date(val.getTime() + 60 * 1000);
-    const y = adjusted.getFullYear();
-    const m = String(adjusted.getMonth() + 1).padStart(2, '0');
-    const d = String(adjusted.getDate()).padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    const d = String(val.getUTCDate()).padStart(2, '0');
+    const m = String(val.getUTCMonth() + 1).padStart(2, '0');
+    const y = val.getUTCFullYear();
+    return `${d}-${m}-${y}`;
   }
 
   if (typeof val === 'number') {
     const utcDays = val - 25569;
     const utcMs = Math.round(utcDays * 86400 * 1000);
-    const date = new Date(utcMs + 60 * 1000);
+    const date = new Date(utcMs + 60 * 60 * 1000);
     if (!isNaN(date.getTime())) {
-      const y = date.getUTCFullYear();
-      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
       const d = String(date.getUTCDate()).padStart(2, '0');
-      return `${y}-${m}-${d}`;
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const y = date.getUTCFullYear();
+      return `${d}-${m}-${y}`;
     }
   }
 
   const str = String(val).trim();
   if (!str || str === '-') return '-';
 
-  if (str.includes('GMT') || str.includes('India Standard Time') || (str.includes('T') && str.length > 15)) {
-    const parsed = new Date(str);
-    if (!isNaN(parsed.getTime())) {
-      const adjusted = new Date(parsed.getTime() + 60 * 1000);
-      const y = adjusted.getFullYear();
-      const m = String(adjusted.getMonth() + 1).padStart(2, '0');
-      const d = String(adjusted.getDate()).padStart(2, '0');
-      return `${y}-${m}-${d}`;
-    }
+  const lower = str.toLowerCase();
+  if (['sent', 'not selected', 'selected', 'yes', 'no', 'done', 'pending', 'active', 'rejected', 'dropped', 'none', 'n/a', 'na'].includes(lower)) {
+    return str;
   }
 
-  const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+  const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
   if (ddmmyyyy) {
     const d = ddmmyyyy[1].padStart(2, '0');
     const m = ddmmyyyy[2].padStart(2, '0');
-    const y = ddmmyyyy[3];
-    return `${y}-${m}-${d}`;
+    let y = ddmmyyyy[3];
+    if (y.length === 2) y = '20' + y;
+    return `${d}-${m}-${y}`;
   }
 
   const yyyymmdd = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
@@ -101,17 +96,36 @@ function formatExcelDate(val: any): string {
     const y = yyyymmdd[1];
     const m = yyyymmdd[2].padStart(2, '0');
     const d = yyyymmdd[3].padStart(2, '0');
-    return `${y}-${m}-${d}`;
+    return `${d}-${m}-${y}`;
   }
 
-  const monthNameMatch = str.match(/^(\d{1,2})[-\s/](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-\s/](\d{2,4})/i);
+  const monthNameMatch = str.match(/^(\d{1,2})[-\s/](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-\s/](\d{2,4})/i) || str.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})[,\s]+(\d{2,4})/i);
   if (monthNameMatch) {
     const months: Record<string, string> = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
-    const d = monthNameMatch[1].padStart(2, '0');
-    const m = months[monthNameMatch[2].toLowerCase().slice(0, 3)] || '01';
-    let y = monthNameMatch[3];
+    let d = '01';
+    let m = '01';
+    let y = '2026';
+    if (isNaN(Number(monthNameMatch[1]))) {
+      m = months[monthNameMatch[1].toLowerCase().slice(0, 3)] || '01';
+      d = String(monthNameMatch[2]).padStart(2, '0');
+      y = monthNameMatch[3];
+    } else {
+      d = String(monthNameMatch[1]).padStart(2, '0');
+      m = months[monthNameMatch[2].toLowerCase().slice(0, 3)] || '01';
+      y = monthNameMatch[3];
+    }
     if (y.length === 2) y = '20' + y;
-    return `${y}-${m}-${d}`;
+    return `${d}-${m}-${y}`;
+  }
+
+  if (str.includes('GMT') || str.includes('India Standard Time') || str.includes('IST') || str.includes('T')) {
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      const d = String(parsed.getUTCDate()).padStart(2, '0');
+      const m = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+      const y = parsed.getUTCFullYear();
+      return `${d}-${m}-${y}`;
+    }
   }
 
   return str;
@@ -171,9 +185,13 @@ export function VeenaDashboard() {
   const loadAllData = async () => {
     setLoading(true);
     try {
-      // 1. Candidates (Onboarding / Recruitment) strictly from DB
-      const res = await veenaApi.getOnboarding();
-      setCandidates(Array.isArray(res) ? res : []);
+      // 1. Recruitment Candidates strictly from DB
+      try {
+        const res = await veenaApi.getRecruitment();
+        setCandidates(Array.isArray(res) ? res : []);
+      } catch {
+        setCandidates([]);
+      }
 
       // 2. Dropouts strictly from DB
       try {
@@ -190,8 +208,6 @@ export function VeenaDashboard() {
       } catch {
         setDailyReports([]);
       }
-    } catch {
-      setCandidates([]);
     } finally {
       setLoading(false);
     }
@@ -207,48 +223,113 @@ export function VeenaDashboard() {
     loadAllData();
   }, []);
 
-  // Dynamic Metrics across real Veena DB records
+  // Dynamic Metrics strictly from current stage and status
   const totalCount = candidates.length;
-  
-  const interviewCount = candidates.filter((c) => {
-    const stage = (c.currentStage || '').toLowerCase();
-    const intv = (c.interviews || '').trim().toLowerCase();
-    return stage === 'interview' || (intv && intv !== '-' && !intv.includes('not scheduled'));
+
+  // 1. Total Rejected: Candidates with status Rejected or selection/offers = Not Selected
+  const rejectedCount = candidates.filter((c) => {
+    const status = (c.status || '').toLowerCase().trim();
+    const stage = (c.currentStage || '').toLowerCase().trim();
+    const sel = (c.selection || '').toLowerCase().trim();
+    const off = (c.offers || '').toLowerCase().trim();
+    return (
+      status === 'rejected' ||
+      stage === 'rejected' ||
+      stage === 'reject' ||
+      sel === 'not selected' ||
+      off === 'not selected'
+    );
   }).length;
 
+  // 2. Offer Released: Candidates strictly in Offer Stage (excluding selection)
   const offerCount = candidates.filter((c) => {
-    const stage = (c.currentStage || '').toLowerCase();
-    const status = (c.status || '').toLowerCase();
-    const off = (c.offers || '').trim();
-    return stage === 'offer' || stage === 'selection' || status === 'selected' || (off && off !== '-');
+    const stage = (c.currentStage || '').toLowerCase().trim();
+    return stage === 'offer' || stage === 'offers';
   }).length;
 
+  // 3. Joining: Candidates strictly in Joining Stage (excluding onboarding)
   const joinedCount = candidates.filter((c) => {
-    const stage = (c.currentStage || '').toLowerCase();
-    const status = (c.status || '').toLowerCase();
-    const join = (c.joining || '').trim();
-    return status === 'joined' || stage === 'joined' || stage === 'onboarding' || stage === 'completed' || (join && join !== '-');
+    const stage = (c.currentStage || '').toLowerCase().trim();
+    const join = (c.joining || '').toLowerCase().trim();
+    return (stage === 'joining' || (join === 'yes' && stage !== 'interviews' && stage !== 'interview' && stage !== 'offer' && stage !== 'offers')) &&
+      stage !== 'onboarding' && stage !== 'completed';
   }).length;
 
-  const inProgressCount = candidates.filter((c) => {
-    const status = (c.status || '').toLowerCase();
-    return status === 'active' || (!['joined', 'dropped', 'rejected'].includes(status));
-  }).length;
+  // 4. Dropout Cases
+  const dropoutsCount = dropouts.length > 0
+    ? dropouts.length
+    : candidates.filter(c => {
+      const st = (c.status || '').toLowerCase().trim();
+      const stg = (c.currentStage || '').toLowerCase().trim();
+      return st === 'dropped' || st === 'dropout' || stg === 'dropout' || stg === 'dropped';
+    }).length;
 
-  const dropoutsCount = dropouts.length;
   const dailyReportsCount = dailyReports.length;
   const conversionRate = totalCount + dropoutsCount > 0 ? (((joinedCount) / (totalCount + dropoutsCount)) * 100).toFixed(1) : '0';
   const dropoutRate = totalCount + dropoutsCount > 0 ? (((dropoutsCount) / (totalCount + dropoutsCount)) * 100).toFixed(1) : '0';
 
+  // Pipeline Stages strictly reflecting candidates in each current stage
   const pipelineStages = [
-    { name: 'Application', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'application').length },
-    { name: 'Screening', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'screening').length },
-    { name: 'Interview', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'interview').length },
-    { name: 'Selection', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'selection').length },
-    { name: 'Offer', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'offer').length },
-    { name: 'Joining', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'joining').length },
-    { name: 'Onboarding', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'onboarding').length },
-    { name: 'Completed', count: candidates.filter((c) => (c.currentStage || '').toLowerCase() === 'completed' || (c.currentStage || '').toLowerCase() === 'joined' || c.status === 'Joined').length },
+    {
+      name: 'Application',
+      count: candidates.filter((c) => {
+        const stg = (c.currentStage || '').toLowerCase().trim();
+        return stg === 'application' || stg === 'applied';
+      }).length,
+    },
+    {
+      name: 'Screening',
+      count: candidates.filter((c) => {
+        const stg = (c.currentStage || '').toLowerCase().trim();
+        return stg === 'screening';
+      }).length,
+    },
+    {
+      name: 'Interview',
+      count: candidates.filter((c) => {
+        const stg = (c.currentStage || '').toLowerCase().trim();
+        return stg === 'interview' || stg === 'interviews';
+      }).length,
+    },
+    {
+      name: 'Selection',
+      count: candidates.filter((c) => {
+        const stg = (c.currentStage || '').toLowerCase().trim();
+        const sel = (c.selection || '').toLowerCase().trim();
+        const st = (c.status || '').toLowerCase().trim();
+        return stg === 'selection' || stg === 'selected' || sel === 'selected' || st === 'selected';
+      }).length,
+    },
+    {
+      name: 'Offer',
+      count: candidates.filter((c) => {
+        const stg = (c.currentStage || '').toLowerCase().trim();
+        return stg === 'offer' || stg === 'offers';
+      }).length,
+    },
+    {
+      name: 'Joining',
+      count: candidates.filter((c) => {
+        const stg = (c.currentStage || '').toLowerCase().trim();
+        const join = (c.joining || '').toLowerCase().trim();
+        return stg === 'joining' || (join === 'yes' && stg !== 'onboarding' && stg !== 'completed' && stg !== 'joined');
+      }).length,
+    },
+    {
+      name: 'Onboarding',
+      count: candidates.filter((c) => {
+        const stg = (c.currentStage || '').toLowerCase().trim();
+        return stg === 'onboarding';
+      }).length,
+    },
+    {
+      name: 'Completed',
+      count: candidates.filter((c) => {
+        const stg = (c.currentStage || '').toLowerCase().trim();
+        const status = (c.status || '').toLowerCase().trim();
+        return stg === 'completed' || stg === 'joined' || status === 'joined';
+      }).length,
+    },
   ];
 
   const [activeCardFilter, setActiveCardFilter] = useState<string | null>(null);
@@ -264,28 +345,71 @@ export function VeenaDashboard() {
 
     let matchesCard = true;
     if (activeCardFilter) {
+      const stage = (c.currentStage || '').toLowerCase().trim();
+      const status = (c.status || '').toLowerCase().trim();
+      const sel = (c.selection || '').toLowerCase().trim();
+      const off = (c.offers || '').toLowerCase().trim();
+      const join = (c.joining || '').toLowerCase().trim();
+
       if (activeCardFilter.startsWith('stage:')) {
-        const targetStage = activeCardFilter.split(':')[1].toLowerCase();
-        matchesCard = (c.currentStage || '').toLowerCase() === targetStage;
-      } else if (activeCardFilter === 'status:Interview') {
-        const stage = (c.currentStage || '').toLowerCase();
-        const intv = (c.interviews || '').trim().toLowerCase();
-        matchesCard = Boolean(stage === 'interview' || (intv && intv !== '-' && !intv.includes('not scheduled')));
+        const targetStage = activeCardFilter.split(':')[1].toLowerCase().trim();
+        if (targetStage === 'application') {
+          matchesCard = stage === 'application' || stage === 'applied';
+        } else if (targetStage === 'screening') {
+          matchesCard = stage === 'screening';
+        } else if (targetStage === 'interview') {
+          matchesCard = stage === 'interview' || stage === 'interviews';
+        } else if (targetStage === 'selection') {
+          matchesCard = stage === 'selection' || stage === 'selected' || sel === 'selected' || status === 'selected';
+        } else if (targetStage === 'offer') {
+          matchesCard = stage === 'offer' || stage === 'offers';
+        } else if (targetStage === 'joining') {
+          matchesCard = stage === 'joining' || (join === 'yes' && stage !== 'onboarding' && stage !== 'completed' && stage !== 'joined');
+        } else if (targetStage === 'onboarding') {
+          matchesCard = stage === 'onboarding';
+        } else if (targetStage === 'completed') {
+          matchesCard = stage === 'completed' || stage === 'joined' || status === 'joined';
+        } else {
+          matchesCard = stage === targetStage;
+        }
+      } else if (activeCardFilter === 'status:Rejected') {
+        matchesCard = Boolean(status === 'rejected' || stage === 'rejected' || stage === 'reject' || sel === 'not selected' || off === 'not selected');
       } else if (activeCardFilter === 'status:Offers') {
-        const stage = (c.currentStage || '').toLowerCase();
-        const status = (c.status || '').toLowerCase();
-        const off = (c.offers || '').trim();
-        matchesCard = Boolean(stage === 'offer' || stage === 'selection' || status === 'selected' || (off && off !== '-'));
+        matchesCard = Boolean(stage === 'offer' || stage === 'offers');
       } else if (activeCardFilter === 'status:Joined') {
-        const stage = (c.currentStage || '').toLowerCase();
-        const status = (c.status || '').toLowerCase();
-        const join = (c.joining || '').trim();
-        matchesCard = Boolean(status === 'joined' || stage === 'joined' || stage === 'onboarding' || stage === 'completed' || (join && join !== '-'));
+        matchesCard = Boolean((stage === 'joining' || (join === 'yes' && stage !== 'interviews' && stage !== 'interview' && stage !== 'offer' && stage !== 'offers' && stage !== 'onboarding' && stage !== 'completed')) && status !== 'rejected' && status !== 'dropped');
       }
     }
 
-    const matchesStage = !stageFilter || c.currentStage === stageFilter;
-    const matchesStatus = !statusFilter || c.status === statusFilter;
+    let matchesStage = true;
+    if (stageFilter) {
+      const candStage = (c.currentStage || '').toLowerCase().trim();
+      const target = stageFilter.toLowerCase().trim();
+      if (target === 'interview' || target === 'interviews') {
+        matchesStage = candStage === 'interview' || candStage === 'interviews';
+      } else if (target === 'selection' || target === 'selected') {
+        const sel = (c.selection || '').toLowerCase().trim();
+        const st = (c.status || '').toLowerCase().trim();
+        matchesStage = candStage === 'selection' || candStage === 'selected' || sel === 'selected' || st === 'selected';
+      } else if (target === 'offer' || target === 'offers') {
+        matchesStage = candStage === 'offer' || candStage === 'offers';
+      } else if (target === 'joining') {
+        const join = (c.joining || '').toLowerCase().trim();
+        matchesStage = candStage === 'joining' || join === 'yes';
+      } else if (target === 'completed' || target === 'joined') {
+        matchesStage = candStage === 'completed' || candStage === 'joined' || (c.status || '').toLowerCase().trim() === 'joined';
+      } else {
+        matchesStage = candStage === target;
+      }
+    }
+
+    let matchesStatus = true;
+    if (statusFilter) {
+      const candStatus = (c.status || '').toLowerCase().trim();
+      const target = statusFilter.toLowerCase().trim();
+      matchesStatus = candStatus === target;
+    }
+
     return matchesSearch && matchesCard && matchesStage && matchesStatus;
   });
 
@@ -347,6 +471,7 @@ export function VeenaDashboard() {
         }
 
         const formatted = jsonData.map((row) => ({
+          candidateId: String(findRowValue(row, ['Candidate ID', 'CANDIDATE ID', 'CandidateId', 'candidate_id', 'ID', 'Id', 'Emp ID', 'EMP ID', 'Employee ID', 'ID No', 'Candidate_Id']) || '').trim(),
           candidateName: String(findRowValue(row, ['Candidate Name', 'EMPLOYEE NAME', 'Name', 'candidate_name', 'Applicant Name']) || '').trim(),
           phoneNumber: String(findRowValue(row, ['Mobile Number', 'MOBILE NUMBER', 'Phone Number', 'Phone', 'phone', 'Contact']) || '').trim(),
           email: String(findRowValue(row, ['Email', 'EMAIL', 'email', 'Email Address']) || '').trim(),
@@ -355,14 +480,14 @@ export function VeenaDashboard() {
           source: String(findRowValue(row, ['Source', 'SOURCE', 'source']) || 'LinkedIn').trim(),
           roleApplied: String(findRowValue(row, ['Role Applied', 'ROLE APPLIED', 'Role', 'role', 'Position']) || 'Sales').trim(),
           recruiter: String(findRowValue(row, ['Recruiter', 'RECRUITER', 'recruiter']) || 'Abbu Veena').trim(),
-          applicationDate: formatExcelDate(findRowValue(row, ['Application Date', 'APPLICATION DATE', 'Date', 'date', 'Applied Date'])),
+          applicationDate: formatExcelDate(findRowValue(row, ['Application Date', 'APPLICATION DATE', 'Application Begin Date', 'Application Start Date', 'Date of Application', 'Applied Date', 'App Date', 'Date', 'date'])),
           currentStage: String(findRowValue(row, ['Current Stage', 'CURRENT STAGE', 'Stage', 'stage']) || 'Screening').trim(),
           status: String(findRowValue(row, ['Status', 'STATUS', 'status']) || 'Active').trim(),
           interviews: String(findRowValue(row, ['Interviews', 'INTERVIEWS', 'interviews']) || '').trim(),
           selection: String(findRowValue(row, ['Selection', 'SELECTION', 'selection']) || '').trim(),
           offers: formatExcelDate(findRowValue(row, ['Offers', 'OFFERS', 'offers', 'Offer Date'])),
           joining: formatExcelDate(findRowValue(row, ['Joining', 'JOINING', 'joining', 'Joining Date', 'DOJ', 'Date of Joining'])),
-          onboarding: String(findRowValue(row, ['Onboarding', 'ONBOARDING', 'onboarding']) || '').trim(),
+          onboarding: formatExcelDate(findRowValue(row, ['Onboarding', 'ONBOARDING', 'onboarding', 'Onboarding Date', 'DOJ', 'Date of Joining'])),
           offerRemarks: String(findRowValue(row, ['Offer Remarks', 'OFFER REMARKS', 'Remarks', 'remarks', 'Notes']) || '').trim(),
         })).filter(r => r.candidateName);
 
@@ -387,7 +512,7 @@ export function VeenaDashboard() {
       let count = 0;
       for (const item of importData) {
         try {
-          await veenaApi.createOnboarding(item);
+          await veenaApi.createRecruitment(item);
           count++;
         } catch (err) {
           console.error('Failed to create candidate in DB:', item, err);
@@ -414,10 +539,10 @@ export function VeenaDashboard() {
 
     try {
       if (editingCandidate) {
-        await veenaApi.updateOnboarding(editingCandidate.id, form);
+        await veenaApi.updateRecruitment(editingCandidate.id, form);
         alert('Candidate updated successfully in Database!');
       } else {
-        await veenaApi.createOnboarding(form);
+        await veenaApi.createRecruitment(form);
         alert('Candidate added successfully to Database!');
       }
       await loadAllData();
@@ -439,7 +564,7 @@ export function VeenaDashboard() {
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this candidate?')) return;
     try {
-      await veenaApi.deleteOnboarding(id);
+      await veenaApi.deleteRecruitment(id);
     } catch (err) {
       console.error('Delete error:', err);
     }
@@ -508,11 +633,10 @@ export function VeenaDashboard() {
               <button
                 key={i}
                 onClick={() => setActiveCardFilter(isSelected ? null : `stage:${stg.name}`)}
-                className={`p-3 rounded-2xl text-center space-y-1 transition-all cursor-pointer border ${
-                  isSelected
+                className={`p-3 rounded-2xl text-center space-y-1 transition-all cursor-pointer border ${isSelected
                     ? 'bg-orange-50 border-orange-400 ring-2 ring-orange-200 shadow-sm'
                     : 'bg-slate-50/80 border-slate-100 hover:border-orange-300'
-                }`}
+                  }`}
               >
                 <div className={`text-[10px] font-bold uppercase ${isSelected ? 'text-orange-600' : 'text-slate-500'}`}>
                   {stg.name}
@@ -543,7 +667,7 @@ export function VeenaDashboard() {
           <span>Interviews &amp; Candidates</span>
         </Link>
         <Link
-          href="/recruitment-tracker"
+          href="/onboarding"
           className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white border border-slate-200 hover:border-orange-400 text-slate-700 hover:text-orange-600 text-xs font-bold transition-all shadow-2xs whitespace-nowrap cursor-pointer"
         >
           <Target className="w-4 h-4 text-indigo-500" />
@@ -570,9 +694,8 @@ export function VeenaDashboard() {
         {/* 1. TOTAL CANDIDATES (Recruitment) */}
         <button
           onClick={() => setActiveCardFilter(activeCardFilter === 'all' ? null : 'all')}
-          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
-            activeCardFilter === 'all' ? 'bg-orange-50 border-orange-400 ring-2 ring-orange-200' : 'bg-white border-slate-200 hover:border-orange-300'
-          }`}
+          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${activeCardFilter === 'all' ? 'bg-orange-50 border-orange-400 ring-2 ring-orange-200' : 'bg-white border-slate-200 hover:border-orange-300'
+            }`}
         >
           <div>
             <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">TOTAL RECRUITMENT</div>
@@ -586,37 +709,35 @@ export function VeenaDashboard() {
           </div>
         </button>
 
-        {/* 2. INTERVIEWS */}
+        {/* 2. TOTAL REJECTED */}
         <button
-          onClick={() => setActiveCardFilter(activeCardFilter === 'status:Interview' ? null : 'status:Interview')}
-          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
-            activeCardFilter === 'status:Interview' ? 'bg-blue-50 border-blue-400 ring-2 ring-blue-200' : 'bg-white border-blue-200 hover:border-blue-400'
-          }`}
+          onClick={() => setActiveCardFilter(activeCardFilter === 'status:Rejected' ? null : 'status:Rejected')}
+          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${activeCardFilter === 'status:Rejected' ? 'bg-red-50 border-red-400 ring-2 ring-red-200' : 'bg-white border-slate-200 hover:border-red-300'
+            }`}
         >
           <div>
-            <div className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">INTERVIEWS</div>
-            <div className="text-3xl font-black text-blue-600 mt-1">{interviewCount}</div>
-            <div className="text-[10px] font-bold text-blue-700 mt-1">
-              Scheduled &amp; Cleared
+            <div className="text-[11px] font-bold text-red-600 uppercase tracking-wider">TOTAL REJECTED</div>
+            <div className="text-3xl font-black text-red-600 mt-1">{rejectedCount}</div>
+            <div className="text-[10px] font-bold text-red-700 mt-1">
+              Not Selected / Rejected
             </div>
           </div>
-          <div className="w-12 h-12 rounded-2xl bg-blue-50 border border-blue-200 flex items-center justify-center text-blue-600">
-            <TrendingUp className="w-6 h-6" />
+          <div className="w-12 h-12 rounded-2xl bg-red-50 border border-red-200 flex items-center justify-center text-red-600">
+            <UserX className="w-6 h-6" />
           </div>
         </button>
 
         {/* 3. OFFERS RELEASED */}
         <button
           onClick={() => setActiveCardFilter(activeCardFilter === 'status:Offers' ? null : 'status:Offers')}
-          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
-            activeCardFilter === 'status:Offers' ? 'bg-indigo-50 border-indigo-400 ring-2 ring-indigo-200' : 'bg-white border-indigo-200 hover:border-indigo-400'
-          }`}
+          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${activeCardFilter === 'status:Offers' ? 'bg-indigo-50 border-indigo-400 ring-2 ring-indigo-200' : 'bg-white border-indigo-200 hover:border-indigo-400'
+            }`}
         >
           <div>
             <div className="text-[11px] font-bold text-indigo-600 uppercase tracking-wider">OFFERS RELEASED</div>
             <div className="text-3xl font-black text-indigo-600 mt-1">{offerCount}</div>
             <div className="text-[10px] font-bold text-indigo-700 mt-1">
-              Selected &amp; Offered
+              Offer Stage Candidates
             </div>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-indigo-50 border border-indigo-200 flex items-center justify-center text-indigo-600">
@@ -624,18 +745,17 @@ export function VeenaDashboard() {
           </div>
         </button>
 
-        {/* 4. JOINED & ONBOARDED */}
+        {/* 4. JOINING */}
         <button
           onClick={() => setActiveCardFilter(activeCardFilter === 'status:Joined' ? null : 'status:Joined')}
-          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${
-            activeCardFilter === 'status:Joined' ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-200' : 'bg-white border-emerald-200 hover:border-emerald-400'
-          }`}
+          className={`p-5 rounded-3xl border shadow-xs flex items-center justify-between text-left transition-all cursor-pointer ${activeCardFilter === 'status:Joined' ? 'bg-emerald-50 border-emerald-400 ring-2 ring-emerald-200' : 'bg-white border-emerald-200 hover:border-emerald-400'
+            }`}
         >
           <div>
-            <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">JOINED &amp; ONBOARDED</div>
+            <div className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">JOINING</div>
             <div className="text-3xl font-black text-emerald-600 mt-1">{joinedCount}</div>
             <div className="text-[10px] font-bold text-emerald-700 mt-1">
-              {conversionRate}% Conversion Rate
+              Confirmed Joining Stage
             </div>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-emerald-600">
@@ -739,7 +859,6 @@ export function VeenaDashboard() {
           <table className="w-full text-xs text-left">
             <thead className="bg-slate-50 border-b border-slate-200 text-[10px] font-black text-slate-500 uppercase tracking-wider">
               <tr>
-                <th className="py-3.5 px-4">CANDIDATE ID</th>
                 <th className="py-3.5 px-4">EMPLOYEE NAME</th>
                 <th className="py-3.5 px-4">MOBILE NUMBER</th>
                 <th className="py-3.5 px-4">EMAIL</th>
@@ -763,20 +882,19 @@ export function VeenaDashboard() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={19} className="py-8 text-center text-slate-400 font-medium">
+                  <td colSpan={18} className="py-8 text-center text-slate-400 font-medium">
                     Loading Candidate Register...
                   </td>
                 </tr>
               ) : filteredCandidates.length === 0 ? (
                 <tr>
-                  <td colSpan={19} className="py-12 text-center text-slate-400">
+                  <td colSpan={18} className="py-12 text-center text-slate-400">
                     No candidate records found. Click "+ Add Candidate" or "Import XLSX" to add records.
                   </td>
                 </tr>
               ) : (
                 paginatedCandidates.map((c, idx) => (
                   <tr key={c.id || idx} className="hover:bg-orange-50/20 transition-colors">
-                    <td className="py-3 px-4 font-mono font-bold text-slate-700 whitespace-nowrap">{c.id || `CAN-${String(idx + 1).padStart(3, '0')}`}</td>
                     <td className="py-3 px-4 font-extrabold text-slate-900 whitespace-nowrap">{c.candidateName}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.phoneNumber || '-'}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.email || '-'}</td>
@@ -787,21 +905,19 @@ export function VeenaDashboard() {
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.recruiter || '-'}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{formatExcelDate(c.applicationDate)}</td>
                     <td className="py-3 px-4 whitespace-nowrap">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        c.currentStage === 'Joined' || c.currentStage === 'Completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                        c.currentStage === 'Dropout' ? 'bg-red-50 text-red-700 border border-red-200' :
-                        'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${c.currentStage === 'Joined' || c.currentStage === 'Completed' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                          c.currentStage === 'Dropout' ? 'bg-red-50 text-red-700 border border-red-200' :
+                            'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}>
                         {c.currentStage || 'Screening'}
                       </span>
                     </td>
                     <td className="py-3 px-4 whitespace-nowrap">
-                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                        c.status === 'Joined' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                        c.status === 'Rejected' || c.status === 'Dropped' ? 'bg-red-50 text-red-700 border border-red-200' :
-                        c.status === 'Active' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
-                        'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${c.status === 'Joined' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                          c.status === 'Rejected' || c.status === 'Dropped' ? 'bg-red-50 text-red-700 border border-red-200' :
+                            c.status === 'Active' ? 'bg-blue-50 text-blue-700 border border-blue-200' :
+                              'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}>
                         {c.status || 'Active'}
                       </span>
                     </td>
@@ -809,7 +925,7 @@ export function VeenaDashboard() {
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.selection || '-'}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{formatExcelDate(c.offers)}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap font-medium">{formatExcelDate(c.joining)}</td>
-                    <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.onboarding || '-'}</td>
+                    <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{formatExcelDate(c.onboarding)}</td>
                     <td className="py-3 px-4 text-slate-700 whitespace-nowrap">{c.offerRemarks || '-'}</td>
                     <td className="py-3 px-4 whitespace-nowrap">
                       <div className="flex items-center gap-1">

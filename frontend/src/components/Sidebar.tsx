@@ -98,9 +98,9 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   // Veena-specific navigation (Onboarding & Hiring)
   const veenaNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { label: 'Recruitment', href: '/onboarding', icon: UserPlus },
+    { label: 'Recruitment Tracker', href: '/recruitment-tracker', icon: UserPlus },
     { label: 'Interviews & Candidates', href: '/interviews', icon: Users },
-    { label: 'Onboarding', href: '/recruitment-tracker', icon: Target },
+    { label: 'Onboarding Pipeline', href: '/onboarding', icon: Target },
     { label: 'Dropout Tracker', href: '/dropouts', icon: UserX },
     { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
   ];

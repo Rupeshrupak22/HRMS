@@ -1,39 +1,31 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import {
-  UserCheck,
+  UserPlus,
   Search,
   Eye,
   Pencil,
   Trash2,
   X,
-  Users,
-  ClipboardCheck,
-  TrendingUp,
-  Award,
-  Phone,
-  Mail,
-  MapPin,
-  GraduationCap,
-  Briefcase,
-  ChevronRight,
-  ArrowUpRight,
-  RefreshCw,
+  RotateCw,
   Upload,
   Download,
   Plus,
   SlidersHorizontal,
+  FileSpreadsheet,
+  CheckCircle2,
 } from 'lucide-react';
-import { apiRequest } from '@/lib/api';
+import * as XLSX from 'xlsx';
+import { veenaApi } from '@/lib/veena-api';
 import { Pagination } from '@/components/Pagination';
 
 interface RecruitmentEntry {
   id: string;
-  employeeName: string;
-  mobileNumber: string;
+  candidateName: string;
+  phoneNumber: string;
   email: string;
-  collegeUniversity: string;
+  college: string;
   location: string;
   source: string;
   roleApplied: string;
@@ -46,13 +38,107 @@ interface RecruitmentEntry {
   offers: string;
   joining: string;
   onboarding: string;
-  remarks: string;
+  offerRemarks: string;
 }
 
-const SOURCE_OPTIONS = ['College', 'LinkedIn', 'Naukri', 'Referral', 'Job Portal', 'Walk-in', 'Other'];
+const SOURCE_OPTIONS = ['College', 'LinkedIn', 'Naukri', 'Referral', 'Job Portal', 'Walk-in', 'Direct', 'Other'];
 const STAGE_OPTIONS = ['Application', 'Screening', 'Interview', 'Selection', 'Offer', 'Joining', 'Onboarding', 'Completed'];
-const STATUS_OPTIONS = ['Pending', 'In Progress', 'Selected', 'Rejected', 'On Hold', 'Joined', 'Dropped'];
+const STATUS_OPTIONS = ['Pending', 'In Progress', 'Selected', 'Rejected', 'On Hold', 'Joined', 'Dropped', 'Active'];
 const ROLE_OPTIONS = ['Sales', 'HR', 'Operational Team', 'Tech', 'Team Leader', 'Academic', 'Marketing', 'Finance'];
+
+function formatExcelDate(val: any): string {
+  if (val === null || val === undefined || val === '' || val === '-') return '-';
+
+  if (val instanceof Date) {
+    if (isNaN(val.getTime())) return '-';
+    const d = String(val.getUTCDate()).padStart(2, '0');
+    const m = String(val.getUTCMonth() + 1).padStart(2, '0');
+    const y = val.getUTCFullYear();
+    return `${d}-${m}-${y}`;
+  }
+
+  if (typeof val === 'number') {
+    const utcDays = val - 25569;
+    const utcMs = Math.round(utcDays * 86400 * 1000);
+    const date = new Date(utcMs + 60 * 60 * 1000);
+    if (!isNaN(date.getTime())) {
+      const d = String(date.getUTCDate()).padStart(2, '0');
+      const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const y = date.getUTCFullYear();
+      return `${d}-${m}-${y}`;
+    }
+  }
+
+  const str = String(val).trim();
+  if (!str || str === '-') return '-';
+
+  const lower = str.toLowerCase();
+  if (['sent', 'not selected', 'selected', 'yes', 'no', 'done', 'pending', 'active', 'rejected', 'dropped', 'none', 'n/a', 'na'].includes(lower)) {
+    return str;
+  }
+
+  const ddmmyyyy = str.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2,4})/);
+  if (ddmmyyyy) {
+    const d = ddmmyyyy[1].padStart(2, '0');
+    const m = ddmmyyyy[2].padStart(2, '0');
+    let y = ddmmyyyy[3];
+    if (y.length === 2) y = '20' + y;
+    return `${d}-${m}-${y}`;
+  }
+
+  const yyyymmdd = str.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})/);
+  if (yyyymmdd) {
+    const y = yyyymmdd[1];
+    const m = yyyymmdd[2].padStart(2, '0');
+    const d = yyyymmdd[3].padStart(2, '0');
+    return `${d}-${m}-${y}`;
+  }
+
+  const monthNameMatch = str.match(/^(\d{1,2})[-\s/](Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[-\s/](\d{2,4})/i) || str.match(/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{1,2})[,\s]+(\d{2,4})/i);
+  if (monthNameMatch) {
+    const months: Record<string, string> = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
+    let d = '01';
+    let m = '01';
+    let y = '2026';
+    if (isNaN(Number(monthNameMatch[1]))) {
+      m = months[monthNameMatch[1].toLowerCase().slice(0, 3)] || '01';
+      d = String(monthNameMatch[2]).padStart(2, '0');
+      y = monthNameMatch[3];
+    } else {
+      d = String(monthNameMatch[1]).padStart(2, '0');
+      m = months[monthNameMatch[2].toLowerCase().slice(0, 3)] || '01';
+      y = monthNameMatch[3];
+    }
+    if (y.length === 2) y = '20' + y;
+    return `${d}-${m}-${y}`;
+  }
+
+  if (str.includes('GMT') || str.includes('India Standard Time') || str.includes('IST') || str.includes('T')) {
+    const parsed = new Date(str);
+    if (!isNaN(parsed.getTime())) {
+      const d = String(parsed.getUTCDate()).padStart(2, '0');
+      const m = String(parsed.getUTCMonth() + 1).padStart(2, '0');
+      const y = parsed.getUTCFullYear();
+      return `${d}-${m}-${y}`;
+    }
+  }
+
+  return str;
+}
+
+function findRowValue(row: Record<string, any>, aliases: string[]): any {
+  const keys = Object.keys(row);
+  for (const alias of aliases) {
+    const cleanAlias = alias.toLowerCase().replace(/[^a-z0-9]/g, '');
+    for (const k of keys) {
+      const cleanKey = k.toLowerCase().replace(/[^a-z0-9]/g, '');
+      if (cleanKey === cleanAlias) {
+        return row[k];
+      }
+    }
+  }
+  return undefined;
+}
 
 export default function RecruitmentTrackerPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -64,90 +150,162 @@ export default function RecruitmentTrackerPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewingEntry, setViewingEntry] = useState<RecruitmentEntry | null>(null);
   const [entries, setEntries] = useState<RecruitmentEntry[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const loadEntries = async () => {
-    try {
-      const data = await apiRequest('/veena/recruitment');
-      setEntries(Array.isArray(data) ? data : []);
-    } catch { setEntries([]); }
-  };
-
-  useEffect(() => { loadEntries(); }, []);
-
-  const emptyForm = {
-    employeeName: '', mobileNumber: '', email: '', collegeUniversity: '',
-    location: '', source: '', roleApplied: '', recruiter: '', applicationDate: '',
-    currentStage: 'Application', status: 'Pending', interviews: '', selection: '',
-    offers: '', joining: '', onboarding: '', remarks: '',
-  };
-  const [formData, setFormData] = useState(emptyForm);
-
-  const filteredEntries = entries.filter((e) => {
-    const matchesSearch =
-      e.employeeName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.mobileNumber.includes(searchTerm) ||
-      e.recruiter.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesRole = !filterRole || e.roleApplied === filterRole;
-    const matchesStage = !filterStage || e.currentStage === filterStage;
-    const matchesStatus = !filterStatus || e.status === filterStatus;
-    return matchesSearch && matchesRole && matchesStage && matchesStatus;
-  });
+  // Import XLSX Modal State
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importData, setImportData] = useState<any[]>([]);
+  const [importing, setImporting] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
+
+  const emptyForm: Omit<RecruitmentEntry, 'id'> = {
+    candidateName: '',
+    phoneNumber: '',
+    email: '',
+    college: '',
+    location: '',
+    source: 'LinkedIn',
+    roleApplied: 'Sales',
+    recruiter: 'Abbu Veena',
+    applicationDate: new Date().toISOString().split('T')[0],
+    currentStage: 'Application',
+    status: 'Pending',
+    interviews: '',
+    selection: '',
+    offers: '',
+    joining: '',
+    onboarding: '',
+    offerRemarks: '',
+  };
+  const [formData, setFormData] = useState(emptyForm);
+
+  const loadEntries = async () => {
+    setLoading(true);
+    try {
+      const data = await veenaApi.getRecruitment();
+      if (Array.isArray(data)) {
+        setEntries(
+          data.map((c: any) => ({
+            id: c.id,
+            candidateName: c.candidateName || c.employeeName || '',
+            phoneNumber: c.phoneNumber || c.mobileNumber || '',
+            email: c.email || '',
+            college: c.college || c.collegeUniversity || '',
+            location: c.location || '',
+            source: c.source || 'LinkedIn',
+            roleApplied: c.roleApplied || 'Sales',
+            recruiter: c.recruiter || 'Abbu Veena',
+            applicationDate: c.applicationDate || '',
+            currentStage: c.currentStage || 'Application',
+            status: c.status || 'Active',
+            interviews: c.interviews || '',
+            selection: c.selection || '',
+            offers: c.offers || '',
+            joining: c.joining || '',
+            onboarding: c.onboarding || '',
+            offerRemarks: c.offerRemarks || c.remarks || '',
+          }))
+        );
+      } else {
+        setEntries([]);
+      }
+    } catch {
+      setEntries([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadEntries();
+  }, []);
+
+  const filteredEntries = useMemo(() => {
+    return entries.filter((e) => {
+      const q = searchTerm.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        e.candidateName.toLowerCase().includes(q) ||
+        e.email.toLowerCase().includes(q) ||
+        e.phoneNumber.includes(q) ||
+        e.college.toLowerCase().includes(q) ||
+        e.location.toLowerCase().includes(q) ||
+        e.recruiter.toLowerCase().includes(q);
+
+      const matchesRole = !filterRole || e.roleApplied === filterRole;
+      const matchesStage = !filterStage || e.currentStage.toLowerCase() === filterStage.toLowerCase();
+      const matchesStatus = !filterStatus || e.status.toLowerCase() === filterStatus.toLowerCase();
+      return matchesSearch && matchesRole && matchesStage && matchesStatus;
+    });
+  }, [entries, searchTerm, filterRole, filterStage, filterStatus]);
 
   useEffect(() => {
     setPage(1);
   }, [searchTerm, filterRole, filterStage, filterStatus]);
 
-  const paginatedEntries = React.useMemo(() => {
+  const paginatedEntries = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
     return filteredEntries.slice(start, start + PAGE_SIZE);
   }, [filteredEntries, page]);
 
-  const handleInputChange = (ev: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
-    setFormData((prev) => ({ ...prev, [ev.target.name]: ev.target.value }));
-  };
-
   const handleSubmit = async (ev: React.FormEvent) => {
     ev.preventDefault();
+    if (!formData.candidateName.trim()) {
+      alert('Please enter Candidate Name');
+      return;
+    }
     try {
       if (editingId) {
-        await apiRequest(`/veena/recruitment/${editingId}`, { method: 'PUT', body: JSON.stringify(formData) });
+        await veenaApi.updateRecruitment(editingId, formData);
+        alert('Recruitment candidate updated successfully!');
       } else {
-        await apiRequest('/veena/recruitment', { method: 'POST', body: JSON.stringify(formData) });
+        await veenaApi.createRecruitment(formData);
+        alert('Recruitment candidate added successfully!');
       }
-    } catch {
-      if (editingId) {
-        setEntries((prev) => prev.map((e) => e.id === editingId ? { ...e, ...formData } : e));
-      } else {
-        setEntries((prev) => [{ id: `REC-${Date.now()}`, ...formData }, ...prev]);
-      }
+      setShowForm(false);
+      setEditingId(null);
+      setFormData(emptyForm);
+      loadEntries();
+    } catch (err: any) {
+      alert('Error saving record: ' + (err?.message || 'Failed'));
     }
-    setEditingId(null);
-    setFormData(emptyForm);
-    setShowForm(false);
-    loadEntries();
   };
 
   const handleEdit = (entry: RecruitmentEntry) => {
     setEditingId(entry.id);
     setFormData({
-      employeeName: entry.employeeName, mobileNumber: entry.mobileNumber, email: entry.email,
-      collegeUniversity: entry.collegeUniversity, location: entry.location, source: entry.source,
-      roleApplied: entry.roleApplied, recruiter: entry.recruiter, applicationDate: entry.applicationDate,
-      currentStage: entry.currentStage, status: entry.status, interviews: entry.interviews,
-      selection: entry.selection, offers: entry.offers, joining: entry.joining,
-      onboarding: entry.onboarding, remarks: entry.remarks,
+      candidateName: entry.candidateName,
+      phoneNumber: entry.phoneNumber,
+      email: entry.email,
+      college: entry.college,
+      location: entry.location,
+      source: entry.source,
+      roleApplied: entry.roleApplied,
+      recruiter: entry.recruiter,
+      applicationDate: entry.applicationDate,
+      currentStage: entry.currentStage,
+      status: entry.status,
+      interviews: entry.interviews,
+      selection: entry.selection,
+      offers: entry.offers,
+      joining: entry.joining,
+      onboarding: entry.onboarding,
+      offerRemarks: entry.offerRemarks,
     });
     setShowForm(true);
   };
 
   const handleDelete = async (id: string) => {
-    if (window.confirm('Are you sure you want to delete this record?')) {
-      try { await apiRequest(`/veena/recruitment/${id}`, { method: 'DELETE' }); } catch {}
-      setEntries((prev) => prev.filter((e) => e.id !== id));
+    if (window.confirm('Are you sure you want to delete this recruitment record?')) {
+      try {
+        await veenaApi.deleteRecruitment(id);
+        loadEntries();
+      } catch (err: any) {
+        alert('Failed to delete: ' + (err?.message || 'Error'));
+      }
     }
   };
 
@@ -157,207 +315,264 @@ export default function RecruitmentTrackerPage() {
     setShowForm(true);
   };
 
+  // Download template with exact requested headers
+  const handleDownloadTemplate = () => {
+    const templateData = [
+      {
+        'Candidate Name': 'Rahul Sharma',
+        'Phone': '9876543210',
+        'Email': 'rahul.sharma@example.com',
+        'College': 'IIT Delhi',
+        'Location': 'Bangalore',
+        'Source': 'LinkedIn',
+        'Role Applied': 'Sales',
+        'Recruiter': 'Abbu Veena',
+        'App Date': '12-08-2026',
+        'Stage': 'Application',
+        'Status': 'Pending',
+        'Interviews': 'Round 1 Scheduled',
+        'Selection': 'Pending',
+        'Offers': '-',
+        'Joining': '-',
+        'Onboarding': '-',
+        'Offer Remarks': 'Candidate profile screened',
+      },
+      {
+        'Candidate Name': 'Pooja Verma',
+        'Phone': '9811223344',
+        'Email': 'pooja.verma@example.com',
+        'College': 'Delhi University',
+        'Location': 'Delhi',
+        'Source': 'Naukri',
+        'Role Applied': 'HR',
+        'Recruiter': 'Abbu Veena',
+        'App Date': '14-08-2026',
+        'Stage': 'Interview',
+        'Status': 'Selected',
+        'Interviews': 'Cleared Final Round',
+        'Selection': 'Selected',
+        'Offers': '20-08-2026',
+        'Joining': '01-09-2026',
+        'Onboarding': 'Pending BGV',
+        'Offer Remarks': 'Accepted offer letter',
+      },
+    ];
+    const ws = XLSX.utils.json_to_sheet(templateData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Recruitment Pipeline');
+    XLSX.writeFile(wb, 'Recruitment_Tracker_Template.xlsx');
+  };
+
+  // File Upload with exact alias matching for Candidate Name, Phone, Email, College, Location, Source, Role Applied, Recruiter, App Date, Stage, Status, Interviews, Selection, Offers, Joining, Onboarding, Offer Remarks
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = new Uint8Array(evt.target?.result as ArrayBuffer);
+        const wb = XLSX.read(data, { type: 'array', cellDates: true });
+        const wsName = wb.SheetNames[0];
+        const ws = wb.Sheets[wsName];
+        const jsonData: any[] = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (!jsonData || jsonData.length === 0) {
+          alert('File is empty or has no rows.');
+          return;
+        }
+
+        const formatted = jsonData
+          .map((row) => ({
+            candidateName: String(
+              findRowValue(row, ['Candidate Name', 'CandidateName', 'candidate_name', 'Employee Name', 'Name', 'Applicant Name']) || ''
+            ).trim(),
+            phoneNumber: String(
+              findRowValue(row, ['Phone', 'Mobile Number', 'Phone Number', 'phone', 'Mobile', 'Contact']) || ''
+            ).trim(),
+            email: String(findRowValue(row, ['Email', 'EMAIL', 'email', 'Email Address']) || '').trim(),
+            college: String(
+              findRowValue(row, ['College', 'College/University', 'COLLEGE', 'college', 'University']) || ''
+            ).trim(),
+            location: String(findRowValue(row, ['Location', 'LOCATION', 'location', 'City']) || '').trim(),
+            source: String(findRowValue(row, ['Source', 'SOURCE', 'source']) || 'Direct').trim(),
+            roleApplied: String(findRowValue(row, ['Role Applied', 'Role', 'role', 'Position', 'Designation']) || 'Sales').trim(),
+            recruiter: String(findRowValue(row, ['Recruiter', 'RECRUITER', 'recruiter']) || 'Abbu Veena').trim(),
+            applicationDate: formatExcelDate(
+              findRowValue(row, ['App Date', 'Application Date', 'AppDate', 'Date', 'date', 'Applied Date'])
+            ),
+            currentStage: String(findRowValue(row, ['Stage', 'Current Stage', 'stage', 'current_stage']) || 'Application').trim(),
+            status: String(findRowValue(row, ['Status', 'STATUS', 'status']) || 'Pending').trim(),
+            interviews: String(findRowValue(row, ['Interviews', 'INTERVIEWS', 'interviews', 'Interview']) || '').trim(),
+            selection: String(findRowValue(row, ['Selection', 'SELECTION', 'selection']) || '').trim(),
+            offers: formatExcelDate(findRowValue(row, ['Offers', 'OFFERS', 'offers', 'Offer Date'])),
+            joining: formatExcelDate(findRowValue(row, ['Joining', 'JOINING', 'joining', 'Joining Date', 'DOJ'])),
+            onboarding: formatExcelDate(findRowValue(row, ['Onboarding', 'ONBOARDING', 'onboarding', 'Onboarding Date'])),
+            offerRemarks: String(
+              findRowValue(row, ['Offer Remarks', 'Remarks', 'OfferRemarks', 'remarks', 'Notes', 'Comment']) || ''
+            ).trim(),
+          }))
+          .filter((r) => r.candidateName);
+
+        if (formatted.length === 0) {
+          alert('No valid candidate records found in file. Please ensure Candidate Name column exists.');
+          return;
+        }
+
+        setImportData(formatted);
+        setShowImportModal(true);
+      } catch {
+        alert('Failed to parse file. Please upload a valid .xlsx or .csv file.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const handleConfirmImport = async () => {
+    setImporting(true);
+    try {
+      let count = 0;
+      for (const item of importData) {
+        try {
+          await veenaApi.createRecruitment(item);
+          count++;
+        } catch (err) {
+          console.error('Failed to import recruitment candidate:', err);
+        }
+      }
+      loadEntries();
+      setShowImportModal(false);
+      setImportData([]);
+      alert(`Successfully saved ${count} recruitment candidate(s) to Database!`);
+    } catch {
+      loadEntries();
+      alert('Import process completed.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // Export with exact requested headers
   const exportCSV = () => {
-    const headers = ['ID', 'Employee Name', 'Mobile Number', 'Email', 'College/University', 'Location', 'Source', 'Role Applied', 'Recruiter', 'Application Date', 'Current Stage', 'Status', 'Interviews', 'Selection', 'Offers', 'Joining', 'Onboarding', 'Remarks'];
-    const rows = filteredEntries.map((e) => [e.id, e.employeeName, e.mobileNumber, e.email, e.collegeUniversity, e.location, e.source, e.roleApplied, e.recruiter, e.applicationDate, e.currentStage, e.status, e.interviews, e.selection, e.offers, e.joining, e.onboarding, e.remarks]);
+    const headers = [
+      'Candidate Name',
+      'Phone',
+      'Email',
+      'College',
+      'Location',
+      'Source',
+      'Role Applied',
+      'Recruiter',
+      'App Date',
+      'Stage',
+      'Status',
+      'Interviews',
+      'Selection',
+      'Offers',
+      'Joining',
+      'Onboarding',
+      'Offer Remarks',
+    ];
+    const rows = filteredEntries.map((e) => [
+      e.candidateName,
+      e.phoneNumber,
+      e.email,
+      e.college,
+      e.location,
+      e.source,
+      e.roleApplied,
+      e.recruiter,
+      e.applicationDate,
+      e.currentStage,
+      e.status,
+      e.interviews,
+      e.selection,
+      e.offers,
+      e.joining,
+      e.onboarding,
+      e.offerRemarks,
+    ]);
     const csv = [headers, ...rows].map((r) => r.map((c) => `"${c}"`).join(',')).join('\n');
     const blob = new Blob([csv], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `recruitment-onboarding-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.download = `recruitment-candidates-${new Date().toISOString().slice(0, 10)}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleImportCSV = (text: string) => {
-    const lines = text.split('\n').filter(Boolean);
-    if (lines.length < 2) return;
-    const newEntries = lines.slice(1).map((line, i) => {
-      const cols = line.split(',').map((c) => c.replace(/"/g, '').trim());
-      return {
-        id: `REC-${String(entries.length + i + 1).padStart(3, '0')}`,
-        employeeName: cols[1] || '', mobileNumber: cols[2] || '', email: cols[3] || '',
-        collegeUniversity: cols[4] || '', location: cols[5] || '', source: cols[6] || '',
-        roleApplied: cols[7] || '', recruiter: cols[8] || '', applicationDate: cols[9] || '',
-        currentStage: cols[10] || 'Application', status: cols[11] || 'Pending',
-        interviews: cols[12] || '', selection: cols[13] || '', offers: cols[14] || '',
-        joining: cols[15] || '', onboarding: cols[16] || '', remarks: cols[17] || '',
-      };
-    });
-    const updated = [...newEntries, ...entries];
-    setEntries(updated);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('adyapan_recruitment_candidates', JSON.stringify(updated));
-    }
-  };
-
-  const fileInputRef = React.useRef<HTMLInputElement>(null);
-
-  // Stats
-  const joinedCount = entries.filter((e) => e.status === 'Joined').length;
-  const inProgressCount = entries.filter((e) => e.status === 'In Progress').length;
-  const selectedCount = entries.filter((e) => e.status === 'Selected').length;
-
-
   const getStageColor = (stage: string) => {
-    const colors: Record<string, string> = {
-      'Application': 'bg-slate-100 text-slate-700 border-slate-200',
-      'Screening': 'bg-purple-50 text-purple-700 border-purple-200',
-      'Interview': 'bg-blue-50 text-blue-700 border-blue-200',
-      'Selection': 'bg-indigo-50 text-indigo-700 border-indigo-200',
-      'Offer': 'bg-amber-50 text-amber-700 border-amber-200',
-      'Joining': 'bg-teal-50 text-teal-700 border-teal-200',
-      'Onboarding': 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      'Completed': 'bg-green-50 text-green-700 border-green-200',
-    };
-    return colors[stage] || 'bg-slate-50 text-slate-600 border-slate-200';
+    const s = (stage || '').toLowerCase();
+    if (s === 'application') return 'bg-slate-100 text-slate-700 border-slate-200';
+    if (s === 'screening') return 'bg-purple-50 text-purple-700 border-purple-200';
+    if (s === 'interview') return 'bg-blue-50 text-blue-700 border-blue-200';
+    if (s === 'selection') return 'bg-indigo-50 text-indigo-700 border-indigo-200';
+    if (s === 'offer') return 'bg-amber-50 text-amber-700 border-amber-200';
+    if (s === 'joining') return 'bg-teal-50 text-teal-700 border-teal-200';
+    if (s === 'onboarding') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (s === 'completed') return 'bg-green-50 text-green-700 border-green-200';
+    return 'bg-slate-50 text-slate-600 border-slate-200';
   };
 
   const getStatusColor = (status: string) => {
-    const colors: Record<string, string> = {
-      'Pending': 'bg-yellow-50 text-yellow-700 border-yellow-200',
-      'In Progress': 'bg-blue-50 text-blue-700 border-blue-200',
-      'Selected': 'bg-emerald-50 text-emerald-700 border-emerald-200',
-      'Rejected': 'bg-red-50 text-red-700 border-red-200',
-      'On Hold': 'bg-orange-50 text-orange-700 border-orange-200',
-      'Joined': 'bg-green-50 text-green-800 border-green-300',
-      'Dropped': 'bg-rose-50 text-rose-700 border-rose-200',
-    };
-    return colors[status] || 'bg-slate-50 text-slate-600 border-slate-200';
+    const s = (status || '').toLowerCase();
+    if (s === 'pending') return 'bg-yellow-50 text-yellow-700 border-yellow-200';
+    if (s === 'in progress') return 'bg-blue-50 text-blue-700 border-blue-200';
+    if (s === 'selected') return 'bg-emerald-50 text-emerald-700 border-emerald-200';
+    if (s === 'rejected') return 'bg-red-50 text-red-700 border-red-200';
+    if (s === 'on hold') return 'bg-orange-50 text-orange-700 border-orange-200';
+    if (s === 'joined') return 'bg-green-50 text-green-800 border-green-300';
+    if (s === 'dropped') return 'bg-rose-50 text-rose-700 border-rose-200';
+    return 'bg-slate-50 text-slate-700 border-slate-200';
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-[1600px] mx-auto min-h-screen p-4 sm:p-6">
       {/* Hero Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-orange-500 via-orange-600 to-amber-600 p-6 text-white shadow-lg shadow-orange-500/20">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -translate-y-32 translate-x-32" />
-        <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/5 rounded-full translate-y-20 -translate-x-20" />
-        <div className="relative z-10">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-              <UserCheck className="w-5 h-5" />
+      <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-orange-500 via-orange-600 to-amber-600 p-6 text-white shadow-xl shadow-orange-500/20">
+        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -translate-y-32 translate-x-32 blur-2xl" />
+        <div className="absolute bottom-0 left-0 w-40 h-40 bg-white/10 rounded-full translate-y-20 -translate-x-20 blur-xl" />
+        <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shadow-inner">
+              <UserPlus className="w-6 h-6 text-white" />
             </div>
             <div>
-              <h1 className="text-xl font-black tracking-tight">Onboarding Pipeline</h1>
-              <p className="text-[11px] text-orange-100 font-medium">
-                End-to-end onboarding pipeline — candidate stages from selection to joined
+              <h1 className="text-xl sm:text-2xl font-black tracking-tight">Recruitment Tracker</h1>
+              <p className="text-xs text-orange-100 font-medium mt-0.5">
+                End-to-end recruitment pipeline — candidate stages from application to offer &amp; joining
               </p>
             </div>
           </div>
-        </div>
-      </div>
-
-      {/* Pipeline Progress Bar */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-5 shadow-sm">
-        <h3 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Hiring Pipeline</h3>
-        <div className="flex items-center gap-1 overflow-x-auto pb-2">
-          {STAGE_OPTIONS.map((stage, idx) => {
-            const count = entries.filter((e) => e.currentStage === stage).length;
-            return (
-              <React.Fragment key={stage}>
-                <button
-                  onClick={() => { setFilterStage(filterStage === stage ? '' : stage); }}
-                  className={`flex-shrink-0 px-3 py-2 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                    filterStage === stage
-                      ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
-                      : 'bg-slate-50 text-slate-600 hover:bg-orange-50 hover:text-orange-600'
-                  }`}
-                >
-                  <div>{stage}</div>
-                  <div className={`text-lg font-black mt-0.5 ${filterStage === stage ? 'text-white' : 'text-slate-900'}`}>{count}</div>
-                </button>
-                {idx < STAGE_OPTIONS.length - 1 && (
-                  <ChevronRight className="w-3.5 h-3.5 text-slate-300 flex-shrink-0" />
-                )}
-              </React.Fragment>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Stats Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Candidates</p>
-              <p className="text-3xl font-black text-slate-900 mt-1">{entries.length}</p>
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-100 to-slate-50 flex items-center justify-center">
-              <Users className="w-5 h-5 text-slate-600" />
-            </div>
-          </div>
-          <div className="mt-2 flex items-center gap-1 text-[10px] font-medium text-slate-500">
-            <ArrowUpRight className="w-3 h-3 text-emerald-500" />
-            <span className="text-emerald-600">Active pipeline</span>
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Joined</p>
-              <p className="text-3xl font-black text-emerald-600 mt-1">{joinedCount}</p>
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-100 to-emerald-50 flex items-center justify-center">
-              <ClipboardCheck className="w-5 h-5 text-emerald-600" />
-            </div>
-          </div>
-          <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${entries.length ? (joinedCount / entries.length) * 100 : 0}%` }} />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">In Progress</p>
-              <p className="text-3xl font-black text-blue-600 mt-1">{inProgressCount}</p>
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-blue-100 to-blue-50 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5 text-blue-600" />
-            </div>
-          </div>
-          <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${entries.length ? (inProgressCount / entries.length) * 100 : 0}%` }} />
-          </div>
-        </div>
-
-        <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm hover:shadow-md transition-shadow">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Selected</p>
-              <p className="text-3xl font-black text-orange-600 mt-1">{selectedCount}</p>
-            </div>
-            <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-100 to-orange-50 flex items-center justify-center">
-              <Award className="w-5 h-5 text-orange-600" />
-            </div>
-          </div>
-          <div className="mt-2 h-1.5 bg-slate-100 rounded-full overflow-hidden">
-            <div className="h-full bg-orange-500 rounded-full transition-all" style={{ width: `${entries.length ? (selectedCount / entries.length) * 100 : 0}%` }} />
+          <div className="flex items-center gap-2">
+            <span className="px-3.5 py-1.5 rounded-xl bg-white/20 backdrop-blur-md text-xs font-bold border border-white/20">
+              Total Candidates: {entries.length}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Toolbar */}
-      <div className="bg-white rounded-2xl border border-slate-200 p-4 shadow-sm">
+      {/* Action Toolbar */}
+      <div className="bg-white rounded-3xl border border-slate-100 p-4 shadow-xs">
         <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <div className="flex items-center gap-2 flex-wrap w-full lg:w-auto">
+            <div className="relative flex-1 sm:w-72">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search candidates..."
-                className="w-64 bg-slate-50 text-xs pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:bg-white transition-colors"
+                placeholder="Search candidates by name, email, college..."
+                className="w-full bg-slate-50 text-xs pl-10 pr-3 py-2.5 rounded-2xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:bg-white transition-colors"
               />
             </div>
             <button
               onClick={() => setShowFilters(!showFilters)}
-              className={`px-3 py-2.5 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                showFilters ? 'bg-orange-500 text-white' : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
+              className={`px-3.5 py-2.5 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                showFilters
+                  ? 'bg-orange-500 text-white shadow-md shadow-orange-500/20'
+                  : 'bg-slate-50 text-slate-600 border border-slate-200 hover:bg-slate-100'
               }`}
             >
               <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -369,26 +584,52 @@ export default function RecruitmentTrackerPage() {
               )}
             </button>
           </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setEntries([...entries])} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer" title="Refresh">
-              <RefreshCw className="w-3.5 h-3.5" />
+
+          <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={loadEntries}
+              className="p-2.5 rounded-2xl bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer"
+              title="Refresh Data"
+            >
+              <RotateCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             </button>
-            <input ref={fileInputRef} type="file" accept=".csv" className="hidden" onChange={(e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              const reader = new FileReader();
-              reader.onload = (ev) => handleImportCSV(ev.target?.result as string);
-              reader.readAsText(file);
-              e.target.value = '';
-            }} />
-            <button onClick={() => fileInputRef.current?.click()} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer" title="Import CSV">
-              <Upload className="w-3.5 h-3.5" />
+
+            <button
+              onClick={handleDownloadTemplate}
+              className="px-3.5 py-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              Template
             </button>
-            <button onClick={exportCSV} className="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 hover:bg-slate-100 transition-colors cursor-pointer" title="Export CSV">
-              <Download className="w-3.5 h-3.5" />
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="px-3.5 py-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Upload className="w-3.5 h-3.5 text-orange-600" />
+              Import XLSX
             </button>
-            <button onClick={openNewForm} className="px-4 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-orange-500/20 hover:shadow-lg hover:shadow-orange-500/30 transition-all cursor-pointer">
-              <Plus className="w-3.5 h-3.5" />
+
+            <button
+              onClick={exportCSV}
+              className="px-3.5 py-2.5 rounded-2xl bg-slate-50 hover:bg-slate-100 text-slate-700 text-xs font-bold border border-slate-200 transition-all flex items-center gap-1.5 cursor-pointer"
+            >
+              <Download className="w-3.5 h-3.5 text-slate-500" />
+              Export
+            </button>
+
+            <button
+              onClick={openNewForm}
+              className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-md shadow-orange-500/20 hover:shadow-lg transition-all cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
               Add Candidate
             </button>
           </div>
@@ -397,388 +638,619 @@ export default function RecruitmentTrackerPage() {
         {/* Filter Panel */}
         {showFilters && (
           <div className="mt-3 pt-3 border-t border-slate-100 flex flex-wrap items-center gap-3">
-            <select value={filterRole} onChange={(e) => setFilterRole(e.target.value)} className="bg-slate-50 text-xs px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-orange-400 cursor-pointer">
+            <select
+              value={filterRole}
+              onChange={(e) => setFilterRole(e.target.value)}
+              className="bg-slate-50 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 cursor-pointer"
+            >
               <option value="">All Roles</option>
-              {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
+              {ROLE_OPTIONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
             </select>
-            <select value={filterStage} onChange={(e) => setFilterStage(e.target.value)} className="bg-slate-50 text-xs px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-orange-400 cursor-pointer">
+            <select
+              value={filterStage}
+              onChange={(e) => setFilterStage(e.target.value)}
+              className="bg-slate-50 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 cursor-pointer"
+            >
               <option value="">All Stages</option>
-              {STAGE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+              {STAGE_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </select>
-            <select value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} className="bg-slate-50 text-xs px-3 py-2 rounded-lg border border-slate-200 focus:outline-none focus:border-orange-400 cursor-pointer">
+            <select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              className="bg-slate-50 text-xs px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 cursor-pointer"
+            >
               <option value="">All Status</option>
-              {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
+              {STATUS_OPTIONS.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
             </select>
             {(filterRole || filterStage || filterStatus) && (
-              <button onClick={() => { setFilterRole(''); setFilterStage(''); setFilterStatus(''); }} className="text-[11px] text-orange-600 font-bold hover:underline cursor-pointer">
-                Clear All
+              <button
+                onClick={() => {
+                  setFilterRole('');
+                  setFilterStage('');
+                  setFilterStatus('');
+                }}
+                className="text-[11px] text-orange-600 font-bold hover:underline cursor-pointer"
+              >
+                Clear Filters
               </button>
             )}
           </div>
         )}
       </div>
 
-      {/* Data Table */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+      {/* Add / Edit Form Modal */}
+      {showForm && (
+        <form
+          onSubmit={handleSubmit}
+          className="bg-white p-6 rounded-3xl border border-orange-200 shadow-xl space-y-4 animate-in fade-in duration-200"
+        >
+          <div className="flex items-center justify-between border-b pb-3">
+            <h3 className="font-black text-sm text-slate-800 flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-orange-600" />
+              {editingId ? 'Edit Candidate' : 'New Candidate'}
+            </h3>
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className="text-slate-400 hover:text-slate-600 cursor-pointer"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 text-xs">
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Candidate Name *</label>
+              <input
+                type="text"
+                required
+                value={formData.candidateName}
+                onChange={(e) => setFormData({ ...formData, candidateName: e.target.value })}
+                placeholder="Full Name"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Phone</label>
+              <input
+                type="text"
+                value={formData.phoneNumber}
+                onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value })}
+                placeholder="10 digit mobile"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Email</label>
+              <input
+                type="email"
+                value={formData.email}
+                onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                placeholder="candidate@example.com"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">College</label>
+              <input
+                type="text"
+                value={formData.college}
+                onChange={(e) => setFormData({ ...formData, college: e.target.value })}
+                placeholder="University / College"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Location</label>
+              <input
+                type="text"
+                value={formData.location}
+                onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                placeholder="City, State"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Source</label>
+              <select
+                value={formData.source}
+                onChange={(e) => setFormData({ ...formData, source: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                {SOURCE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Role Applied</label>
+              <select
+                value={formData.roleApplied}
+                onChange={(e) => setFormData({ ...formData, roleApplied: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                {ROLE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Recruiter</label>
+              <input
+                type="text"
+                value={formData.recruiter}
+                onChange={(e) => setFormData({ ...formData, recruiter: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">App Date</label>
+              <input
+                type="text"
+                value={formData.applicationDate}
+                onChange={(e) => setFormData({ ...formData, applicationDate: e.target.value })}
+                placeholder="DD-MM-YYYY"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Stage</label>
+              <select
+                value={formData.currentStage}
+                onChange={(e) => setFormData({ ...formData, currentStage: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                {STAGE_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Status</label>
+              <select
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt} value={opt}>
+                    {opt}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Interviews</label>
+              <input
+                type="text"
+                value={formData.interviews}
+                onChange={(e) => setFormData({ ...formData, interviews: e.target.value })}
+                placeholder="Interview details"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Selection</label>
+              <input
+                type="text"
+                value={formData.selection}
+                onChange={(e) => setFormData({ ...formData, selection: e.target.value })}
+                placeholder="Selection status"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Offers</label>
+              <input
+                type="text"
+                value={formData.offers}
+                onChange={(e) => setFormData({ ...formData, offers: e.target.value })}
+                placeholder="Offer details"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Joining</label>
+              <input
+                type="text"
+                value={formData.joining}
+                onChange={(e) => setFormData({ ...formData, joining: e.target.value })}
+                placeholder="Joining date / status"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div>
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Onboarding</label>
+              <input
+                type="text"
+                value={formData.onboarding}
+                onChange={(e) => setFormData({ ...formData, onboarding: e.target.value })}
+                placeholder="Onboarding status"
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <div className="col-span-1 sm:col-span-2 md:col-span-4">
+              <label className="block text-[11px] font-bold text-slate-600 mb-1">Offer Remarks</label>
+              <input
+                type="text"
+                value={formData.offerRemarks}
+                onChange={(e) => setFormData({ ...formData, offerRemarks: e.target.value })}
+                placeholder="Remarks..."
+                className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2 border-t">
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold shadow-md shadow-orange-600/20 cursor-pointer"
+            >
+              {editingId ? 'Update Candidate' : 'Save Candidate'}
+            </button>
+          </div>
+        </form>
+      )}
+
+      {/* Candidate Register Table */}
+      <div className="bg-white rounded-3xl border border-slate-100 shadow-xs overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
           <div>
             <h2 className="text-sm font-bold text-slate-900">Candidate Register</h2>
-            <p className="text-[10px] text-slate-400 mt-0.5">Showing {filteredEntries.length} of {entries.length} candidates</p>
+            <p className="text-[11px] text-slate-400 mt-0.5">
+              Showing {filteredEntries.length} of {entries.length} recruitment candidates
+            </p>
           </div>
-          {(searchTerm || filterRole || filterStage || filterStatus) && (
-            <button onClick={() => { setSearchTerm(''); setFilterRole(''); setFilterStage(''); setFilterStatus(''); }} className="text-[11px] text-orange-600 font-bold hover:underline cursor-pointer">
-              Reset All Filters
-            </button>
-          )}
         </div>
+
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
+          <table className="w-full text-left text-xs border-collapse">
             <thead>
-              <tr className="bg-gradient-to-r from-slate-50 to-slate-100/50 border-b border-slate-200">
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Candidate ID</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Employee Name</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Mobile Number</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Email</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">College/University</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Location</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Source</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Role Applied</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Recruiter</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Application Date</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Current Stage</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Status</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Interviews</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Selection</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Offers</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Joining</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Onboarding</th>
-                <th className="py-3.5 px-4 whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Remarks</th>
-                <th className="py-3.5 px-4 text-center whitespace-nowrap font-extrabold text-[10px] text-slate-500 uppercase tracking-wider">Actions</th>
+              <tr className="bg-slate-50/75 border-b border-slate-100 text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">
+                <th className="py-3 px-3">#</th>
+                <th className="py-3 px-3">Candidate Name</th>
+                <th className="py-3 px-3">Phone</th>
+                <th className="py-3 px-3">Email</th>
+                <th className="py-3 px-3">College</th>
+                <th className="py-3 px-3">Location</th>
+                <th className="py-3 px-3">Source</th>
+                <th className="py-3 px-3">Role Applied</th>
+                <th className="py-3 px-3">Recruiter</th>
+                <th className="py-3 px-3">App Date</th>
+                <th className="py-3 px-3">Stage</th>
+                <th className="py-3 px-3">Status</th>
+                <th className="py-3 px-3">Interviews</th>
+                <th className="py-3 px-3">Selection</th>
+                <th className="py-3 px-3">Offers</th>
+                <th className="py-3 px-3">Joining</th>
+                <th className="py-3 px-3">Onboarding</th>
+                <th className="py-3 px-3">Offer Remarks</th>
+                <th className="py-3 px-3 text-right">Actions</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedEntries.map((entry) => (
-                <tr key={entry.id} className="hover:bg-orange-50/40 transition-all group">
-                  <td className="py-3.5 px-4 font-mono font-bold text-slate-700 whitespace-nowrap text-[11px]">{entry.id}</td>
-                  <td className="py-3.5 px-4">
-                    <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white text-[10px] font-black flex-shrink-0">
-                        {entry.employeeName.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                      </div>
-                      <div className="font-bold text-slate-900 whitespace-nowrap text-[11px]">{entry.employeeName}</div>
-                    </div>
-                  </td>
-                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap font-medium text-[11px]">{entry.mobileNumber}</td>
-                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.email}</td>
-                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.collegeUniversity}</td>
-                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.location}</td>
-                  <td className="py-3.5 px-4 whitespace-nowrap">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">{entry.source}</span>
-                  </td>
-                  <td className="py-3.5 px-4 whitespace-nowrap">
-                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700">{entry.roleApplied}</span>
-                  </td>
-                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px] font-medium">{entry.recruiter}</td>
-                  <td className="py-3.5 px-4 text-slate-600 whitespace-nowrap text-[11px]">{entry.applicationDate}</td>
-                  <td className="py-3.5 px-4 whitespace-nowrap">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                      entry.currentStage === 'Onboarding' ? 'bg-emerald-100 text-emerald-800' :
-                      entry.currentStage === 'Joining' ? 'bg-green-100 text-green-800' :
-                      entry.currentStage === 'Offer' ? 'bg-purple-100 text-purple-800' :
-                      entry.currentStage === 'Selection' ? 'bg-blue-100 text-blue-800' :
-                      entry.currentStage === 'Interview' ? 'bg-amber-100 text-amber-800' :
-                      'bg-slate-100 text-slate-700'
-                    }`}>
-                      {entry.currentStage}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 whitespace-nowrap">
-                    <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
-                      entry.status === 'Completed' || entry.status === 'Selected' ? 'bg-emerald-100 text-emerald-800' :
-                      entry.status === 'Rejected' || entry.status === 'Dropped' ? 'bg-red-100 text-red-800' :
-                      'bg-amber-100 text-amber-800'
-                    }`}>
-                      {entry.status}
-                    </span>
-                  </td>
-                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.interviews || '—'}</td>
-                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.selection || '—'}</td>
-                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.offers || '—'}</td>
-                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.joining || '—'}</td>
-                  <td className="py-3.5 px-4 text-slate-700 whitespace-nowrap text-[11px]">{entry.onboarding || '—'}</td>
-                  <td className="py-3.5 px-4 text-slate-500 whitespace-nowrap text-[11px] max-w-[150px] truncate">{entry.remarks || '—'}</td>
-                  <td className="py-3.5 px-4">
-                    <div className="flex items-center justify-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => setViewingEntry(entry)} title="View" className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 cursor-pointer transition-colors"><Eye className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => handleEdit(entry)} title="Edit" className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 cursor-pointer transition-colors"><Pencil className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => handleDelete(entry.id)} title="Delete" className="p-1.5 rounded-lg text-red-500 hover:bg-red-50 cursor-pointer transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {paginatedEntries.length === 0 && (
+              {paginatedEntries.length === 0 ? (
                 <tr>
-                  <td colSpan={18} className="py-16 text-center">
-                    <div className="text-slate-300 mb-2"><Users className="w-10 h-10 mx-auto" /></div>
-                    <p className="text-sm font-bold text-slate-400">No candidates found</p>
-                    <p className="text-[11px] text-slate-400 mt-1">Try adjusting your search or filters</p>
+                  <td colSpan={19} className="text-center py-12 text-slate-400 font-medium">
+                    No recruitment candidates found. Import an XLSX or add a new candidate.
                   </td>
                 </tr>
+              ) : (
+                paginatedEntries.map((c, index) => (
+                  <tr key={c.id} className="hover:bg-orange-50/30 transition-colors whitespace-nowrap">
+                    <td className="py-3 px-3 text-slate-400 font-mono text-[10px]">
+                      {(page - 1) * PAGE_SIZE + index + 1}
+                    </td>
+                    <td className="py-3 px-3 font-bold text-slate-900">{c.candidateName}</td>
+                    <td className="py-3 px-3 text-slate-600 font-mono text-[11px]">{c.phoneNumber || '-'}</td>
+                    <td className="py-3 px-3 text-slate-600">{c.email || '-'}</td>
+                    <td className="py-3 px-3 text-slate-600">{c.college || '-'}</td>
+                    <td className="py-3 px-3 text-slate-600">{c.location || '-'}</td>
+                    <td className="py-3 px-3">
+                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 font-semibold text-[10px]">
+                        {c.source || 'Direct'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 font-semibold text-slate-800">{c.roleApplied || '-'}</td>
+                    <td className="py-3 px-3 text-slate-600">{c.recruiter || '-'}</td>
+                    <td className="py-3 px-3 text-slate-600 font-mono text-[11px]">{c.applicationDate || '-'}</td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${getStageColor(
+                          c.currentStage
+                        )}`}
+                      >
+                        {c.currentStage || 'Application'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3">
+                      <span
+                        className={`px-2.5 py-1 rounded-full text-[10px] font-bold border ${getStatusColor(
+                          c.status
+                        )}`}
+                      >
+                        {c.status || 'Active'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-3 text-slate-600">{c.interviews || '-'}</td>
+                    <td className="py-3 px-3 text-slate-600">{c.selection || '-'}</td>
+                    <td className="py-3 px-3 text-slate-600 font-mono text-[11px]">{c.offers || '-'}</td>
+                    <td className="py-3 px-3 text-slate-600 font-mono text-[11px]">{c.joining || '-'}</td>
+                    <td className="py-3 px-3 text-slate-600">{c.onboarding || '-'}</td>
+                    <td className="py-3 px-3 text-slate-600 max-w-[150px] truncate" title={c.offerRemarks}>
+                      {c.offerRemarks || '-'}
+                    </td>
+                    <td className="py-3 px-3 text-right">
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setViewingEntry(c)}
+                          className="p-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-600 transition-colors cursor-pointer"
+                          title="View Details"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleEdit(c)}
+                          className="p-1.5 rounded-lg bg-blue-50 hover:bg-blue-100 text-blue-600 transition-colors cursor-pointer"
+                          title="Edit"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDelete(c.id)}
+                          className="p-1.5 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 transition-colors cursor-pointer"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>
         </div>
-        <Pagination
-          currentPage={page}
-          totalItems={filteredEntries.length}
-          pageSize={PAGE_SIZE}
-          onPageChange={setPage}
-        />
+
+        {/* Pagination */}
+        <div className="p-4 border-t border-slate-100">
+          <Pagination
+            currentPage={page}
+            totalItems={filteredEntries.length}
+            pageSize={PAGE_SIZE}
+            onPageChange={setPage}
+          />
+        </div>
       </div>
 
-      {/* Form Modal */}
-      {showForm && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-slate-200">
-            <div className="p-5 border-b border-slate-100 flex items-center justify-between sticky top-0 bg-white rounded-t-2xl z-10">
-              <div>
-                <h3 className="text-base font-black text-slate-900">
-                  {editingId ? 'Edit Recruitment Record' : 'Add New Candidate'}
-                </h3>
-                <p className="text-[10px] text-slate-400 mt-0.5">Fill in the candidate details below</p>
+      {/* View Details Modal */}
+      {viewingEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-xl w-full p-6 shadow-2xl space-y-4 border border-slate-100">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center font-black">
+                  {viewingEntry.candidateName.charAt(0)}
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">{viewingEntry.candidateName}</h3>
+                  <p className="text-xs text-slate-400 font-semibold">{viewingEntry.roleApplied} • {viewingEntry.source}</p>
+                </div>
               </div>
-              <button onClick={() => { setShowForm(false); setEditingId(null); }} className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-100 cursor-pointer transition-colors">
-                <X className="w-4 h-4" />
+              <button
+                onClick={() => setViewingEntry(null)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
-            <form onSubmit={handleSubmit} className="p-5 space-y-5">
-              {/* Section: Personal Info */}
-              <div>
-                <h4 className="text-[11px] font-black text-orange-600 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <Users className="w-3.5 h-3.5" /> Personal Information
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Employee Name *</label>
-                    <input type="text" name="employeeName" value={formData.employeeName} onChange={handleInputChange} required placeholder="Full name" className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Mobile Number *</label>
-                    <input type="tel" name="mobileNumber" value={formData.mobileNumber} onChange={handleInputChange} required placeholder="9876543210" className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Email *</label>
-                    <input type="email" name="email" value={formData.email} onChange={handleInputChange} required placeholder="email@example.com" className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">College/University</label>
-                    <input type="text" name="collegeUniversity" value={formData.collegeUniversity} onChange={handleInputChange} placeholder="e.g. IIT Bombay" className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Location *</label>
-                    <input type="text" name="location" value={formData.location} onChange={handleInputChange} required placeholder="e.g. Mumbai" className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Source *</label>
-                    <select name="source" value={formData.source} onChange={handleInputChange} required className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 cursor-pointer">
-                      <option value="">Select Source</option>
-                      {SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                </div>
-              </div>
 
-              {/* Section: Job Info */}
-              <div>
-                <h4 className="text-[11px] font-black text-blue-600 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <Briefcase className="w-3.5 h-3.5" /> Job Details
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Role Applied *</label>
-                    <select name="roleApplied" value={formData.roleApplied} onChange={handleInputChange} required className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 cursor-pointer">
-                      <option value="">Select Role</option>
-                      {ROLE_OPTIONS.map((r) => <option key={r} value={r}>{r}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Recruiter *</label>
-                    <input type="text" name="recruiter" value={formData.recruiter} onChange={handleInputChange} required placeholder="e.g. Veena" className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Application Date *</label>
-                    <input type="date" name="applicationDate" value={formData.applicationDate} onChange={handleInputChange} required className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Current Stage *</label>
-                    <select name="currentStage" value={formData.currentStage} onChange={handleInputChange} required className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 cursor-pointer">
-                      {STAGE_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Status *</label>
-                    <select name="status" value={formData.status} onChange={handleInputChange} required className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 cursor-pointer">
-                      {STATUS_OPTIONS.map((s) => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Interviews</label>
-                    <input type="text" name="interviews" value={formData.interviews} onChange={handleInputChange} placeholder="e.g. Cleared (2 rounds)" className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all" />
-                  </div>
-                </div>
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Phone</p>
+                <p className="font-semibold text-slate-800 mt-0.5">{viewingEntry.phoneNumber || '-'}</p>
               </div>
-
-              {/* Section: Pipeline Progress */}
-              <div>
-                <h4 className="text-[11px] font-black text-emerald-600 uppercase tracking-wider mb-3 flex items-center gap-2">
-                  <TrendingUp className="w-3.5 h-3.5" /> Pipeline Progress
-                </h4>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Selection</label>
-                    <input type="text" name="selection" value={formData.selection} onChange={handleInputChange} placeholder="e.g. Selected / Pending" className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Offers</label>
-                    <input type="text" name="offers" value={formData.offers} onChange={handleInputChange} placeholder="e.g. Sent / Accepted" className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Joining</label>
-                    <input type="text" name="joining" value={formData.joining} onChange={handleInputChange} placeholder="e.g. 2026-09-01" className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all" />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-bold text-slate-600 mb-1">Onboarding</label>
-                    <input type="text" name="onboarding" value={formData.onboarding} onChange={handleInputChange} placeholder="e.g. Completed / In Progress" className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 transition-all" />
-                  </div>
-                </div>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Email</p>
+                <p className="font-semibold text-slate-800 mt-0.5 truncate">{viewingEntry.email || '-'}</p>
               </div>
-
-              {/* Remarks */}
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 mb-1">Remarks</label>
-                <textarea name="remarks" value={formData.remarks} onChange={handleInputChange} rows={2} placeholder="Any additional notes..." className="w-full text-xs px-3 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-400/10 resize-none transition-all" />
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">College</p>
+                <p className="font-semibold text-slate-800 mt-0.5">{viewingEntry.college || '-'}</p>
               </div>
-
-              <div className="flex justify-end gap-3 pt-3 border-t border-slate-100">
-                <button type="button" onClick={() => { setShowForm(false); setEditingId(null); }} className="px-5 py-2.5 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 cursor-pointer transition-colors">
-                  Cancel
-                </button>
-                <button type="submit" className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-orange-500 to-amber-500 text-white font-bold text-xs shadow-md shadow-orange-500/20 hover:shadow-lg hover:shadow-orange-500/30 cursor-pointer transition-all">
-                  {editingId ? 'Update Record' : 'Save Candidate'}
-                </button>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Location</p>
+                <p className="font-semibold text-slate-800 mt-0.5">{viewingEntry.location || '-'}</p>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* View Modal */}
-      {viewingEntry && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto border border-slate-200">
-            {/* Header with avatar */}
-            <div className="p-5 border-b border-slate-100 bg-gradient-to-r from-orange-50 to-amber-50">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-orange-400 to-amber-500 flex items-center justify-center text-white font-black text-sm shadow-md shadow-orange-500/20">
-                    {viewingEntry.employeeName.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                  </div>
-                  <div>
-                    <h3 className="text-base font-black text-slate-900">{viewingEntry.employeeName}</h3>
-                    <p className="text-[10px] text-slate-500 font-medium">{viewingEntry.id} • {viewingEntry.roleApplied}</p>
-                  </div>
-                </div>
-                <button onClick={() => setViewingEntry(null)} className="p-2 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-white/80 cursor-pointer transition-colors">
-                  <X className="w-4 h-4" />
-                </button>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Recruiter</p>
+                <p className="font-semibold text-slate-800 mt-0.5">{viewingEntry.recruiter || '-'}</p>
               </div>
-              <div className="flex items-center gap-3 mt-3">
-                <span className={`px-2.5 py-1 border text-[10px] font-bold rounded-lg ${getStageColor(viewingEntry.currentStage)}`}>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">App Date</p>
+                <p className="font-semibold text-slate-800 mt-0.5">{viewingEntry.applicationDate || '-'}</p>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Stage</p>
+                <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getStageColor(viewingEntry.currentStage)}`}>
                   {viewingEntry.currentStage}
                 </span>
-                <span className={`px-2.5 py-1 border text-[10px] font-bold rounded-lg ${getStatusColor(viewingEntry.status)}`}>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Status</p>
+                <span className={`inline-block mt-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${getStatusColor(viewingEntry.status)}`}>
                   {viewingEntry.status}
                 </span>
               </div>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Interviews</p>
+                <p className="font-semibold text-slate-800 mt-0.5">{viewingEntry.interviews || '-'}</p>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Selection</p>
+                <p className="font-semibold text-slate-800 mt-0.5">{viewingEntry.selection || '-'}</p>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Offers</p>
+                <p className="font-semibold text-slate-800 mt-0.5">{viewingEntry.offers || '-'}</p>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Joining</p>
+                <p className="font-semibold text-slate-800 mt-0.5">{viewingEntry.joining || '-'}</p>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Onboarding</p>
+                <p className="font-semibold text-slate-800 mt-0.5">{viewingEntry.onboarding || '-'}</p>
+              </div>
+              <div className="p-3 rounded-2xl bg-slate-50">
+                <p className="text-[10px] font-bold text-slate-400 uppercase">Offer Remarks</p>
+                <p className="font-semibold text-slate-800 mt-0.5">{viewingEntry.offerRemarks || '-'}</p>
+              </div>
             </div>
 
-            <div className="p-5 space-y-4">
-              {/* Contact Info */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50">
-                  <Phone className="w-3.5 h-3.5 text-slate-400" />
-                  <div>
-                    <div className="text-[9px] text-slate-400 font-bold uppercase">Mobile</div>
-                    <div className="text-xs font-semibold text-slate-800">{viewingEntry.mobileNumber}</div>
-                  </div>
+            <div className="flex justify-end pt-2">
+              <button
+                onClick={() => setViewingEntry(null)}
+                className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* XLSX Import Confirmation Modal */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-xs p-4 animate-in fade-in">
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 shadow-2xl space-y-4 border border-slate-100 max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-orange-100 text-orange-600 flex items-center justify-center">
+                  <FileSpreadsheet className="w-5 h-5" />
                 </div>
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50">
-                  <Mail className="w-3.5 h-3.5 text-slate-400" />
-                  <div>
-                    <div className="text-[9px] text-slate-400 font-bold uppercase">Email</div>
-                    <div className="text-xs font-semibold text-slate-800">{viewingEntry.email}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50">
-                  <GraduationCap className="w-3.5 h-3.5 text-slate-400" />
-                  <div>
-                    <div className="text-[9px] text-slate-400 font-bold uppercase">College/University</div>
-                    <div className="text-xs font-semibold text-slate-800">{viewingEntry.collegeUniversity || '-'}</div>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 p-2.5 rounded-xl bg-slate-50">
-                  <MapPin className="w-3.5 h-3.5 text-slate-400" />
-                  <div>
-                    <div className="text-[9px] text-slate-400 font-bold uppercase">Location</div>
-                    <div className="text-xs font-semibold text-slate-800">{viewingEntry.location}</div>
-                  </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">Confirm Recruitment XLSX Import</h3>
+                  <p className="text-xs text-slate-400 font-semibold">
+                    {importData.length} recruitment candidate record(s) ready to import to Database
+                  </p>
                 </div>
               </div>
+              <button
+                onClick={() => setShowImportModal(false)}
+                className="text-slate-400 hover:text-slate-600 cursor-pointer p-1"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-              {/* Pipeline Details */}
-              <div className="border-t border-slate-100 pt-4">
-                <h4 className="text-[10px] font-black text-slate-500 uppercase tracking-wider mb-3">Pipeline Progress</h4>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <ViewField label="Source" value={viewingEntry.source} />
-                  <ViewField label="Recruiter" value={viewingEntry.recruiter} />
-                  <ViewField label="Application Date" value={viewingEntry.applicationDate} />
-                  <ViewField label="Interviews" value={viewingEntry.interviews} />
-                  <ViewField label="Selection" value={viewingEntry.selection} />
-                  <ViewField label="Offers" value={viewingEntry.offers} />
-                  <ViewField label="Joining" value={viewingEntry.joining} />
-                  <ViewField label="Onboarding" value={viewingEntry.onboarding} />
-                </div>
-              </div>
-
-              {/* Remarks */}
-              {viewingEntry.remarks && (
-                <div className="border-t border-slate-100 pt-4">
-                  <div className="text-[10px] text-slate-500 font-bold uppercase mb-1.5">Remarks</div>
-                  <div className="text-xs text-slate-700 bg-amber-50 border border-amber-100 p-3 rounded-xl leading-relaxed">{viewingEntry.remarks}</div>
+            <div className="overflow-y-auto flex-1 border rounded-2xl">
+              <table className="w-full text-left text-xs whitespace-nowrap">
+                <thead className="bg-slate-50 sticky top-0 border-b">
+                  <tr className="text-[10px] font-bold text-slate-500 uppercase">
+                    <th className="p-3">#</th>
+                    <th className="p-3">Candidate Name</th>
+                    <th className="p-3">Phone</th>
+                    <th className="p-3">Email</th>
+                    <th className="p-3">College</th>
+                    <th className="p-3">Location</th>
+                    <th className="p-3">Role Applied</th>
+                    <th className="p-3">Stage</th>
+                    <th className="p-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {importData.slice(0, 50).map((row, idx) => (
+                    <tr key={idx} className="hover:bg-slate-50">
+                      <td className="p-3 text-slate-400 text-[10px]">{idx + 1}</td>
+                      <td className="p-3 font-bold text-slate-900">{row.candidateName}</td>
+                      <td className="p-3 text-slate-600">{row.phoneNumber || '-'}</td>
+                      <td className="p-3 text-slate-600">{row.email || '-'}</td>
+                      <td className="p-3 text-slate-600">{row.college || '-'}</td>
+                      <td className="p-3 text-slate-600">{row.location || '-'}</td>
+                      <td className="p-3 text-slate-600">{row.roleApplied || '-'}</td>
+                      <td className="p-3">
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-slate-100 text-slate-700">
+                          {row.currentStage || 'Application'}
+                        </span>
+                      </td>
+                      <td className="p-3">
+                        <span className="px-2 py-0.5 rounded-full text-[9px] font-bold bg-emerald-50 text-emerald-700">
+                          {row.status || 'Pending'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {importData.length > 50 && (
+                <div className="p-3 bg-slate-50 text-center text-xs text-slate-500 font-medium">
+                  + {importData.length - 50} more records...
                 </div>
               )}
+            </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-100">
-                <button onClick={() => { setViewingEntry(null); handleEdit(viewingEntry); }} className="px-4 py-2 rounded-xl bg-amber-50 text-amber-700 border border-amber-200 font-bold text-[11px] hover:bg-amber-100 cursor-pointer transition-colors flex items-center gap-1.5">
-                  <Pencil className="w-3 h-3" /> Edit
+            <div className="flex items-center justify-between pt-2 border-t">
+              <span className="text-xs text-slate-500 font-semibold">
+                Will insert directly into PostgreSQL Database
+              </span>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowImportModal(false)}
+                  disabled={importing}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold cursor-pointer disabled:opacity-50"
+                >
+                  Cancel
                 </button>
-                <button onClick={() => setViewingEntry(null)} className="px-4 py-2 rounded-xl bg-slate-100 text-slate-600 font-bold text-[11px] hover:bg-slate-200 cursor-pointer transition-colors">
-                  Close
+                <button
+                  type="button"
+                  onClick={handleConfirmImport}
+                  disabled={importing}
+                  className="px-5 py-2 rounded-xl bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold shadow-md shadow-orange-600/20 cursor-pointer flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {importing ? (
+                    <>
+                      <RotateCw className="w-3.5 h-3.5 animate-spin" />
+                      Importing...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      Confirm &amp; Import ({importData.length})
+                    </>
+                  )}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
-    </div>
-  );
-}
-
-function ViewField({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="p-2 rounded-lg bg-slate-50/80">
-      <div className="text-[9px] text-slate-400 font-bold uppercase">{label}</div>
-      <div className="text-[11px] font-semibold text-slate-800 mt-0.5">{value || '-'}</div>
     </div>
   );
 }

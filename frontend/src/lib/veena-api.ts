@@ -27,6 +27,13 @@ async function request(endpoint: string, options: RequestInit = {}) {
 }
 
 export const veenaApi = {
+  // Recruitment Candidates / Hiring Pipeline
+  getRecruitment: () => request('/recruitment'),
+  createRecruitment: (data: any) => request('/recruitment', { method: 'POST', body: JSON.stringify(data) }),
+  updateRecruitment: (id: string, data: any) => request(`/recruitment/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteRecruitment: (id: string) => request(`/recruitment/${id}`, { method: 'DELETE' }),
+
+  // Pure Employee Onboarding Pipeline
   getOnboarding: () => request('/onboarding'),
   createOnboarding: (data: any) => request('/onboarding', { method: 'POST', body: JSON.stringify(data) }),
   updateOnboarding: (id: string, data: any) => request(`/onboarding/${id}`, { method: 'PUT', body: JSON.stringify(data) }),

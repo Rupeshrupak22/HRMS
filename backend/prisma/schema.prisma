@@ -778,19 +778,45 @@ model DropoutRecord {
   updatedAt       DateTime @updatedAt
 }
 
-model OnboardingTracker {
+model RecruitmentTracker {
   id              String   @id @default(uuid())
   candidateName   String
   phoneNumber     String?
   email           String?
   college         String?
   location        String?
-  source          String
-  roleApplied     String
+  source          String?
+  roleApplied     String?
   recruiter       String?
   applicationDate String?
-  currentStage    String
-  status          String
+  currentStage    String?
+  status          String?
+  interviews      String?
+  selection       String?
+  offers          String?
+  joining         String?
+  onboarding      String?
+  offerRemarks    String?
+  createdByEmail  String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model OnboardingTracker {
+  id              String   @id @default(uuid())
+  employeeId      String?
+  candidateName   String
+  phoneNumber     String?
+  email           String?
+  college         String?
+  location        String?
+  source          String?
+  roleApplied     String?
+  recruiter       String?
+  joiningDate     String?
+  applicationDate String?
+  currentStage    String?
+  status          String?
   interviews      String?
   selection       String?
   offers          String?
