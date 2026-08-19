@@ -28,9 +28,10 @@ function crud(model: any) {
     },
     create: async (req: AuthRequest, res: Response) => {
       try {
+        const { id, _id, _isPlaceholder, ...rest } = req.body;
         const dbCreated = await model.create({
           data: {
-            ...req.body,
+            ...rest,
             createdByEmail: req.user!.email,
           },
         });
@@ -43,9 +44,10 @@ function crud(model: any) {
     update: async (req: AuthRequest, res: Response) => {
       try {
         const id = String(req.params.id);
+        const { id: bodyId, _id, _isPlaceholder, createdAt, updatedAt, ...rest } = req.body;
         const updated = await model.update({
           where: { id },
-          data: req.body,
+          data: rest,
         });
         return res.json(updated);
       } catch (e: any) {
@@ -102,6 +104,8 @@ router.post('/performance/bulk', async (req: AuthRequest, res: Response) => {
             managerRemark: String(item.managerRemark || '').trim(),
             finalRemark: String(item.finalRemark || '').trim(),
             furtherActions: String(item.furtherActions || '').trim(),
+            performanceMonth: item.performanceMonth ? String(item.performanceMonth).trim() : null,
+            monthPerformance: item.monthPerformance ? String(item.monthPerformance).trim() : null,
             createdByEmail: req.user!.email,
           },
         });

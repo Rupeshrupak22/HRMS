@@ -694,6 +694,8 @@ model EmployeePerformance {
   factFinding         String?
   managerExplanation  String?
   myExplanation       String?
+  performanceMonth    String?
+  monthPerformance    String?
   createdByEmail      String?
   createdAt           DateTime @default(now())
   updatedAt           DateTime @updatedAt
