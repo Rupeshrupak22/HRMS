@@ -524,14 +524,14 @@ export default function PayrollManagementPage() {
             <table className="w-full text-left text-xs whitespace-nowrap min-w-max">
               <thead className="bg-slate-50 border-b border-slate-200">
                 <tr>
-                  <th className="px-4 py-3 font-bold text-slate-700 sticky left-0 bg-slate-50 z-10 border-r border-slate-200">
-                    Actions
-                  </th>
                   {HEADERS.map((header) => (
                     <th key={header} className="px-4 py-3 font-bold text-slate-700">
                       {header}
                     </th>
                   ))}
+                  <th className="px-4 py-3 font-bold text-slate-700 sticky right-0 bg-slate-50 z-10 border-l border-slate-200">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -548,27 +548,29 @@ export default function PayrollManagementPage() {
                 ) : (
                   filteredEntries.map((entry, rowIndex) => (
                     <tr key={entry.id || rowIndex} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-2 sticky left-0 bg-white group-hover:bg-slate-50 z-10 border-r border-slate-100 flex items-center gap-1 min-w-[90px]">
-                        <button
-                          onClick={() => openEditModal(rowIndex)}
-                          className="p-1.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer"
-                          title="Edit Entry"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setConfirmModal({ isOpen: true, type: 'DELETE', index: rowIndex })}
-                          className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
-                          title="Delete Entry"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </td>
                       {HEADERS.map((header) => (
                         <td key={header} className="px-4 py-3 text-slate-700">
                           {entry[header] || <span className="text-slate-300">-</span>}
                         </td>
                       ))}
+                      <td className="px-4 py-2 sticky right-0 bg-white z-10 border-l border-slate-100">
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => openEditModal(rowIndex)}
+                            className="p-1.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors cursor-pointer"
+                            title="Edit Entry"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setConfirmModal({ isOpen: true, type: 'DELETE', index: rowIndex })}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer"
+                            title="Delete Entry"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </td>
                     </tr>
                   ))
                 )}
