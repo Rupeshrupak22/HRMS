@@ -291,7 +291,7 @@ export default function PavitraReportPage() {
 
           return (
             <div className="rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
                 <table className="w-full text-[10px] text-center">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
