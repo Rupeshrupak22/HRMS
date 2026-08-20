@@ -114,8 +114,13 @@ async function main() {
   // USERS: Super Admin + HR Manager (Nandini) + 5 Specialists
   // ─────────────────────────────────────────────────────────────────────────
 
-  const defaultPassword = await bcrypt.hash('Adyapan@123', 10);
-  const adminPassword = await bcrypt.hash('Admin@123', 10);
+  const adminPassword = await bcrypt.hash('Admin@Ady2026!', 10);
+  const nandiniPassword = await bcrypt.hash('Nandini@Hr2026!', 10);
+  const pavitraPassword = await bcrypt.hash('Pavitra@Att2026!', 10);
+  const charithaPassword = await bcrypt.hash('Charitha@Pay2026!', 10);
+  const veenaPassword = await bcrypt.hash('Veena@Hire2026!', 10);
+  const nitishaPassword = await bcrypt.hash('Nitisha@Disc2026!', 10);
+  const aravindPassword = await bcrypt.hash('Aravind@Exit2026!', 10);
 
   const hrDept = await prisma.department.findUnique({ where: { code: 'HR' } });
   const hrDesig = await prisma.designation.findUnique({ where: { code: 'HRE' } });
@@ -124,7 +129,7 @@ async function main() {
   // 1. Super Admin
   const adminUser = await prisma.user.upsert({
     where: { email: 'admin@adyapan.com' },
-    update: { role: 'SUPER_ADMIN', isEmailVerified: true },
+    update: { role: 'SUPER_ADMIN', isEmailVerified: true, passwordHash: adminPassword },
     create: {
       email: 'admin@adyapan.com',
       passwordHash: adminPassword,
@@ -132,15 +137,15 @@ async function main() {
       isEmailVerified: true,
     },
   });
-  console.log('  ✅ Super Admin: admin@adyapan.com / Admin@123');
+  console.log('  ✅ Super Admin: admin@adyapan.com / Admin@Ady2026!');
 
   // 2. Nandini — HR Manager (HR_ADMIN, sees everything)
   const nandiniUser = await prisma.user.upsert({
     where: { email: 'nandini@adyapan.com' },
-    update: { role: 'HR_ADMIN', isEmailVerified: true },
+    update: { role: 'HR_ADMIN', isEmailVerified: true, passwordHash: nandiniPassword },
     create: {
       email: 'nandini@adyapan.com',
-      passwordHash: defaultPassword,
+      passwordHash: nandiniPassword,
       role: 'HR_ADMIN',
       isEmailVerified: true,
     },
@@ -159,15 +164,15 @@ async function main() {
       status: 'ACTIVE',
     },
   });
-  console.log('  ✅ HR Manager: nandini@adyapan.com / Adyapan@123');
+  console.log('  ✅ HR Manager: nandini@adyapan.com / Nandini@Hr2026!');
 
   // 3. Pavitra — Attendance & Leave Specialist
   const pavitraUser = await prisma.user.upsert({
     where: { email: 'pavitra@adyapan.com' },
-    update: { role: 'HR_EXECUTIVE', isEmailVerified: true },
+    update: { role: 'HR_EXECUTIVE', isEmailVerified: true, passwordHash: pavitraPassword },
     create: {
       email: 'pavitra@adyapan.com',
-      passwordHash: defaultPassword,
+      passwordHash: pavitraPassword,
       role: 'HR_EXECUTIVE',
       isEmailVerified: true,
     },
@@ -186,15 +191,15 @@ async function main() {
       status: 'ACTIVE',
     },
   });
-  console.log('  ✅ Specialist: pavitra@adyapan.com / Adyapan@123 (Attendance & Leave)');
+  console.log('  ✅ Specialist: pavitra@adyapan.com / Pavitra@Att2026! (Attendance & Leave)');
 
   // 4. Charitha — Salary & Payroll Specialist
   const charithaUser = await prisma.user.upsert({
     where: { email: 'charitha@adyapan.com' },
-    update: { role: 'HR_EXECUTIVE', isEmailVerified: true },
+    update: { role: 'HR_EXECUTIVE', isEmailVerified: true, passwordHash: charithaPassword },
     create: {
       email: 'charitha@adyapan.com',
-      passwordHash: defaultPassword,
+      passwordHash: charithaPassword,
       role: 'HR_EXECUTIVE',
       isEmailVerified: true,
     },
@@ -213,15 +218,15 @@ async function main() {
       status: 'ACTIVE',
     },
   });
-  console.log('  ✅ Specialist: charitha@adyapan.com / Adyapan@123 (Salary & Payroll)');
+  console.log('  ✅ Specialist: charitha@adyapan.com / Charitha@Pay2026! (Salary & Payroll)');
 
   // 5. Veena — Onboarding & Hiring Specialist
   const veenaUser = await prisma.user.upsert({
     where: { email: 'veena@adyapan.com' },
-    update: { role: 'HR_EXECUTIVE', isEmailVerified: true },
+    update: { role: 'HR_EXECUTIVE', isEmailVerified: true, passwordHash: veenaPassword },
     create: {
       email: 'veena@adyapan.com',
-      passwordHash: defaultPassword,
+      passwordHash: veenaPassword,
       role: 'HR_EXECUTIVE',
       isEmailVerified: true,
     },
@@ -240,15 +245,15 @@ async function main() {
       status: 'ACTIVE',
     },
   });
-  console.log('  ✅ Specialist: veena@adyapan.com / Adyapan@123 (Onboarding & Hiring)');
+  console.log('  ✅ Specialist: veena@adyapan.com / Veena@Hire2026! (Onboarding & Hiring)');
 
   // 6. Nitisha — Discipline & POSH Specialist
   const nitishaUser = await prisma.user.upsert({
     where: { email: 'nitisha@adyapan.com' },
-    update: { role: 'HR_EXECUTIVE', isEmailVerified: true },
+    update: { role: 'HR_EXECUTIVE', isEmailVerified: true, passwordHash: nitishaPassword },
     create: {
       email: 'nitisha@adyapan.com',
-      passwordHash: defaultPassword,
+      passwordHash: nitishaPassword,
       role: 'HR_EXECUTIVE',
       isEmailVerified: true,
     },
@@ -267,15 +272,15 @@ async function main() {
       status: 'ACTIVE',
     },
   });
-  console.log('  ✅ Specialist: nitisha@adyapan.com / Adyapan@123 (Discipline & POSH)');
+  console.log('  ✅ Specialist: nitisha@adyapan.com / Nitisha@Disc2026! (Discipline & POSH)');
 
   // 7. Aravind — Resignation & Exit Specialist
   const aravindUser = await prisma.user.upsert({
     where: { email: 'aravind@adyapan.com' },
-    update: { role: 'HR_EXECUTIVE', isEmailVerified: true },
+    update: { role: 'HR_EXECUTIVE', isEmailVerified: true, passwordHash: aravindPassword },
     create: {
       email: 'aravind@adyapan.com',
-      passwordHash: defaultPassword,
+      passwordHash: aravindPassword,
       role: 'HR_EXECUTIVE',
       isEmailVerified: true,
     },
@@ -294,17 +299,17 @@ async function main() {
       status: 'ACTIVE',
     },
   });
-  console.log('  ✅ Specialist: aravind@adyapan.com / Adyapan@123 (Resignation & Exit)');
+  console.log('  ✅ Specialist: aravind@adyapan.com / Aravind@Exit2026! (Resignation & Exit)');
 
   console.log('\n✅ Seed completed successfully');
   console.log('\n📋 All Logins:');
-  console.log('   Super Admin:  admin@adyapan.com / Admin@123');
-  console.log('   HR Manager:   nandini@adyapan.com / Adyapan@123');
-  console.log('   Pavitra:      pavitra@adyapan.com / Adyapan@123');
-  console.log('   Charitha:     charitha@adyapan.com / Adyapan@123');
-  console.log('   Veena:        veena@adyapan.com / Adyapan@123');
-  console.log('   Nitisha:      nitisha@adyapan.com / Adyapan@123');
-  console.log('   Aravind:      aravind@adyapan.com / Adyapan@123');
+  console.log('   Super Admin:  admin@adyapan.com / Admin@Ady2026!');
+  console.log('   HR Manager:   nandini@adyapan.com / Nandini@Hr2026!');
+  console.log('   Pavitra:      pavitra@adyapan.com / Pavitra@Att2026!');
+  console.log('   Charitha:     charitha@adyapan.com / Charitha@Pay2026!');
+  console.log('   Veena:        veena@adyapan.com / Veena@Hire2026!');
+  console.log('   Nitisha:      nitisha@adyapan.com / Nitisha@Disc2026!');
+  console.log('   Aravind:      aravind@adyapan.com / Aravind@Exit2026!');
 }
 
 main()
