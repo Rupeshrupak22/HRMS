@@ -11,7 +11,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
     const body = await request.json();
 
-    const response = await fetch(`${CRM_BACKEND_URL}/api/hrms-sync/employees/${id}`, {
+    // Try hrms-sync endpoint first, then fallback to /api/hr/employee/:id
+    let response = await fetch(`${CRM_BACKEND_URL}/api/hrms-sync/employees/${id}`, {
       method: 'PUT',
       headers: {
         'Accept': 'application/json',
@@ -20,6 +21,32 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       },
       body: JSON.stringify(body),
     });
+
+    // Fallback to CRM's main employee API if sync endpoint doesn't support PUT
+    if (response.status === 404 || response.status === 405) {
+      response = await fetch(`${CRM_BACKEND_URL}/api/hr/employee/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-HRMS-API-KEY': CRM_SYNC_API_KEY,
+        },
+        body: JSON.stringify(body),
+      });
+    }
+
+    // If still failing, try PATCH
+    if (response.status === 404 || response.status === 405) {
+      response = await fetch(`${CRM_BACKEND_URL}/api/hr/employee/${id}`, {
+        method: 'PATCH',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-HRMS-API-KEY': CRM_SYNC_API_KEY,
+        },
+        body: JSON.stringify(body),
+      });
+    }
 
     const data = await response.json().catch(() => null);
 
@@ -40,12 +67,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-// DELETE /api/crm-employees/:id — Delete employee in CRM
+// DELETE /api/crm-employees/:id — Delete/deactivate employee in CRM
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
 
-    const response = await fetch(`${CRM_BACKEND_URL}/api/hrms-sync/employees/${id}`, {
+    let response = await fetch(`${CRM_BACKEND_URL}/api/hrms-sync/employees/${id}`, {
       method: 'DELETE',
       headers: {
         'Accept': 'application/json',
@@ -53,6 +80,18 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
         'X-HRMS-API-KEY': CRM_SYNC_API_KEY,
       },
     });
+
+    // Fallback
+    if (response.status === 404 || response.status === 405) {
+      response = await fetch(`${CRM_BACKEND_URL}/api/hr/employee/${id}`, {
+        method: 'DELETE',
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+          'X-HRMS-API-KEY': CRM_SYNC_API_KEY,
+        },
+      });
+    }
 
     const data = await response.json().catch(() => null);
 
