@@ -438,6 +438,10 @@ export function EmployeeMaster() {
 
         if (!res.ok) {
           const errData = await res.json().catch(() => null);
+          // If CRM doesn't support PUT, show helpful message
+          if (res.status === 404 || res.status === 401) {
+            throw new Error('Employee update must be done on the CRM portal (adyapancrm.in). HRMS sync will reflect changes automatically.');
+          }
           throw new Error(errData?.message || `CRM update failed (${res.status})`);
         }
       } else {

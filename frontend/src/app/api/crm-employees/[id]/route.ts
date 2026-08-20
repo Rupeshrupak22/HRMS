@@ -24,7 +24,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // Fallback to CRM's main employee API if sync endpoint doesn't support PUT
     if (response.status === 404 || response.status === 405) {
-      response = await fetch(`${CRM_BACKEND_URL}/api/hr/employee/${id}`, {
+      response = await fetch(`${CRM_BACKEND_URL}/api/hr/employees/${id}`, {
         method: 'PUT',
         headers: {
           'Accept': 'application/json',
@@ -37,7 +37,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // If still failing, try PATCH
     if (response.status === 404 || response.status === 405) {
-      response = await fetch(`${CRM_BACKEND_URL}/api/hr/employee/${id}`, {
+      response = await fetch(`${CRM_BACKEND_URL}/api/hr/employees/${id}`, {
         method: 'PATCH',
         headers: {
           'Accept': 'application/json',
@@ -83,7 +83,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     // Fallback
     if (response.status === 404 || response.status === 405) {
-      response = await fetch(`${CRM_BACKEND_URL}/api/hr/employee/${id}`, {
+      response = await fetch(`${CRM_BACKEND_URL}/api/hr/employees/${id}`, {
         method: 'DELETE',
         headers: {
           'Accept': 'application/json',
