@@ -62,14 +62,22 @@ async function main() {
     { name: 'Sales', code: 'SAL', description: 'Sales & Business Development' },
     { name: 'Finance', code: 'FIN', description: 'Finance & Accounts' },
     { name: 'Operations', code: 'OPS', description: 'Operations & Admin' },
+    { name: 'IT', code: 'IT', description: 'Information Technology' },
   ];
 
   for (const dept of departments) {
-    await prisma.department.upsert({
-      where: { code: dept.code },
-      update: {},
-      create: dept,
-    });
+    try {
+      await prisma.department.upsert({
+        where: { code: dept.code },
+        update: { description: dept.description },
+        create: dept,
+      });
+    } catch (e: any) {
+      // Skip if name conflict exists
+      if (e.code === 'P2002') {
+        console.log(`  ⚠️ Department "${dept.name}" already exists, skipping`);
+      } else throw e;
+    }
   }
 
   // Create designations
@@ -82,21 +90,41 @@ async function main() {
     { title: 'HR Manager', code: 'HRM', level: 3 },
     { title: 'Marketing Executive', code: 'ME', level: 1 },
     { title: 'Sales Manager', code: 'SM', level: 3 },
+    { title: 'Staff', code: 'STF', level: 1 },
+    { title: 'Intern', code: 'INT', level: 0 },
+    { title: 'Senior Team Leader', code: 'STL', level: 3 },
+    { title: 'Trainee', code: 'TRN', level: 0 },
   ];
 
   for (const d of designations) {
-    await prisma.designation.upsert({
-      where: { code: d.code },
-      update: {},
-      create: d,
-    });
+    try {
+      await prisma.designation.upsert({
+        where: { code: d.code },
+        update: {},
+        create: d,
+      });
+    } catch (e: any) {
+      if (e.code === 'P2002') {
+        console.log(`  ⚠️ Designation "${d.title}" already exists, skipping`);
+      } else throw e;
+    }
   }
 
-  // Create super admin user
+  // ─────────────────────────────────────────────────────────────────────────
+  // USERS: Super Admin + HR Manager (Nandini) + 5 Specialists
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const defaultPassword = await bcrypt.hash('Adyapan@123', 10);
   const adminPassword = await bcrypt.hash('Admin@123', 10);
-  await prisma.user.upsert({
+
+  const hrDept = await prisma.department.findUnique({ where: { code: 'HR' } });
+  const hrDesig = await prisma.designation.findUnique({ where: { code: 'HRE' } });
+  const hrmDesig = await prisma.designation.findUnique({ where: { code: 'HRM' } });
+
+  // 1. Super Admin
+  const adminUser = await prisma.user.upsert({
     where: { email: 'admin@adyapan.com' },
-    update: {},
+    update: { role: 'SUPER_ADMIN', isEmailVerified: true },
     create: {
       email: 'admin@adyapan.com',
       passwordHash: adminPassword,
@@ -104,41 +132,179 @@ async function main() {
       isEmailVerified: true,
     },
   });
+  console.log('  ✅ Super Admin: admin@adyapan.com / Admin@123');
 
-  // Create HR Admin user with employee profile
-  const hrPassword = await bcrypt.hash('Hr@12345', 10);
-  const hrUser = await prisma.user.upsert({
-    where: { email: 'hr@adyapan.com' },
-    update: {},
+  // 2. Nandini — HR Manager (HR_ADMIN, sees everything)
+  const nandiniUser = await prisma.user.upsert({
+    where: { email: 'nandini@adyapan.com' },
+    update: { role: 'HR_ADMIN', isEmailVerified: true },
     create: {
-      email: 'hr@adyapan.com',
-      passwordHash: hrPassword,
+      email: 'nandini@adyapan.com',
+      passwordHash: defaultPassword,
       role: 'HR_ADMIN',
       isEmailVerified: true,
     },
   });
-
-  const hrDept = await prisma.department.findUnique({ where: { code: 'HR' } });
-  const hrDesig = await prisma.designation.findUnique({ where: { code: 'HRM' } });
-
   await prisma.employee.upsert({
-    where: { employeeCode: 'ADY001' },
-    update: {},
+    where: { employeeCode: 'EMP-NANDINI' },
+    update: { firstName: 'Nandini', lastName: 'HR Manager', status: 'ACTIVE' },
     create: {
-      userId: hrUser.id,
-      employeeCode: 'ADY001',
-      firstName: 'HR',
-      lastName: 'Admin',
+      userId: nandiniUser.id,
+      employeeCode: 'EMP-NANDINI',
+      firstName: 'Nandini',
+      lastName: '(HR Manager)',
+      departmentId: hrDept?.id,
+      designationId: hrmDesig?.id,
+      employmentType: 'FULL_TIME',
+      status: 'ACTIVE',
+    },
+  });
+  console.log('  ✅ HR Manager: nandini@adyapan.com / Adyapan@123');
+
+  // 3. Pavitra — Attendance & Leave Specialist
+  const pavitraUser = await prisma.user.upsert({
+    where: { email: 'pavitra@adyapan.com' },
+    update: { role: 'HR_EXECUTIVE', isEmailVerified: true },
+    create: {
+      email: 'pavitra@adyapan.com',
+      passwordHash: defaultPassword,
+      role: 'HR_EXECUTIVE',
+      isEmailVerified: true,
+    },
+  });
+  await prisma.employee.upsert({
+    where: { employeeCode: 'EMP-PAVITRA' },
+    update: { firstName: 'Pavitra', lastName: 'Attendance', status: 'ACTIVE' },
+    create: {
+      userId: pavitraUser.id,
+      employeeCode: 'EMP-PAVITRA',
+      firstName: 'Pavitra',
+      lastName: '(Attendance & Leave)',
       departmentId: hrDept?.id,
       designationId: hrDesig?.id,
       employmentType: 'FULL_TIME',
       status: 'ACTIVE',
     },
   });
+  console.log('  ✅ Specialist: pavitra@adyapan.com / Adyapan@123 (Attendance & Leave)');
 
-  console.log('✅ Seed completed successfully');
-  console.log('   Admin login: admin@adyapan.com / Admin@123');
-  console.log('   HR login:    hr@adyapan.com / Hr@12345');
+  // 4. Charitha — Salary & Payroll Specialist
+  const charithaUser = await prisma.user.upsert({
+    where: { email: 'charitha@adyapan.com' },
+    update: { role: 'HR_EXECUTIVE', isEmailVerified: true },
+    create: {
+      email: 'charitha@adyapan.com',
+      passwordHash: defaultPassword,
+      role: 'HR_EXECUTIVE',
+      isEmailVerified: true,
+    },
+  });
+  await prisma.employee.upsert({
+    where: { employeeCode: 'EMP-CHARITHA' },
+    update: { firstName: 'Charitha', lastName: 'Payroll', status: 'ACTIVE' },
+    create: {
+      userId: charithaUser.id,
+      employeeCode: 'EMP-CHARITHA',
+      firstName: 'Charitha',
+      lastName: '(Salary & Payroll)',
+      departmentId: hrDept?.id,
+      designationId: hrDesig?.id,
+      employmentType: 'FULL_TIME',
+      status: 'ACTIVE',
+    },
+  });
+  console.log('  ✅ Specialist: charitha@adyapan.com / Adyapan@123 (Salary & Payroll)');
+
+  // 5. Veena — Onboarding & Hiring Specialist
+  const veenaUser = await prisma.user.upsert({
+    where: { email: 'veena@adyapan.com' },
+    update: { role: 'HR_EXECUTIVE', isEmailVerified: true },
+    create: {
+      email: 'veena@adyapan.com',
+      passwordHash: defaultPassword,
+      role: 'HR_EXECUTIVE',
+      isEmailVerified: true,
+    },
+  });
+  await prisma.employee.upsert({
+    where: { employeeCode: 'EMP-VEENA' },
+    update: { firstName: 'Veena', lastName: 'Onboarding', status: 'ACTIVE' },
+    create: {
+      userId: veenaUser.id,
+      employeeCode: 'EMP-VEENA',
+      firstName: 'Abbu Veena',
+      lastName: '(Onboarding & Hiring)',
+      departmentId: hrDept?.id,
+      designationId: hrDesig?.id,
+      employmentType: 'FULL_TIME',
+      status: 'ACTIVE',
+    },
+  });
+  console.log('  ✅ Specialist: veena@adyapan.com / Adyapan@123 (Onboarding & Hiring)');
+
+  // 6. Nitisha — Discipline & POSH Specialist
+  const nitishaUser = await prisma.user.upsert({
+    where: { email: 'nitisha@adyapan.com' },
+    update: { role: 'HR_EXECUTIVE', isEmailVerified: true },
+    create: {
+      email: 'nitisha@adyapan.com',
+      passwordHash: defaultPassword,
+      role: 'HR_EXECUTIVE',
+      isEmailVerified: true,
+    },
+  });
+  await prisma.employee.upsert({
+    where: { employeeCode: 'EMP-NITISHA' },
+    update: { firstName: 'Nitisha', lastName: 'Discipline', status: 'ACTIVE' },
+    create: {
+      userId: nitishaUser.id,
+      employeeCode: 'EMP-NITISHA',
+      firstName: 'Nitisha',
+      lastName: '(Discipline & POSH)',
+      departmentId: hrDept?.id,
+      designationId: hrDesig?.id,
+      employmentType: 'FULL_TIME',
+      status: 'ACTIVE',
+    },
+  });
+  console.log('  ✅ Specialist: nitisha@adyapan.com / Adyapan@123 (Discipline & POSH)');
+
+  // 7. Aravind — Resignation & Exit Specialist
+  const aravindUser = await prisma.user.upsert({
+    where: { email: 'aravind@adyapan.com' },
+    update: { role: 'HR_EXECUTIVE', isEmailVerified: true },
+    create: {
+      email: 'aravind@adyapan.com',
+      passwordHash: defaultPassword,
+      role: 'HR_EXECUTIVE',
+      isEmailVerified: true,
+    },
+  });
+  await prisma.employee.upsert({
+    where: { employeeCode: 'EMP-ARAVIND' },
+    update: { firstName: 'Aravind', lastName: 'Exit', status: 'ACTIVE' },
+    create: {
+      userId: aravindUser.id,
+      employeeCode: 'EMP-ARAVIND',
+      firstName: 'Aravind',
+      lastName: '(Resignation & Exit)',
+      departmentId: hrDept?.id,
+      designationId: hrDesig?.id,
+      employmentType: 'FULL_TIME',
+      status: 'ACTIVE',
+    },
+  });
+  console.log('  ✅ Specialist: aravind@adyapan.com / Adyapan@123 (Resignation & Exit)');
+
+  console.log('\n✅ Seed completed successfully');
+  console.log('\n📋 All Logins:');
+  console.log('   Super Admin:  admin@adyapan.com / Admin@123');
+  console.log('   HR Manager:   nandini@adyapan.com / Adyapan@123');
+  console.log('   Pavitra:      pavitra@adyapan.com / Adyapan@123');
+  console.log('   Charitha:     charitha@adyapan.com / Adyapan@123');
+  console.log('   Veena:        veena@adyapan.com / Adyapan@123');
+  console.log('   Nitisha:      nitisha@adyapan.com / Adyapan@123');
+  console.log('   Aravind:      aravind@adyapan.com / Adyapan@123');
 }
 
 main()
