@@ -92,6 +92,7 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
     { label: 'Employee Master', href: '/employee-master', icon: Users },
     { label: 'Attendance', href: '/attendance', icon: Clock },
     { label: 'Leaves', href: '/leaves', icon: CalendarDays },
+    { label: 'Documents', href: '/documents', icon: FolderOpen },
     { label: 'Daily Reports', href: '/daily-reports', icon: FileText },
   ];
 
