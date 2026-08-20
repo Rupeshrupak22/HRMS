@@ -32,8 +32,16 @@ async function request(endpoint: string, options: RequestInit = {}) {
     headers,
   });
 
-  if (!res.ok) throw new Error(`API error: ${res.statusText}`);
-  const result = await res.json();
+  if (!res.ok) {
+    let errorDetail = res.statusText;
+    try {
+      const errJson = await res.json();
+      if (errJson?.error) errorDetail = errJson.error;
+    } catch {}
+    console.warn(`Nitisha API [${method} ${endpoint}] returned ${res.status}: ${errorDetail}`);
+    throw new Error(errorDetail || `API error: ${res.statusText}`);
+  }
+  const result = await res.json().catch(() => ({}));
   if (result && typeof result === 'object' && result.success && result.data !== undefined) {
     return result.data;
   }
