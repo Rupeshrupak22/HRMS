@@ -57,38 +57,6 @@ export default function AttendancePage() {
         logs = res.data;
       }
 
-      // If HRMS DB is empty, fetch from CRM attendance API
-      if (logs.length === 0) {
-        try {
-          const fromDate = startDate.split('T')[0];
-          const toDate = endDate.split('T')[0];
-          const crmRes = await fetch(`/api/crm-attendance?from=${fromDate}&to=${toDate}`);
-          if (crmRes.ok) {
-            const crmJson = await crmRes.json();
-            const crmRecords: any[] = Array.isArray(crmJson) ? crmJson : (crmJson.attendance || crmJson.data || crmJson.records || []);
-            if (crmRecords.length > 0) {
-              logs = crmRecords.map((r: any) => ({
-                id: r.id || Math.random().toString(36).slice(2),
-                empId: r.employeeCode || r.empId || '-',
-                empName: r.employeeName || r.empName || 'Employee',
-                role: r.role || '-',
-                department: r.department || '-',
-                designation: r.designation || '-',
-                date: r.date ? r.date.split('T')[0] : '',
-                checkInTime: r.checkIn ? new Date(r.checkIn).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
-                checkOutTime: r.checkOut ? new Date(r.checkOut).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
-                workHours: r.workMinutes ? Math.round((r.workMinutes / 60) * 100) / 100 : 0,
-                status: r.status || 'PRESENT',
-                lateMinutes: 0,
-                source: 'CRM',
-              }));
-            }
-          }
-        } catch (crmErr) {
-          console.warn('CRM attendance fallback skipped:', crmErr);
-        }
-      }
-
       setAllLogs(logs);
     } catch (error) {
       console.error('Failed to fetch attendance', error);
