@@ -486,11 +486,57 @@ export function EmployeeMaster() {
         }
 
         if (formMode === 'create') {
-          if (!payload.password) payload.password = 'Adyapan@123';
-          await apiRequest('/employees', {
-            method: 'POST',
-            body: JSON.stringify(payload),
-          });
+          // Push to CRM first, then fallback to internal DB
+          const crmCreatePayload: any = {
+            name: formData.name.trim(),
+            email: formData.email.trim(),
+            mobile: formData.mobile.trim(),
+            password: formData.password?.trim() || 'Adyapan@123',
+            employeeId: formData.employeeId.trim(),
+            designation: formData.designation.trim(),
+            role: sanitizedRole,
+            department: formData.department.trim(),
+            teamName: formData.teamName.trim(),
+            reportingManager: formData.reportingManager.trim(),
+            isActive: true,
+            employmentType: sanitizeEmploymentType(formData.employmentType),
+            gender: formData.gender.trim(),
+            joiningDate: formData.joiningDate || undefined,
+            dateOfBirth: formData.dateOfBirth || undefined,
+            baseSalary: Number(formData.baseSalary) || 0,
+            bankName: formData.bankName.trim() || undefined,
+            bankAccountNumber: formData.bankAccountNumber.trim() || undefined,
+            bankIfsc: formData.bankIfsc.trim() || undefined,
+            address: formData.address.trim() || undefined,
+            emergencyContactName: formData.emergencyContactName.trim() || undefined,
+            emergencyContactPhone: formData.emergencyContactPhone.trim() || undefined,
+            notes: formData.notes.trim() || undefined,
+          };
+
+          let created = false;
+          try {
+            const crmRes = await fetch('/api/crm-employees/create', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(crmCreatePayload),
+            });
+            if (crmRes.ok) created = true;
+            else {
+              const errData = await crmRes.json().catch(() => null);
+              console.warn('CRM create failed, using internal DB:', errData?.message);
+            }
+          } catch (crmErr) {
+            console.warn('CRM create error, fallback to internal DB:', crmErr);
+          }
+
+          // Fallback to internal DB if CRM failed
+          if (!created) {
+            if (!payload.password) payload.password = 'Adyapan@123';
+            await apiRequest('/employees', {
+              method: 'POST',
+              body: JSON.stringify(payload),
+            });
+          }
         } else {
           await apiRequest(`/employees/${formData.id}`, {
             method: 'PATCH',

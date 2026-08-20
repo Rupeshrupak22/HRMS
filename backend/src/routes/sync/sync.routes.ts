@@ -75,6 +75,29 @@ router.post('/employee', async (req: Request, res: Response) => {
         break;
       }
 
+      case 'document.created':
+      case 'document.updated': {
+        // Upsert employee with documents
+        if (data.documents && Array.isArray(data.documents)) {
+          const result = await upsertEmployeeFromCrm(data);
+          action = `document_${result.action}`;
+        } else {
+          action = 'document_skipped';
+        }
+        break;
+      }
+
+      case 'document.deleted': {
+        // Re-sync employee to reflect removed document
+        if (data.id) {
+          const result = await upsertEmployeeFromCrm(data);
+          action = 'document_deleted';
+        } else {
+          action = 'document_delete_skipped';
+        }
+        break;
+      }
+
       default: {
         console.warn('[CRM Webhook] Unknown event type:', event);
         await logWebhook('WEBHOOK', event, data.id, 'SKIPPED', `Unknown event: ${event}`);
