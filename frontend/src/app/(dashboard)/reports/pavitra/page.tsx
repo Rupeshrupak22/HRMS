@@ -246,61 +246,120 @@ export default function PavitraReportPage() {
         )}
       </section>
 
-      {/* 2. Attendance Records Section */}
+      {/* 2. Attendance Records Section — Monthly Grouped View */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <Clock className="w-4 h-4 text-emerald-600" /> Attendance Records ({filteredAttendance.length})
+          <Clock className="w-4 h-4 text-emerald-600" /> Attendance Records — Monthly View ({filteredAttendance.length} logs)
         </h2>
         {filteredAttendance.length === 0 ? (
           <p className="text-xs text-slate-400 py-4 text-center">No attendance records found for this date.</p>
-        ) : (
-          <div className="rounded-2xl border border-slate-200 overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-left">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold whitespace-nowrap">
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3">Emp Code</th>
-                    <th className="px-4 py-3">Employee Name</th>
-                    <th className="px-4 py-3">Department</th>
-                    <th className="px-4 py-3">Status</th>
-                    <th className="px-4 py-3">Check In</th>
-                    <th className="px-4 py-3">Check Out</th>
-                    <th className="px-4 py-3">Verification</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {paginatedAttendance.map((r, idx) => (
-                    <tr key={r.id || idx} className="hover:bg-slate-50 transition whitespace-nowrap">
-                      <td className="px-4 py-2.5 font-bold text-slate-800">{r.date || filterDate || '-'}</td>
-                      <td className="px-4 py-2.5 font-medium text-slate-700">{r.empId || r.employeeId || r.employeeCode || `EMP-${1000 + idx}`}</td>
-                      <td className="px-4 py-2.5 font-extrabold text-slate-900">{r.empName || r.employeeName || 'Employee'}</td>
-                      <td className="px-4 py-2.5 text-slate-600">{r.department || '-'}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          r.status === 'PRESENT' ? 'bg-green-100 text-green-700'
-                          : r.status === 'LATE' ? 'bg-amber-100 text-amber-700'
-                          : 'bg-red-100 text-red-700'
-                        }`}>
-                          {r.status || 'PRESENT'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 font-mono text-slate-600">{r.checkInTime || '-'}</td>
-                      <td className="px-4 py-2.5 font-mono text-slate-600">{r.checkOutTime || '-'}</td>
-                      <td className="px-4 py-2.5 text-emerald-600 font-semibold">Verified by Pavitra</td>
+        ) : (() => {
+          // Group attendance by employee
+          const empMap = new Map<string, { empId: string; empName: string; department: string; days: Record<number, string> }>();
+          for (const r of filteredAttendance) {
+            const key = r.empId || r.employeeId || r.employeeCode || 'unknown';
+            if (!empMap.has(key)) {
+              empMap.set(key, {
+                empId: key,
+                empName: r.empName || r.employeeName || 'Employee',
+                department: r.department || '-',
+                days: {},
+              });
+            }
+            const dateStr = r.date || '';
+            const day = dateStr ? parseInt(dateStr.split('-')[2], 10) : 0;
+            if (day > 0 && day <= 31) {
+              const status = (r.status || 'PRESENT').charAt(0); // P, A, L, H
+              empMap.get(key)!.days[day] = status;
+            }
+          }
+          const grouped = Array.from(empMap.values());
+          const daysInMonth = 31; // show all 31 columns
+
+          const statusColor = (s: string) => {
+            switch (s) {
+              case 'P': return 'bg-green-100 text-green-700';
+              case 'L': return 'bg-amber-100 text-amber-700';
+              case 'A': return 'bg-red-100 text-red-700';
+              case 'H': return 'bg-blue-100 text-blue-700';
+              case 'W': return 'bg-purple-100 text-purple-700';
+              default: return 'bg-slate-50 text-slate-300';
+            }
+          };
+
+          const paginatedGrouped = grouped.slice((attPage - 1) * PAGE_SIZE, attPage * PAGE_SIZE);
+
+          return (
+            <div className="rounded-2xl border border-slate-200 overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-[10px] text-center">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                      <th className="px-3 py-2.5 text-left sticky left-0 bg-slate-50 z-10 min-w-[60px]">Emp ID</th>
+                      <th className="px-3 py-2.5 text-left sticky left-[60px] bg-slate-50 z-10 min-w-[120px]">Name</th>
+                      <th className="px-2 py-2.5 min-w-[60px]">Dept</th>
+                      {Array.from({ length: daysInMonth }, (_, i) => (
+                        <th key={i + 1} className="px-1 py-2.5 min-w-[26px]">{i + 1}</th>
+                      ))}
+                      <th className="px-2 py-2.5 min-w-[30px]">P</th>
+                      <th className="px-2 py-2.5 min-w-[30px]">A</th>
+                      <th className="px-2 py-2.5 min-w-[30px]">L</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedGrouped.map((emp, idx) => {
+                      let present = 0, absent = 0, late = 0;
+                      Object.values(emp.days).forEach(s => {
+                        if (s === 'P') present++;
+                        else if (s === 'A') absent++;
+                        else if (s === 'L') late++;
+                        else if (s === 'H') present += 0.5;
+                      });
+                      return (
+                        <tr key={emp.empId + idx} className="hover:bg-slate-50 transition">
+                          <td className="px-3 py-2 text-left font-bold text-slate-800 sticky left-0 bg-white z-10">{emp.empId}</td>
+                          <td className="px-3 py-2 text-left font-bold text-slate-900 sticky left-[60px] bg-white z-10 truncate max-w-[120px]">{emp.empName}</td>
+                          <td className="px-2 py-2 text-slate-600">{emp.department}</td>
+                          {Array.from({ length: daysInMonth }, (_, i) => {
+                            const s = emp.days[i + 1] || '';
+                            return (
+                              <td key={i + 1} className="px-0.5 py-1.5">
+                                {s ? (
+                                  <span className={`inline-block w-5 h-5 leading-5 rounded text-[9px] font-bold ${statusColor(s)}`}>
+                                    {s}
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-200">-</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                          <td className="px-2 py-2 font-bold text-green-700">{present}</td>
+                          <td className="px-2 py-2 font-bold text-red-700">{absent}</td>
+                          <td className="px-2 py-2 font-bold text-amber-700">{late}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              <div className="p-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500 px-4">
+                <div className="flex gap-3">
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-100"></span> P = Present</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-100"></span> L = Late</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100"></span> A = Absent</span>
+                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-100"></span> H = Half Day</span>
+                </div>
+              </div>
+              <Pagination
+                currentPage={attPage}
+                totalItems={grouped.length}
+                pageSize={PAGE_SIZE}
+                onPageChange={setAttPage}
+              />
             </div>
-            <Pagination
-              currentPage={attPage}
-              totalItems={filteredAttendance.length}
-              pageSize={PAGE_SIZE}
-              onPageChange={setAttPage}
-            />
-          </div>
-        )}
+          );
+        })()}
       </section>
 
       {/* 2. Leave Applications Section */}
