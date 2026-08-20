@@ -399,44 +399,88 @@ export function EmployeeMaster() {
       const sanitizedRole = validRoles.includes(roleUpper) ? roleUpper : 'EMPLOYEE';
 
       const names = formData.name.trim().split(' ');
-      const payload: any = {
-        firstName: names[0] || formData.name.trim(),
-        lastName: names.slice(1).join(' ') || '',
-        email: formData.email.trim(),
-        mobileNumber: formData.mobile.trim(),
-        employeeCode: formData.employeeId.trim(),
-        role: sanitizedRole,
-        department: formData.department.trim(),
-        designation: formData.designation.trim(),
-        status: formData.isActive ? 'ACTIVE' : 'INACTIVE',
-        employmentType: sanitizeEmploymentType(formData.employmentType),
-        gender: sanitizeGender(formData.gender),
-        joiningDate: formData.joiningDate ? new Date(formData.joiningDate).toISOString() : undefined,
-        dateOfBirth: formData.dateOfBirth ? new Date(formData.dateOfBirth).toISOString() : undefined,
-        bankName: formData.bankName.trim() || undefined,
-        bankAccountNo: formData.bankAccountNumber.trim() || undefined,
-        ifscCode: formData.bankIfsc.trim() || undefined,
-        address: formData.address.trim() || undefined,
-        emergencyContact: formData.emergencyContactName.trim() || undefined,
-        emergencyPhone: formData.emergencyContactPhone.trim() || undefined,
-        baseSalary: Number(formData.baseSalary) || 0,
-      };
 
-      if (formData.password?.trim()) {
-        payload.password = formData.password.trim();
-      }
+      // Detect if this is a CRM employee (non-UUID id format like "cmqi07ux...")
+      const isCrmEmployee = formMode === 'edit' && formData.id && !formData.id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 
-      if (formMode === 'create') {
-        if (!payload.password) payload.password = 'Adyapan@123';
-        await apiRequest('/employees', {
-          method: 'POST',
-          body: JSON.stringify(payload),
+      if (isCrmEmployee) {
+        // Update via CRM API
+        const crmPayload: any = {
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          mobile: formData.mobile.trim(),
+          employeeId: formData.employeeId.trim(),
+          designation: formData.designation.trim(),
+          role: sanitizedRole,
+          department: formData.department.trim(),
+          teamName: formData.teamName.trim(),
+          reportingManager: formData.reportingManager.trim(),
+          isActive: Boolean(formData.isActive),
+          employmentType: sanitizeEmploymentType(formData.employmentType),
+          gender: sanitizeGender(formData.gender),
+          dateOfBirth: formData.dateOfBirth || undefined,
+          joiningDate: formData.joiningDate || undefined,
+          baseSalary: Number(formData.baseSalary) || 0,
+          bankName: formData.bankName.trim() || undefined,
+          bankAccountNumber: formData.bankAccountNumber.trim() || undefined,
+          bankIfsc: formData.bankIfsc.trim() || undefined,
+          address: formData.address.trim() || undefined,
+          emergencyContactName: formData.emergencyContactName.trim() || undefined,
+          emergencyContactPhone: formData.emergencyContactPhone.trim() || undefined,
+          notes: formData.notes.trim() || undefined,
+        };
+
+        const res = await fetch(`/api/crm-employees/${formData.id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(crmPayload),
         });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error(errData?.message || `CRM update failed (${res.status})`);
+        }
       } else {
-        await apiRequest(`/employees/${formData.id}`, {
-          method: 'PATCH',
-          body: JSON.stringify(payload),
-        });
+        // Internal DB employee
+        const payload: any = {
+          firstName: names[0] || formData.name.trim(),
+          lastName: names.slice(1).join(' ') || '',
+          email: formData.email.trim(),
+          mobileNumber: formData.mobile.trim(),
+          employeeCode: formData.employeeId.trim(),
+          role: sanitizedRole,
+          department: formData.department.trim(),
+          designation: formData.designation.trim(),
+          status: formData.isActive ? 'ACTIVE' : 'INACTIVE',
+          employmentType: sanitizeEmploymentType(formData.employmentType),
+          gender: sanitizeGender(formData.gender),
+          joiningDate: formData.joiningDate ? new Date(formData.joiningDate).toISOString() : undefined,
+          dateOfBirth: formData.dateOfBirth ? new Date(formData.dateOfBirth).toISOString() : undefined,
+          bankName: formData.bankName.trim() || undefined,
+          bankAccountNo: formData.bankAccountNumber.trim() || undefined,
+          ifscCode: formData.bankIfsc.trim() || undefined,
+          address: formData.address.trim() || undefined,
+          emergencyContact: formData.emergencyContactName.trim() || undefined,
+          emergencyPhone: formData.emergencyContactPhone.trim() || undefined,
+          baseSalary: Number(formData.baseSalary) || 0,
+        };
+
+        if (formData.password?.trim()) {
+          payload.password = formData.password.trim();
+        }
+
+        if (formMode === 'create') {
+          if (!payload.password) payload.password = 'Adyapan@123';
+          await apiRequest('/employees', {
+            method: 'POST',
+            body: JSON.stringify(payload),
+          });
+        } else {
+          await apiRequest(`/employees/${formData.id}`, {
+            method: 'PATCH',
+            body: JSON.stringify(payload),
+          });
+        }
       }
 
       setIsFormModalOpen(false);
@@ -450,7 +494,7 @@ export function EmployeeMaster() {
       // Refresh list
       fetchEmployees();
       if (selectedEmployee && selectedEmployee.id === formData.id) {
-        setSelectedEmployee({ ...selectedEmployee, ...payload, name: formData.name });
+        setSelectedEmployee({ ...selectedEmployee, name: formData.name });
       }
     } catch (err: any) {
       console.error('Form submission error:', err);
@@ -467,7 +511,19 @@ export function EmployeeMaster() {
 
     try {
       const targetId = deleteTarget.id || deleteTarget._id || '';
-      await apiRequest(`/employees/${targetId}`, { method: 'DELETE' });
+
+      // Detect if CRM employee (non-UUID id)
+      const isCrmEmployee = targetId && !String(targetId).match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
+
+      if (isCrmEmployee) {
+        const res = await fetch(`/api/crm-employees/${targetId}`, { method: 'DELETE' });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => null);
+          throw new Error(errData?.message || `CRM delete failed (${res.status})`);
+        }
+      } else {
+        await apiRequest(`/employees/${targetId}`, { method: 'DELETE' });
+      }
 
       setEmployees((prev) => prev.filter((e) => (e.id || e._id) !== targetId));
       if (selectedEmployee && (selectedEmployee.id || selectedEmployee._id) === targetId) {
