@@ -290,9 +290,9 @@ export default function PavitraReportPage() {
           const paginatedGrouped = grouped.slice((attPage - 1) * PAGE_SIZE, attPage * PAGE_SIZE);
 
           return (
-            <div className="rounded-2xl border border-slate-200 overflow-hidden">
-              <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                <table className="w-full text-[10px] text-center">
+            <div className="rounded-2xl border border-slate-200">
+              <div className="overflow-x-scroll [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
+                <table className="text-[10px] text-center min-w-[1200px] w-full">
                   <thead>
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
                       <th className="px-3 py-2.5 text-left sticky left-0 bg-slate-50 z-10 min-w-[60px]">Emp ID</th>
