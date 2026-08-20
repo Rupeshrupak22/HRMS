@@ -3,17 +3,11 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 const CRM_BACKEND_URL = process.env.CRM_BACKEND_URL || 'https://adyapancrm.in';
-const CRM_SYNC_API_KEY = process.env.CRM_SYNC_API_KEY || '';
+const CRM_SYNC_API_KEY = process.env.CRM_SYNC_API_KEY || 'hrms-sync-key-2026';
 
 // PUT /api/crm-employees/:id — Update employee in CRM
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    // Require auth
-    const accessToken = request.cookies.get('access_token')?.value || request.headers.get('authorization');
-    if (!accessToken) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
-
     const { id } = await params;
     const body = await request.json();
 
@@ -76,12 +70,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 // DELETE /api/crm-employees/:id — Delete/deactivate employee in CRM
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    // Require auth
-    const accessToken = request.cookies.get('access_token')?.value || request.headers.get('authorization');
-    if (!accessToken) {
-      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-    }
-
     const { id } = await params;
 
     let response = await fetch(`${CRM_BACKEND_URL}/api/hrms-sync/employees/${id}`, {

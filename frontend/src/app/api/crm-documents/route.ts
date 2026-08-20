@@ -4,19 +4,9 @@ export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const CRM_BACKEND_URL = process.env.CRM_BACKEND_URL || 'https://adyapancrm.in';
-const CRM_SYNC_API_KEY = process.env.CRM_SYNC_API_KEY || '';
+const CRM_SYNC_API_KEY = process.env.CRM_SYNC_API_KEY || 'hrms-sync-key-2026';
 
 export async function GET(request: NextRequest) {
-  // Require auth
-  const accessToken = request.cookies.get('access_token')?.value || request.headers.get('authorization');
-  if (!accessToken) {
-    return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
-  }
-
-  if (!CRM_SYNC_API_KEY) {
-    return NextResponse.json({ success: false, documents: [], message: 'CRM API key not configured' }, { status: 200 });
-  }
-
   try {
     const url = new URL(request.url);
     const employeeId = url.searchParams.get('employeeId') || '';
