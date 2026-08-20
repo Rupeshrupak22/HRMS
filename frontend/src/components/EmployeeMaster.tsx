@@ -559,7 +559,7 @@ export function EmployeeMaster() {
     const clean = String(type || '').trim().toUpperCase().replace(/[\s-]+/g, '_');
     if (clean.includes('FULL') || clean === 'FT') return 'FULL_TIME';
     if (clean.includes('PART') || clean === 'PT') return 'PART_TIME';
-    if (clean.includes('INTERN')) return 'INTERNSHIP';
+    if (clean.includes('INTERN')) return 'INTERN';
     if (clean.includes('CONTRACT')) return 'CONTRACT';
     if (clean.includes('PROBATION')) return 'PROBATION';
     if (clean.includes('FREELANCE')) return 'FREELANCE';
