@@ -176,6 +176,7 @@ export function EmployeeMaster() {
     setError(null);
 
     try {
+      // Fetch from internal HRMS database
       const res = await apiRequest('/employees');
       const internalList = Array.isArray(res)
         ? res
@@ -183,7 +184,7 @@ export function EmployeeMaster() {
         ? res.data
         : [];
 
-      const list: EmployeeRecord[] = internalList.map((emp: any) => ({
+      let list: EmployeeRecord[] = internalList.map((emp: any) => ({
         id: emp.id,
         name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || 'Employee',
         email: emp.user?.email || emp.email || '',
@@ -211,6 +212,60 @@ export function EmployeeMaster() {
         documents: emp.documents || [],
         raw: emp,
       }));
+
+      // Also fetch CRM employees and merge (deduplicate by email)
+      try {
+        const crmRes = await fetch('/api/crm-employees');
+        if (crmRes.ok) {
+          const crmJson = await crmRes.json();
+          const crmList: any[] = Array.isArray(crmJson) ? crmJson : (crmJson.employees || crmJson.data || []);
+          
+          if (crmList.length > 0) {
+            const existingEmails = new Set(list.map(e => (e.email || '').toLowerCase().trim()).filter(Boolean));
+            const existingCodes = new Set(list.map(e => String(e.employeeId || '').toLowerCase().trim()).filter(Boolean));
+
+            const crmMapped = crmList
+              .filter((emp: any) => {
+                const email = (emp.email || '').toLowerCase().trim();
+                const code = String(emp.employeeId || '').toLowerCase().trim();
+                return (!email || !existingEmails.has(email)) && (!code || !existingCodes.has(code));
+              })
+              .map((emp: any) => ({
+                id: emp.id,
+                name: emp.name || 'Employee',
+                email: emp.email || '',
+                mobile: emp.mobile || '',
+                department: emp.department || 'General',
+                designation: emp.designation || 'Staff',
+                role: emp.role || 'EMPLOYEE',
+                employmentType: emp.employmentType || 'FULL_TIME',
+                gender: emp.gender || '',
+                status: emp.isActive !== false ? 'ACTIVE' : 'INACTIVE',
+                isActive: emp.isActive !== false,
+                employeeId: emp.employeeId || '',
+                joiningDate: emp.joiningDate || '',
+                dateOfBirth: emp.dateOfBirth || '',
+                reportingManager: emp.reportingManager || '',
+                teamId: emp.teamId || '',
+                teamName: emp.teamName || '',
+                baseSalary: emp.baseSalary || 0,
+                bankName: emp.bankName || '',
+                bankAccountNumber: emp.bankAccountNumber || '',
+                bankIfsc: emp.bankIfsc || '',
+                address: emp.address || '',
+                emergencyContactName: emp.emergencyContactName || '',
+                emergencyContactPhone: emp.emergencyContactPhone || '',
+                notes: emp.notes || '',
+                weekOff: emp.weekOff || '',
+                specialization: emp.specialization || '',
+              }));
+
+            list = [...list, ...crmMapped];
+          }
+        }
+      } catch (crmErr) {
+        console.warn('CRM employee fetch skipped:', crmErr);
+      }
 
       setEmployees(list);
       setLastUpdated(new Date());
