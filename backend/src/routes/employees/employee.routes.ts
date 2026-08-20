@@ -49,7 +49,7 @@ router.post('/', authorize('HR_ADMIN', 'HR_MANAGER', 'HR_EXECUTIVE'), validate(c
 });
 
 // PATCH /api/employees/:id
-router.patch('/:id', authorize('HR_ADMIN', 'HR_MANAGER', 'MANAGER'), validate(updateEmployeeSchema), async (req: AuthRequest, res: Response, next) => {
+router.patch('/:id', authorize('HR_ADMIN', 'HR_MANAGER', 'HR_EXECUTIVE', 'MANAGER'), validate(updateEmployeeSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const employee = await employeeService.update(String(req.params.id), req.body);
     res.json({ success: true, data: employee });
@@ -59,7 +59,7 @@ router.patch('/:id', authorize('HR_ADMIN', 'HR_MANAGER', 'MANAGER'), validate(up
 });
 
 // DELETE /api/employees/:id
-router.delete('/:id', authorize('HR_ADMIN'), async (req: AuthRequest, res: Response, next) => {
+router.delete('/:id', authorize('HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const result = await employeeService.remove(String(req.params.id));
     res.json({ success: true, data: result });
