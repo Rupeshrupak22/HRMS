@@ -21,13 +21,42 @@ export default function PavitraReportPage() {
   const PAGE_SIZE = 20;
 
   useEffect(() => {
-    // 0. Employee Master roster
-    apiRequest('/employees')
-      .then((d) => {
-        const fetched = Array.isArray(d) ? d : (d?.data && Array.isArray(d.data) ? d.data : []);
-        setEmployees(fetched);
-      })
-      .catch(() => setEmployees([]));
+    // 0. Employee Master roster — CRM + internal DB
+    (async () => {
+      let list: any[] = [];
+      // Primary: CRM employees
+      try {
+        const crmRes = await fetch('/api/crm-employees');
+        if (crmRes.ok) {
+          const crmJson = await crmRes.json();
+          const crmList = Array.isArray(crmJson) ? crmJson : (crmJson.employees || crmJson.data || []);
+          list = crmList.map((emp: any) => ({
+            id: emp.id,
+            employeeCode: emp.employeeId || '',
+            firstName: emp.name?.split(' ')[0] || '',
+            lastName: emp.name?.split(' ').slice(1).join(' ') || '',
+            name: emp.name || '',
+            email: emp.email || '',
+            department: { name: emp.department || '-' },
+            designation: { title: emp.designation || '-' },
+            status: emp.isActive !== false ? 'ACTIVE' : 'INACTIVE',
+            joiningDate: emp.joiningDate || '',
+          }));
+        }
+      } catch {}
+      // Secondary: internal DB employees (merge non-duplicates)
+      try {
+        const res = await apiRequest('/employees');
+        const fetched = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
+        const existingEmails = new Set(list.map((e: any) => (e.email || '').toLowerCase()).filter(Boolean));
+        const dbOnly = fetched.filter((e: any) => {
+          const email = (e.user?.email || e.email || '').toLowerCase();
+          return !email || !existingEmails.has(email);
+        });
+        list = [...list, ...dbOnly];
+      } catch {}
+      setEmployees(list);
+    })();
 
     // 1. Attendance logs
     const savedAtt = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_attendance_logs') : null;
@@ -230,7 +259,7 @@ export default function PavitraReportPage() {
                           {emp.status || 'ACTIVE'}
                         </span>
                       </td>
-                      <td className="px-4 py-2.5 text-slate-600 font-medium">{emp.dateOfJoining ? emp.dateOfJoining.split('T')[0] : '-'}</td>
+                      <td className="px-4 py-2.5 text-slate-600 font-medium">{(emp.joiningDate || emp.dateOfJoining || '').split('T')[0] || '-'}</td>
                     </tr>
                   ))}
                 </tbody>
