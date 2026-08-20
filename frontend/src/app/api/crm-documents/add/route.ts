@@ -3,11 +3,17 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic';
 
 const CRM_BACKEND_URL = process.env.CRM_BACKEND_URL || 'https://adyapancrm.in';
-const CRM_SYNC_API_KEY = process.env.CRM_SYNC_API_KEY || 'hrms-sync-key-2026';
+const CRM_SYNC_API_KEY = process.env.CRM_SYNC_API_KEY || '';
 
 // POST /api/crm-documents/add — Add document to employee in CRM
 export async function POST(request: NextRequest) {
   try {
+    // Require auth
+    const accessToken = request.cookies.get('access_token')?.value || request.headers.get('authorization');
+    if (!accessToken) {
+      return NextResponse.json({ success: false, message: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const { employeeId, ...docData } = body;
 

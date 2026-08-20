@@ -59,17 +59,17 @@ app.use(cors({
     if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
       callback(null, true);
     } else {
-      callback(null, true); // Allow all in production for now — tighten later
+      callback(new Error('Not allowed by CORS'));
     }
   },
   credentials: true,
 }));
 app.use(cookieParser(env.COOKIE_SECRET));
 
-// Global rate limiting: high throughput for enterprise HRMS operations
+// Global rate limiting
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5000, // 5000 requests per 15 minutes to comfortably support dashboards & specialists
+  max: 1000, // 1000 requests per 15 minutes per IP
   message: { success: false, message: 'Too many requests. Please try again later.' },
   standardHeaders: true,
   legacyHeaders: false,

@@ -116,54 +116,25 @@ export function authorize(...roles: Role[]) {
 
     const email = (req.user.email || '').toLowerCase().trim();
     const userRole = (req.user.role || 'EMPLOYEE') as Role;
-    const empCode = (req.user.employeeCode || '').toUpperCase().trim();
     const isSpecialist = Boolean(req.user.specialization) || Boolean(SPECIALIST_CONFIG[email]);
-    const isPavitra =
-      email === 'pavitra@adyapan.com' ||
-      req.user.specialization === 'ATTENDANCE_LEAVE' ||
-      (req.user.firstName || '').toLowerCase().includes('pavitra') ||
-      empCode === 'EMP-015' ||
-      empCode === 'ADP0001';
-    const isNandini =
-      email === 'nandini@adyapan.com' ||
-      email === 'nandani@adyapan.com' ||
-      (req.user.firstName || '').toLowerCase().includes('nandini') ||
-      (req.user.lastName || '').toLowerCase().includes('nandini');
+    const isPavitra = email === 'pavitra@adyapan.com' || req.user.specialization === 'ATTENDANCE_LEAVE';
+    const isNandini = email === 'nandini@adyapan.com' || email === 'nandani@adyapan.com' || req.user.specialization === 'HR_MANAGER_ALL';
 
-    // SUPER_ADMIN and HR_ADMIN (including Nandini) bypass all role checks
+    // SUPER_ADMIN and HR_ADMIN bypass all role checks
     if (userRole === 'SUPER_ADMIN' || userRole === 'HR_ADMIN' || isNandini) {
       next();
       return;
     }
 
-    // Pavitra (Attendance & Leave specialist) has full permission for attendance, leave, reports, and HR executive operations
-    if (isPavitra) {
-      next();
-      return;
+    // Known specialists (Pavitra, Veena, Nitisha, Aravind, Charitha) have HR_EXECUTIVE-level access
+    if (isSpecialist || isPavitra) {
+      if (roles.includes('HR_EXECUTIVE' as Role) || roles.includes('EMPLOYEE' as Role) || roles.length === 0) {
+        next();
+        return;
+      }
     }
 
-    // Any employee ID starting with ADP or EMP or specialist has permission to perform HR & Attendance operations
-    if (
-      empCode.startsWith('ADP') ||
-      empCode.startsWith('EMP') ||
-      isSpecialist ||
-      roles.includes('EMPLOYEE' as Role)
-    ) {
-      next();
-      return;
-    }
-
-    // HR Specialists have access to HR_EXECUTIVE, HR_MANAGER, and EMPLOYEE operations
-    if (
-      isSpecialist &&
-      (roles.includes('HR_EXECUTIVE' as Role) ||
-        roles.includes('HR_MANAGER' as Role) ||
-        roles.includes('EMPLOYEE' as Role))
-    ) {
-      next();
-      return;
-    }
-
+    // Standard role check
     if (roles.length > 0 && !roles.includes(userRole)) {
       next(new ForbiddenError('You do not have permission to access this resource'));
       return;
