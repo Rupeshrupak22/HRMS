@@ -176,95 +176,106 @@ export function EmployeeMaster() {
     setError(null);
 
     try {
-      // Fetch from internal HRMS database
-      const res = await apiRequest('/employees');
-      const internalList = Array.isArray(res)
-        ? res
-        : res?.data && Array.isArray(res.data)
-        ? res.data
-        : [];
+      let list: EmployeeRecord[] = [];
 
-      let list: EmployeeRecord[] = internalList.map((emp: any) => ({
-        id: emp.id,
-        name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || 'Employee',
-        email: emp.user?.email || emp.email || '',
-        mobile: emp.mobileNumber || emp.phone || '',
-        department: emp.department?.name || (typeof emp.department === 'string' ? emp.department : 'General'),
-        designation: emp.designation?.title || (typeof emp.designation === 'string' ? emp.designation : 'Staff'),
-        role: emp.user?.role || emp.role || 'EMPLOYEE',
-        employmentType: emp.employmentType || 'FULL_TIME',
-        gender: emp.gender || 'MALE',
-        status: emp.status || 'ACTIVE',
-        isActive: emp.status === 'ACTIVE',
-        employeeId: emp.employeeCode || emp.id,
-        joiningDate: emp.joiningDate || emp.dateOfJoining || emp.createdAt,
-        dateOfBirth: emp.dateOfBirth || '',
-        reportingManager: emp.manager ? `${emp.manager.firstName || ''} ${emp.manager.lastName || ''}`.trim() : '',
-        teamId: emp.teamId || emp.team?.id || '',
-        teamName: emp.team?.name || '',
-        baseSalary: emp.salaryStructure?.basicSalary || 0,
-        bankName: emp.bankName || '',
-        bankAccountNumber: emp.bankAccountNo || '',
-        bankIfsc: emp.ifscCode || '',
-        address: emp.address || '',
-        emergencyContactName: emp.emergencyContactName || '',
-        emergencyContactPhone: emp.emergencyPhone || '',
-        documents: emp.documents || [],
-        raw: emp,
-      }));
-
-      // Also fetch CRM employees and merge (deduplicate by email)
+      // PRIMARY: Fetch from CRM API
       try {
         const crmRes = await fetch('/api/crm-employees');
         if (crmRes.ok) {
           const crmJson = await crmRes.json();
           const crmList: any[] = Array.isArray(crmJson) ? crmJson : (crmJson.employees || crmJson.data || []);
-          
-          if (crmList.length > 0) {
-            const existingEmails = new Set(list.map(e => (e.email || '').toLowerCase().trim()).filter(Boolean));
-            const existingCodes = new Set(list.map(e => String(e.employeeId || '').toLowerCase().trim()).filter(Boolean));
 
-            const crmMapped = crmList
-              .filter((emp: any) => {
-                const email = (emp.email || '').toLowerCase().trim();
-                const code = String(emp.employeeId || '').toLowerCase().trim();
-                return (!email || !existingEmails.has(email)) && (!code || !existingCodes.has(code));
-              })
-              .map((emp: any) => ({
-                id: emp.id,
-                name: emp.name || 'Employee',
-                email: emp.email || '',
-                mobile: emp.mobile || '',
-                department: emp.department || 'General',
-                designation: emp.designation || 'Staff',
-                role: emp.role || 'EMPLOYEE',
-                employmentType: emp.employmentType || 'FULL_TIME',
-                gender: emp.gender || '',
-                status: emp.isActive !== false ? 'ACTIVE' : 'INACTIVE',
-                isActive: emp.isActive !== false,
-                employeeId: emp.employeeId || '',
-                joiningDate: emp.joiningDate || '',
-                dateOfBirth: emp.dateOfBirth || '',
-                reportingManager: emp.reportingManager || '',
-                teamId: emp.teamId || '',
-                teamName: emp.teamName || '',
-                baseSalary: emp.baseSalary || 0,
-                bankName: emp.bankName || '',
-                bankAccountNumber: emp.bankAccountNumber || '',
-                bankIfsc: emp.bankIfsc || '',
-                address: emp.address || '',
-                emergencyContactName: emp.emergencyContactName || '',
-                emergencyContactPhone: emp.emergencyContactPhone || '',
-                notes: emp.notes || '',
-                weekOff: emp.weekOff || '',
-                specialization: emp.specialization || '',
-              }));
-
-            list = [...list, ...crmMapped];
-          }
+          list = crmList.map((emp: any) => ({
+            id: emp.id,
+            name: emp.name || 'Employee',
+            email: emp.email || '',
+            mobile: emp.mobile || '',
+            department: emp.department || 'General',
+            designation: emp.designation || 'Staff',
+            role: emp.role || 'EMPLOYEE',
+            employmentType: emp.employmentType || 'FULL_TIME',
+            gender: emp.gender || '',
+            status: emp.isActive !== false ? 'ACTIVE' : 'INACTIVE',
+            isActive: emp.isActive !== false,
+            employeeId: emp.employeeId || '',
+            joiningDate: emp.joiningDate || '',
+            dateOfBirth: emp.dateOfBirth || '',
+            reportingManager: emp.reportingManager || '',
+            teamId: emp.teamId || '',
+            teamName: emp.teamName || '',
+            baseSalary: emp.baseSalary || 0,
+            bankName: emp.bankName || '',
+            bankAccountNumber: emp.bankAccountNumber || '',
+            bankIfsc: emp.bankIfsc || '',
+            address: emp.address || '',
+            emergencyContactName: emp.emergencyContactName || '',
+            emergencyContactPhone: emp.emergencyContactPhone || '',
+            notes: emp.notes || '',
+            weekOff: emp.weekOff || '',
+            specialization: emp.specialization || '',
+          }));
         }
       } catch (crmErr) {
-        console.warn('CRM employee fetch skipped:', crmErr);
+        console.warn('CRM employee fetch failed:', crmErr);
+      }
+
+      // SECONDARY: Also fetch internal DB employees and merge (for specialists/admin who aren't in CRM)
+      try {
+        const res = await apiRequest('/employees');
+        const internalList = Array.isArray(res)
+          ? res
+          : res?.data && Array.isArray(res.data)
+          ? res.data
+          : [];
+
+        if (internalList.length > 0) {
+          const existingEmails = new Set(list.map(e => (e.email || '').toLowerCase().trim()).filter(Boolean));
+          const existingCodes = new Set(list.map(e => String(e.employeeId || '').toLowerCase().trim()).filter(Boolean));
+
+          const dbMapped = internalList
+            .filter((emp: any) => {
+              const email = (emp.user?.email || emp.email || '').toLowerCase().trim();
+              const code = String(emp.employeeCode || '').toLowerCase().trim();
+              return (!email || !existingEmails.has(email)) && (!code || !existingCodes.has(code));
+            })
+            .map((emp: any) => ({
+              id: emp.id,
+              name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || 'Employee',
+              email: emp.user?.email || emp.email || '',
+              mobile: emp.mobileNumber || emp.phone || '',
+              department: emp.department?.name || (typeof emp.department === 'string' ? emp.department : 'General'),
+              designation: emp.designation?.title || (typeof emp.designation === 'string' ? emp.designation : 'Staff'),
+              role: emp.user?.role || emp.role || 'EMPLOYEE',
+              employmentType: emp.employmentType || 'FULL_TIME',
+              gender: emp.gender || 'MALE',
+              status: emp.status || 'ACTIVE',
+              isActive: emp.status === 'ACTIVE',
+              employeeId: emp.employeeCode || emp.id,
+              joiningDate: emp.joiningDate || emp.createdAt,
+              dateOfBirth: emp.dateOfBirth || '',
+              reportingManager: emp.manager ? `${emp.manager.firstName || ''} ${emp.manager.lastName || ''}`.trim() : '',
+              teamId: emp.teamId || emp.team?.id || '',
+              teamName: emp.team?.name || '',
+              baseSalary: emp.salaryStructure?.basicSalary || 0,
+              bankName: emp.bankName || '',
+              bankAccountNumber: emp.bankAccountNo || '',
+              bankIfsc: emp.ifscCode || '',
+              address: emp.address || '',
+              emergencyContactName: emp.emergencyContactName || '',
+              emergencyContactPhone: emp.emergencyPhone || '',
+              documents: emp.documents || [],
+              raw: emp,
+            }));
+
+          list = [...list, ...dbMapped];
+        }
+      } catch (dbErr) {
+        console.warn('Internal DB fetch failed:', dbErr);
+      }
+
+      // If both failed, show error
+      if (list.length === 0) {
+        setError('No employee data available. Please check your connection.');
       }
 
       setEmployees(list);
