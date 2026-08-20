@@ -394,6 +394,10 @@ export function EmployeeMaster() {
         'COUNSELOR',
         'TELECALLER',
         'DEVELOPER',
+        'SALES_MEMBER',
+        'TECH',
+        'TECH_LEAD',
+        'OPERATIONAL_HEAD',
       ];
       const roleUpper = String(formData.role || '').trim().toUpperCase();
       const sanitizedRole = validRoles.includes(roleUpper) ? roleUpper : 'EMPLOYEE';
@@ -404,7 +408,15 @@ export function EmployeeMaster() {
       const isCrmEmployee = formMode === 'edit' && formData.id && !formData.id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 
       if (isCrmEmployee) {
-        // Update via CRM API
+        // Update via CRM API — use CRM-compatible field formats
+        const genderForCrm = (g?: string) => {
+          const clean = String(g || '').trim().toLowerCase();
+          if (clean.startsWith('f')) return 'Female';
+          if (clean.startsWith('o')) return 'Other';
+          if (clean.startsWith('m')) return 'Male';
+          return g || '';
+        };
+
         const crmPayload: any = {
           name: formData.name.trim(),
           email: formData.email.trim(),
@@ -417,7 +429,7 @@ export function EmployeeMaster() {
           reportingManager: formData.reportingManager.trim(),
           isActive: Boolean(formData.isActive),
           employmentType: sanitizeEmploymentType(formData.employmentType),
-          gender: sanitizeGender(formData.gender),
+          gender: genderForCrm(formData.gender),
           dateOfBirth: formData.dateOfBirth || undefined,
           joiningDate: formData.joiningDate || undefined,
           baseSalary: Number(formData.baseSalary) || 0,
