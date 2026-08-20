@@ -6,7 +6,6 @@ import {
   Search,
   RefreshCw,
   Download,
-  Key,
   Eye,
   Building2,
   Briefcase,
@@ -153,8 +152,6 @@ export function EmployeeMaster() {
 
   // Modal states
   const [selectedEmployee, setSelectedEmployee] = useState<EmployeeRecord | null>(null);
-  const [showTokenModal, setShowTokenModal] = useState(false);
-  const [customToken, setCustomToken] = useState<string>('');
 
   // Add / Edit Modal states
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
@@ -169,149 +166,61 @@ export function EmployeeMaster() {
   const [deleteTarget, setDeleteTarget] = useState<EmployeeRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  // Load custom token from localStorage on mount
+  // Load employees on mount
   useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const stored =
-        localStorage.getItem('adyapan_crm_bearer_token') ||
-        localStorage.getItem('adyapan_access_token') ||
-        localStorage.getItem('token') ||
-        '';
-      if (stored) {
-        setCustomToken(stored);
-      }
-      fetchEmployees(stored);
-    }
+    fetchEmployees();
   }, []);
 
-  const fetchEmployees = async (overrideToken?: string) => {
+  const fetchEmployees = async () => {
     setLoading(true);
     setError(null);
 
-    const tokenToUse =
-      overrideToken !== undefined
-        ? overrideToken
-        : customToken ||
-          (typeof window !== 'undefined'
-            ? localStorage.getItem('adyapan_crm_bearer_token') ||
-              localStorage.getItem('adyapan_access_token') ||
-              localStorage.getItem('token') ||
-              ''
-            : '');
-
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    };
-
-    if (tokenToUse) {
-      headers['Authorization'] = tokenToUse.startsWith('Bearer ')
-        ? tokenToUse
-        : `Bearer ${tokenToUse}`;
-    }
-
     try {
-      let list: EmployeeRecord[] = [];
-      let teamList: any[] = [];
+      const res = await apiRequest('/employees');
+      const internalList = Array.isArray(res)
+        ? res
+        : res?.data && Array.isArray(res.data)
+        ? res.data
+        : [];
 
-      try {
-        const endpoint = `/api/crm/employees${tokenToUse ? `?token=${encodeURIComponent(tokenToUse)}` : ''}`;
-        const res = await fetch(endpoint, {
-          method: 'GET',
-          headers,
-        });
-
-        const json = await res.json().catch(() => null);
-
-        if (res.ok && json) {
-          if (Array.isArray(json)) {
-            list = json;
-          } else if (json && Array.isArray(json.employees)) {
-            list = json.employees;
-            if (Array.isArray(json.teams)) teamList = json.teams;
-          } else if (json && Array.isArray(json.data)) {
-            list = json.data;
-            if (Array.isArray(json.teams)) teamList = json.teams;
-          } else if (json && json.data && Array.isArray(json.data.employees)) {
-            list = json.data.employees;
-            if (Array.isArray(json.data.teams)) teamList = json.data.teams;
-          } else if (json && typeof json === 'object') {
-            const potentialArray = Object.values(json).find((val) => Array.isArray(val));
-            if (potentialArray && Array.isArray(potentialArray)) {
-              list = potentialArray as EmployeeRecord[];
-            }
-          }
-        }
-      } catch (crmErr) {
-        console.warn('CRM proxy fetch error, falling back to internal HRMS DB:', crmErr);
-      }
-
-      // Always merge internal HRMS database employees so all records are visible
-      try {
-        const internalRes = await apiRequest('/employees').catch(() => []);
-        const internalList = Array.isArray(internalRes)
-          ? internalRes
-          : internalRes?.data && Array.isArray(internalRes.data)
-          ? internalRes.data
-          : [];
-
-        if (internalList.length > 0) {
-          const existingEmails = new Set(list.map((c: any) => (c.email || c.officialEmail || '').toLowerCase().trim()).filter(Boolean));
-          const existingCodes = new Set(list.map((c: any) => String(c.employeeId || c.employeeCode || c.empCode || '').toLowerCase().trim()).filter(Boolean));
-
-          const mappedInternal = internalList
-            .filter((emp: any) => {
-              const email = (emp.user?.email || emp.email || '').toLowerCase().trim();
-              const code = String(emp.employeeCode || emp.id || '').toLowerCase().trim();
-              return (!email || !existingEmails.has(email)) && (!code || !existingCodes.has(code));
-            })
-            .map((emp: any) => ({
-              id: emp.id,
-              name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || 'Employee',
-              email: emp.user?.email || emp.email || '',
-              phone: emp.phone || emp.mobileNumber || '',
-              department: emp.department?.name || (typeof emp.department === 'string' ? emp.department : 'General'),
-              designation: emp.designation?.title || (typeof emp.designation === 'string' ? emp.designation : 'Staff'),
-              role: emp.user?.role || emp.role || 'EMPLOYEE',
-              employmentType: emp.employmentType || 'FULL_TIME',
-              gender: emp.gender || 'MALE',
-              status: emp.status || 'ACTIVE',
-              employeeId: emp.employeeCode || emp.id,
-              joiningDate: emp.dateOfJoining || emp.createdAt,
-              manager: emp.manager ? `${emp.manager.firstName || ''} ${emp.manager.lastName || ''}`.trim() : '-',
-              salary: emp.salaryStructure?.netSalary ? String(emp.salaryStructure.netSalary) : '-',
-              teamId: emp.teamId || emp.team?.id,
-              teamName: emp.team?.name,
-              isTeamLead: emp.isTeamLead || false,
-              raw: emp,
-            }));
-
-          list = [...list, ...mappedInternal];
-        }
-      } catch (dbErr) {
-        console.warn('Internal DB employee fetch error:', dbErr);
-      }
+      const list: EmployeeRecord[] = internalList.map((emp: any) => ({
+        id: emp.id,
+        name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || 'Employee',
+        email: emp.user?.email || emp.email || '',
+        mobile: emp.mobileNumber || emp.phone || '',
+        department: emp.department?.name || (typeof emp.department === 'string' ? emp.department : 'General'),
+        designation: emp.designation?.title || (typeof emp.designation === 'string' ? emp.designation : 'Staff'),
+        role: emp.user?.role || emp.role || 'EMPLOYEE',
+        employmentType: emp.employmentType || 'FULL_TIME',
+        gender: emp.gender || 'MALE',
+        status: emp.status || 'ACTIVE',
+        isActive: emp.status === 'ACTIVE',
+        employeeId: emp.employeeCode || emp.id,
+        joiningDate: emp.joiningDate || emp.dateOfJoining || emp.createdAt,
+        dateOfBirth: emp.dateOfBirth || '',
+        reportingManager: emp.manager ? `${emp.manager.firstName || ''} ${emp.manager.lastName || ''}`.trim() : '',
+        teamId: emp.teamId || emp.team?.id || '',
+        teamName: emp.team?.name || '',
+        baseSalary: emp.salaryStructure?.basicSalary || 0,
+        bankName: emp.bankName || '',
+        bankAccountNumber: emp.bankAccountNo || '',
+        bankIfsc: emp.ifscCode || '',
+        address: emp.address || '',
+        emergencyContactName: emp.emergencyContactName || '',
+        emergencyContactPhone: emp.emergencyPhone || '',
+        documents: emp.documents || [],
+        raw: emp,
+      }));
 
       setEmployees(list);
-      if (teamList.length > 0) setTeams(teamList);
       setLastUpdated(new Date());
     } catch (err: any) {
-      console.error('Failed to fetch employee master:', err);
-      setError(err.message || 'Failed to fetch employee master data.');
+      console.error('Failed to fetch employees:', err);
+      setError(err.message || 'Failed to fetch employee data.');
       setEmployees([]);
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleSaveToken = (token: string) => {
-    const cleanToken = token.trim();
-    setCustomToken(cleanToken);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('adyapan_crm_bearer_token', cleanToken);
-    }
-    setShowTokenModal(false);
-    fetchEmployees(cleanToken);
   };
 
   // Open Create Modal
@@ -324,43 +233,25 @@ export function EmployeeMaster() {
     setIsFormModalOpen(true);
   };
 
-  // Fetch full employee details with uploads from CRM
+  // Fetch full employee details from internal API
   const fetchEmployeeDetails = async (emp: EmployeeRecord) => {
     setSelectedEmployee(emp); // Show immediately with available data
-    
-    const tokenToUse =
-      customToken ||
-      (typeof window !== 'undefined'
-        ? localStorage.getItem('adyapan_crm_bearer_token') ||
-          localStorage.getItem('adyapan_access_token') ||
-          localStorage.getItem('token') ||
-          ''
-        : '');
-
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    };
-
-    if (tokenToUse) {
-      headers['Authorization'] = tokenToUse.startsWith('Bearer ')
-        ? tokenToUse
-        : `Bearer ${tokenToUse}`;
-    }
 
     try {
       const empId = emp.id || emp._id || '';
       if (!empId) return;
 
-      const endpoint = `/api/crm/employees?id=${encodeURIComponent(String(empId))}&uploads=true${tokenToUse ? `&token=${encodeURIComponent(tokenToUse)}` : ''}`;
-      const res = await fetch(endpoint, { method: 'GET', headers });
-      const json = await res.json().catch(() => null);
+      const res = await apiRequest(`/employees/${empId}`);
+      const detail = res?.data || res;
 
-      if (res.ok && json) {
-        const detail = json.employee || json.data || json;
-        if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
-          setSelectedEmployee({ ...emp, ...detail });
-        }
+      if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+        setSelectedEmployee({
+          ...emp,
+          ...detail,
+          name: `${detail.firstName || ''} ${detail.lastName || ''}`.trim() || emp.name,
+          email: detail.user?.email || emp.email,
+          documents: detail.documents || [],
+        });
       }
     } catch (err) {
       console.warn('Failed to fetch employee details:', err);
@@ -423,26 +314,6 @@ export function EmployeeMaster() {
     setFormSubmitting(true);
     setFormError(null);
 
-    const tokenToUse =
-      customToken ||
-      (typeof window !== 'undefined'
-        ? localStorage.getItem('adyapan_crm_bearer_token') ||
-          localStorage.getItem('adyapan_access_token') ||
-          localStorage.getItem('token') ||
-          ''
-        : '');
-
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    };
-
-    if (tokenToUse) {
-      headers['Authorization'] = tokenToUse.startsWith('Bearer ')
-        ? tokenToUse
-        : `Bearer ${tokenToUse}`;
-    }
-
     try {
       const validRoles = [
         'EMPLOYEE',
@@ -461,109 +332,45 @@ export function EmployeeMaster() {
       const roleUpper = String(formData.role || '').trim().toUpperCase();
       const sanitizedRole = validRoles.includes(roleUpper) ? roleUpper : 'EMPLOYEE';
 
+      const names = formData.name.trim().split(' ');
       const payload: any = {
-        name: formData.name.trim(),
+        firstName: names[0] || formData.name.trim(),
+        lastName: names.slice(1).join(' ') || '',
         email: formData.email.trim(),
-        mobile: formData.mobile.trim(),
-        employeeId: formData.employeeId.trim(),
-        designation: formData.designation.trim(),
+        mobileNumber: formData.mobile.trim(),
+        employeeCode: formData.employeeId.trim(),
         role: sanitizedRole,
         department: formData.department.trim(),
-        teamName: formData.teamName.trim(),
-        teamId: formData.teamId || undefined,
-        reportingManager: formData.reportingManager.trim(),
-        isActive: Boolean(formData.isActive),
+        designation: formData.designation.trim(),
         status: formData.isActive ? 'ACTIVE' : 'INACTIVE',
         employmentType: sanitizeEmploymentType(formData.employmentType),
         gender: sanitizeGender(formData.gender),
-        dateOfBirth: formData.dateOfBirth ? new Date(formData.dateOfBirth).toISOString() : undefined,
         joiningDate: formData.joiningDate ? new Date(formData.joiningDate).toISOString() : undefined,
-        onboardingDate: formData.onboardingDate ? new Date(formData.onboardingDate).toISOString() : undefined,
+        dateOfBirth: formData.dateOfBirth ? new Date(formData.dateOfBirth).toISOString() : undefined,
+        bankName: formData.bankName.trim() || undefined,
+        bankAccountNo: formData.bankAccountNumber.trim() || undefined,
+        ifscCode: formData.bankIfsc.trim() || undefined,
+        address: formData.address.trim() || undefined,
+        emergencyContact: formData.emergencyContactName.trim() || undefined,
+        emergencyPhone: formData.emergencyContactPhone.trim() || undefined,
         baseSalary: Number(formData.baseSalary) || 0,
-        bankName: formData.bankName.trim(),
-        bankAccountNumber: formData.bankAccountNumber.trim(),
-        bankIfsc: formData.bankIfsc.trim(),
-        panNumber: formData.panNumber.trim(),
-        uanNumber: formData.uanNumber.trim(),
-        address: formData.address.trim(),
-        emergencyContactName: formData.emergencyContactName.trim(),
-        emergencyContactPhone: formData.emergencyContactPhone.trim(),
-        notes: formData.notes.trim(),
       };
 
-      // Always supply password to satisfy CRM API validation
-      payload.password = formData.password?.trim() || 'Adyapan@123';
-
-      let endpoint = `/api/crm/employees${tokenToUse ? `?token=${encodeURIComponent(tokenToUse)}` : ''}`;
-      let method = 'POST';
-
-      if (formMode === 'edit') {
-        method = 'PUT';
-        const separator = endpoint.includes('?') ? '&' : '?';
-        endpoint += `${separator}id=${encodeURIComponent(formData.id)}`;
-        payload.id = formData.id;
+      if (formData.password?.trim()) {
+        payload.password = formData.password.trim();
       }
 
-      let isSuccess = false;
-      let result: any = null;
-
-      try {
-        const res = await fetch(endpoint, {
-          method,
-          headers,
+      if (formMode === 'create') {
+        if (!payload.password) payload.password = 'Adyapan@123';
+        await apiRequest('/employees', {
+          method: 'POST',
           body: JSON.stringify(payload),
         });
-
-        result = await res.json().catch(() => null);
-
-        if (res.ok) {
-          isSuccess = true;
-        } else {
-          console.warn('CRM API responded with error:', result);
-        }
-      } catch (crmErr) {
-        console.warn('CRM API submission failed, using internal database fallback:', crmErr);
-      }
-
-      // If CRM failed (e.g. role is invalid or unauthorized), fallback to internal HRMS PostgreSQL database
-      if (!isSuccess) {
-        try {
-          const names = formData.name.trim().split(' ');
-          const internalBody: any = {
-            firstName: names[0] || formData.name.trim(),
-            lastName: names.slice(1).join(' ') || '',
-            email: formData.email.trim(),
-            phone: formData.mobile.trim(),
-            employeeCode: formData.employeeId.trim(),
-            role: sanitizedRole,
-            department: formData.department.trim(),
-            designation: formData.designation.trim(),
-            status: formData.isActive ? 'ACTIVE' : 'INACTIVE',
-            employmentType: sanitizeEmploymentType(formData.employmentType),
-            gender: sanitizeGender(formData.gender),
-            dateOfJoining: formData.joiningDate ? new Date(formData.joiningDate).toISOString() : undefined,
-          };
-
-          if (formMode === 'create') {
-            await apiRequest('/employees', {
-              method: 'POST',
-              body: JSON.stringify(internalBody),
-            });
-          } else if (formData.id) {
-            await apiRequest(`/employees/${formData.id}`, {
-              method: 'PATCH',
-              body: JSON.stringify(internalBody),
-            }).catch(() => {
-              return apiRequest('/employees', {
-                method: 'POST',
-                body: JSON.stringify(internalBody),
-              });
-            });
-          }
-          isSuccess = true;
-        } catch (dbErr: any) {
-          throw new Error(result?.message || dbErr?.message || `Failed to ${formMode === 'create' ? 'create' : 'update'} employee`);
-        }
+      } else {
+        await apiRequest(`/employees/${formData.id}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload),
+        });
       }
 
       setIsFormModalOpen(false);
@@ -577,7 +384,7 @@ export function EmployeeMaster() {
       // Refresh list
       fetchEmployees();
       if (selectedEmployee && selectedEmployee.id === formData.id) {
-        setSelectedEmployee({ ...selectedEmployee, ...payload });
+        setSelectedEmployee({ ...selectedEmployee, ...payload, name: formData.name });
       }
     } catch (err: any) {
       console.error('Form submission error:', err);
@@ -592,44 +399,9 @@ export function EmployeeMaster() {
     if (!deleteTarget) return;
     setDeleting(true);
 
-    const tokenToUse =
-      customToken ||
-      (typeof window !== 'undefined'
-        ? localStorage.getItem('adyapan_crm_bearer_token') ||
-          localStorage.getItem('adyapan_access_token') ||
-          localStorage.getItem('token') ||
-          ''
-        : '');
-
-    const headers: Record<string, string> = {
-      Accept: 'application/json',
-      'Content-Type': 'application/json',
-    };
-
-    if (tokenToUse) {
-      headers['Authorization'] = tokenToUse.startsWith('Bearer ')
-        ? tokenToUse
-        : `Bearer ${tokenToUse}`;
-    }
-
     try {
       const targetId = deleteTarget.id || deleteTarget._id || '';
-      const endpoint = `/api/crm/employees?id=${encodeURIComponent(String(targetId))}${tokenToUse ? `&token=${encodeURIComponent(tokenToUse)}` : ''}`;
-
-      let isDeleted = false;
-      try {
-        const res = await fetch(endpoint, {
-          method: 'DELETE',
-          headers,
-        });
-        if (res.ok) isDeleted = true;
-      } catch (crmErr) {
-        console.warn('CRM delete failed, deleting from internal DB:', crmErr);
-      }
-
-      if (!isDeleted && targetId) {
-        await apiRequest(`/employees/${targetId}`, { method: 'DELETE' }).catch(() => {});
-      }
+      await apiRequest(`/employees/${targetId}`, { method: 'DELETE' });
 
       setEmployees((prev) => prev.filter((e) => (e.id || e._id) !== targetId));
       if (selectedEmployee && (selectedEmployee.id || selectedEmployee._id) === targetId) {
@@ -1000,13 +772,6 @@ export function EmployeeMaster() {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setShowTokenModal(true)}
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-semibold flex items-center gap-1.5 transition cursor-pointer shadow-sm"
-            >
-              <Key className="w-3.5 h-3.5" />
-              <span>Configure Auth Key</span>
-            </button>
             <button
               onClick={() => fetchEmployees()}
               className="px-3.5 py-2 bg-white hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-xl text-xs font-semibold transition cursor-pointer"
@@ -1668,68 +1433,7 @@ export function EmployeeMaster() {
           </div>
         </div>
       )}
-      {/* Auth Key Modal */}
-      {showTokenModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center">
-                  <Key className="w-4 h-4" />
-                </div>
-                <h3 className="font-bold text-slate-900 text-sm">Configure Master Key</h3>
-              </div>
-              <button onClick={() => setShowTokenModal(false)} className="text-slate-400 hover:text-slate-600 cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <p className="text-xs text-slate-600 mb-4">
-              Provide your API authentication session key to synchronize with the Master Employee Directory.
-            </p>
-
-            <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                const input = (e.currentTarget.elements.namedItem('token') as HTMLInputElement).value;
-                handleSaveToken(input);
-              }}
-              className="space-y-4"
-            >
-              <div>
-                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">
-                  Bearer Token
-                </label>
-                <textarea
-                  name="token"
-                  defaultValue={customToken}
-                  rows={3}
-                  placeholder="Paste JWT / Bearer token here..."
-                  className="w-full p-3 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs font-mono text-slate-800"
-                  required
-                />
-              </div>
-
-              <div className="flex items-center justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowTokenModal(false)}
-                  className="px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-md shadow-indigo-600/20 cursor-pointer"
-                >
-                  <Save className="w-4 h-4" />
-                  <span>Save & Connect</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {/* End of component */}
     </div>
   );
 }

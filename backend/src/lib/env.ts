@@ -12,4 +12,9 @@ export const env = {
   CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:3000',
   COOKIE_SECRET: process.env.COOKIE_SECRET || 'change-me-cookie-secret',
   IS_PRODUCTION: (process.env.NODE_ENV || 'development') === 'production',
+
+  // CRM Sync Configuration
+  CRM_BACKEND_URL: process.env.CRM_BACKEND_URL || '',
+  CRM_SYNC_API_KEY: process.env.CRM_SYNC_API_KEY || '',
+  CRM_WEBHOOK_SECRET: process.env.CRM_WEBHOOK_SECRET || '',
 };

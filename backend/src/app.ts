@@ -33,6 +33,7 @@ import aravindRoutes from './routes/specialists/aravind.routes';
 import nitishaRoutes from './routes/specialists/nitisha.routes';
 import veenaRoutes from './routes/specialists/veena.routes';
 import aiRoutes from './routes/ai/ai.routes';
+import syncRoutes from './routes/sync/sync.routes';
 import { authenticate } from './middleware/auth';
 
 const app = express();
@@ -77,7 +78,15 @@ const globalLimiter = rateLimit({
 });
 app.use(globalLimiter);
 
-app.use(express.json({ limit: '2mb' }));
+app.use(express.json({
+  limit: '2mb',
+  verify: (req: any, _res, buf) => {
+    // Store raw body for webhook signature verification
+    if (req.url && req.url.includes('/sync/employee')) {
+      req.rawBody = buf.toString('utf8');
+    }
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
 // CSRF protection for state-changing requests
@@ -116,6 +125,7 @@ apiRouter.use('/nitisha', nitishaRoutes);
 apiRouter.use('/veena', veenaRoutes);
 apiRouter.use('/veena-portal', veenaRoutes);
 apiRouter.use('/ai', aiRoutes);
+apiRouter.use('/sync', syncRoutes);
 
 app.use('/api', apiRouter);
 app.use('/api/v1', apiRouter);

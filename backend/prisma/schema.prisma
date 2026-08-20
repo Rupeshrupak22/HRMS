@@ -76,6 +76,7 @@ model Employee {
   id                 String   @id @default(uuid())
   employeeCode       String   @unique
   userId             String   @unique
+  crmExternalId      String?  @unique
   firstName          String
   lastName           String
   profilePhoto       String?
@@ -96,12 +97,16 @@ model Employee {
   probationDays      Int      @default(90)
   workLocation       String   @default("Headquarters")
   workMode           String   @default("In-Office")
+  weekOff            String?
+  specialization     String?
   status             String   @default("PROBATION")
 
   bankAccountNo      String?
   ifscCode           String?
   bankName           String?
   accountHolder      String?
+  panNumber          String?
+  uanNumber          String?
 
   emergencyContactName String?
   emergencyRelation    String?
@@ -937,4 +942,28 @@ model OverallReport {
   status             String   @default("SUBMITTED")
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
+}
+
+// ------------------------------------------------------
+// CRM Sync Models
+// ------------------------------------------------------
+
+model CrmSyncLog {
+  id            String   @id @default(uuid())
+  syncType      String   // "WEBHOOK" | "FULL_SYNC" | "INCREMENTAL_SYNC"
+  event         String?  // "employee.created" | "employee.updated" | "employee.deactivated"
+  crmEmployeeId String?
+  status        String   @default("SUCCESS") // "SUCCESS" | "FAILED" | "SKIPPED"
+  errorMessage  String?
+  payload       String?  // JSON string of the received data (for debugging)
+  processedAt   DateTime @default(now())
+}
+
+model CrmSyncState {
+  id              String   @id @default(uuid())
+  lastSyncAt      DateTime @default(now())
+  lastSyncStatus  String   @default("SUCCESS")
+  totalSynced     Int      @default(0)
+  errorCount      Int      @default(0)
+  updatedAt       DateTime @updatedAt
 }

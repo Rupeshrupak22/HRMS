@@ -22,6 +22,12 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     return;
   }
 
+  // Skip webhook and cron sync endpoints (authenticated via HMAC/API key)
+  if (req.path.includes('/sync/employee') || req.path.includes('/sync/cron')) {
+    next();
+    return;
+  }
+
   // Origin validation — check that request comes from allowed origin
   const origin = req.headers.origin || req.headers.referer;
   const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
