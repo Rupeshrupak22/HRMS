@@ -1175,14 +1175,20 @@ export default function EmployeePerformancePage() {
                           </select>
                         </div>
                       </div>
-                      <input
-                        type="text"
+                      <select
                         required
-                        placeholder={`e.g. 5 calls, best, good for Day ${activeFormDay}`}
                         value={form.dailyPerformance}
                         onChange={(e) => setForm({ ...form, dailyPerformance: e.target.value })}
                         className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      />
+                      >
+                        <option value="">Select Performance</option>
+                        <option value="Excellent">Excellent</option>
+                        <option value="Good">Good</option>
+                        <option value="Above Average">Above Average</option>
+                        <option value="Average">Average</option>
+                        <option value="Below Average">Below Average</option>
+                        <option value="Bad">Bad</option>
+                      </select>
                     </div>
 
                     <div className="bg-orange-50/50 p-2.5 rounded-xl border border-orange-200">
@@ -1205,28 +1211,40 @@ export default function EmployeePerformancePage() {
                           </select>
                         </div>
                       </div>
-                      <input
-                        type="text"
+                      <select
                         required
-                        placeholder={`e.g. 25 calls for ${activeFormWeek}`}
                         value={form.weeklyPerformance}
                         onChange={(e) => setForm({ ...form, weeklyPerformance: e.target.value })}
                         className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      />
+                      >
+                        <option value="">Select Performance</option>
+                        <option value="Excellent">Excellent</option>
+                        <option value="Good">Good</option>
+                        <option value="Above Average">Above Average</option>
+                        <option value="Average">Average</option>
+                        <option value="Below Average">Below Average</option>
+                        <option value="Bad">Bad</option>
+                      </select>
                     </div>
                   </>
                 )}
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 mb-1">Monthly Performance *</label>
-                  <input
-                    type="text"
+                  <select
                     required
-                    placeholder="e.g. 100 calls"
                     value={form.monthlyPerformance}
                     onChange={(e) => setForm({ ...form, monthlyPerformance: e.target.value })}
                     className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
+                  >
+                    <option value="">Select Performance</option>
+                    <option value="Excellent">Excellent</option>
+                    <option value="Good">Good</option>
+                    <option value="Above Average">Above Average</option>
+                    <option value="Average">Average</option>
+                    <option value="Below Average">Below Average</option>
+                    <option value="Bad">Bad</option>
+                  </select>
                 </div>
 
                 {/* Daily Revenue with Day tag */}
