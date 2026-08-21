@@ -79,6 +79,8 @@ export default function AttendancePage() {
       if (!empMap.has(key)) {
         empMap.set(key, {
           empId: key,
+          employeeId: log.employeeId || log.id,
+          id: log.employeeId || log.id,
           empName: log.empName,
           role: log.role && log.role !== '-' ? log.role : '-',
           department: log.department && log.department !== '-' ? log.department : '-',
@@ -733,7 +735,7 @@ export default function AttendancePage() {
           });
         }
       }
-      const targetEmpId = editEmployee.isNew ? editForm.empId : (editForm.empId || editEmployee.empId);
+      const targetEmpId = editEmployee.isNew ? editForm.empId : (editEmployee.employeeId || editEmployee.id || editForm.empId || editEmployee.empId);
       if (!targetEmpId) {
         alert("Employee ID is required");
         setSaving(false);
@@ -743,7 +745,8 @@ export default function AttendancePage() {
       await apiRequest('/attendance/monthly-update', {
         method: 'PUT',
         body: JSON.stringify({
-          employeeCode: targetEmpId,
+          employeeId: targetEmpId,
+          employeeCode: editForm.empId || editEmployee.empId,
           employeeName: editForm.empName,
           role: editForm.role,
           department: editForm.department,
@@ -766,14 +769,19 @@ export default function AttendancePage() {
 
   const handleConfirmDelete = async () => {
     if (!deleteEmployee) return;
-    const targetEmpId = deleteEmployee.empId || deleteEmployee.id;
+    const targetEmpId = deleteEmployee.employeeId || deleteEmployee.id || deleteEmployee.empId;
     setDeleting(true);
     try {
       await apiRequest('/attendance/monthly-delete', {
         method: 'DELETE',
-        body: JSON.stringify({ employeeId: targetEmpId, month: selectedMonth })
+        body: JSON.stringify({
+          employeeId: targetEmpId,
+          employeeCode: deleteEmployee.empId,
+          employeeName: deleteEmployee.empName,
+          month: selectedMonth
+        })
       });
-      setAllLogs(prev => prev.filter(l => l.empId !== targetEmpId && l.employeeId !== targetEmpId));
+      setAllLogs(prev => prev.filter(l => l.empId !== deleteEmployee.empId && l.employeeId !== targetEmpId));
       setDeleteEmployee(null);
       await fetchAttendanceData();
     } catch (err: any) {
