@@ -228,11 +228,29 @@ router.get('/my-logs', async (req: AuthRequest, res: Response, next) => {
 // GET /api/attendance/all-logs — admin view all employee attendance
 router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const { startDate, endDate, status } = req.query as any;
+    const { month, startDate, endDate, status } = req.query as any;
     const where: any = {};
 
-    if (startDate) where.date = { ...where.date, gte: new Date(startDate) };
-    if (endDate) where.date = { ...where.date, lte: new Date(endDate) };
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      const [yStr, mStr] = month.split('-');
+      const y = parseInt(yStr, 10);
+      const m = parseInt(mStr, 10);
+      const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
+      const end = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+      where.date = {
+        gte: new Date(start.getTime() - (12 * 60 * 60 * 1000)),
+        lte: new Date(end.getTime() + (12 * 60 * 60 * 1000)),
+      };
+    } else {
+      if (startDate) {
+        const s = new Date(startDate);
+        where.date = { ...where.date, gte: new Date(s.getTime() - (24 * 60 * 60 * 1000)) };
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        where.date = { ...where.date, lte: new Date(e.getTime() + (24 * 60 * 60 * 1000)) };
+      }
+    }
     if (status) where.status = status;
 
     const records = await prisma.attendanceRecord.findMany({
@@ -250,6 +268,14 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EM
         } catch {}
       }
 
+      // Convert UTC timestamp to IST calendar date (Asia/Kolkata +5:30)
+      const istMs = r.date.getTime() + (5.5 * 60 * 60 * 1000);
+      const istDate = new Date(istMs);
+      const year = istDate.getUTCFullYear();
+      const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(istDate.getUTCDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+
       return {
         id: r.id,
         employeeId: r.employeeId,
@@ -258,7 +284,7 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EM
         role: metadata.role || 'EMPLOYEE',
         department: metadata.department || '-',
         designation: metadata.designation || '-',
-        date: `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}-${String(r.date.getDate()).padStart(2, '0')}`,
+        date: dateStr,
         checkInTime: r.checkInTime ? r.checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
         checkOutTime: r.checkOutTime ? r.checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
         workHours: r.workHours,
@@ -298,14 +324,17 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE',
       if (record.date) {
         const parts = String(record.date).split('T')[0].split('-');
         if (parts.length === 3) {
-          dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10);
+          const d = parseInt(parts[2], 10);
+          // Store at UTC 12:00:00 to prevent timezone shifts
+          dateObj = new Date(Date.UTC(y, m - 1, d, 12, 0, 0, 0));
         } else {
           dateObj = new Date(record.date);
         }
       } else {
         dateObj = new Date();
       }
-      dateObj.setHours(0, 0, 0, 0);
 
       if (!minDateObj || dateObj < minDateObj) minDateObj = dateObj;
       if (!maxDateObj || dateObj > maxDateObj) maxDateObj = dateObj;
@@ -344,16 +373,23 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE',
     }
 
     let imported = 0;
-    if (insertPayload.length > 0 && minDateObj && maxDateObj) {
-      // 1. Delete existing records for touched employees in this date range
+    if (insertPayload.length > 0 && minDateObj) {
+      // Wipe the full month for touched employees so no ghost records remain
+      const y = minDateObj.getUTCFullYear();
+      const m = minDateObj.getUTCMonth();
+      const monthStart = new Date(Date.UTC(y, m, 1, 0, 0, 0, 0));
+      const monthEnd = new Date(Date.UTC(y, m + 1, 0, 23, 59, 59, 999));
+      const delStart = new Date(monthStart.getTime() - (24 * 60 * 60 * 1000));
+      const delEnd = new Date(monthEnd.getTime() + (24 * 60 * 60 * 1000));
+
       await prisma.attendanceRecord.deleteMany({
         where: {
           employeeId: { in: Array.from(touchedEmployees) },
-          date: { gte: minDateObj, lte: maxDateObj },
+          date: { gte: delStart, lte: delEnd },
         },
       }).catch(() => {});
 
-      // 2. Direct fast bulk insert
+      // Direct fast bulk insert
       const result = await prisma.attendanceRecord.createMany({
         data: insertPayload,
         skipDuplicates: true,

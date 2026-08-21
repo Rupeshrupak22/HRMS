@@ -48,10 +48,7 @@ export default function PavitraReportPage() {
   const fetchAttendanceData = async () => {
     setLoading(true);
     try {
-      const [year, month] = selectedMonth.split('-');
-      const startDate = new Date(parseInt(year, 10), parseInt(month, 10) - 1, 1).toISOString();
-      const endDate = new Date(parseInt(year, 10), parseInt(month, 10), 0, 23, 59, 59).toISOString();
-      const res = await apiRequest(`/attendance/all-logs?startDate=${startDate}&endDate=${endDate}`);
+      const res = await apiRequest(`/attendance/all-logs?month=${selectedMonth}`);
       let logs: any[] = [];
       if (Array.isArray(res)) {
         logs = res;

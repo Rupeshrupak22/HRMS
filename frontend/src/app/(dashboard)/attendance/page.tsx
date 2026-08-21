@@ -44,10 +44,7 @@ export default function AttendancePage() {
   const fetchAttendanceData = async () => {
     setLoading(true);
     try {
-      const [year, month] = selectedMonth.split('-');
-      const startDate = new Date(parseInt(year, 10), parseInt(month, 10) - 1, 1).toISOString();
-      const endDate = new Date(parseInt(year, 10), parseInt(month, 10), 0, 23, 59, 59).toISOString();
-      const res = await apiRequest(`/attendance/all-logs?startDate=${startDate}&endDate=${endDate}`);
+      const res = await apiRequest(`/attendance/all-logs?month=${selectedMonth}`);
       let logs: any[] = [];
       if (Array.isArray(res)) {
         logs = res;
@@ -135,28 +132,32 @@ export default function AttendancePage() {
       }
 
       if (log.date) {
-        const day = parseInt(log.date.split('-')[2], 10);
-        if (!isNaN(day)) {
-          emp.days[day] = log.status;
-          if (log.status === 'PRESENT') emp.presentCount++;
-          else if (log.status === 'ABSENT') emp.absentCount++;
-          else if (log.status === 'EARLY_LOGOUT') emp.earlyLogoutCount++;
-          else if (log.status === 'LATE_LOGIN') emp.lateLoginCount++;
-          else if (log.status === 'SICK_LEAVE') emp.sickLeaveCount++;
-          else if (log.status === 'EMERGENCY_LEAVE') emp.emergencyLeaveCount++;
-          else if (log.status === 'PAID_LEAVE') emp.paidLeaveCount++;
-          else if (log.status === 'LONG_LEAVE') emp.longLeaveCount++;
-          else if (log.status === 'CASUAL_LEAVE') emp.casualLeaveCount++;
-          else if (log.status === 'NATIONAL_HOLIDAY') emp.nationalHolidayCount++;
-          else if (log.status === 'FESTIVE_HOLIDAY') emp.festiveHolidayCount++;
-          else if (log.status === 'HOLIDAY') emp.holidayCount++;
-          else if (log.status === 'TRAINING') emp.trainingCount++;
-          else if (log.status === 'WEEKLY_OFF') emp.wo++;
-          else if (log.status === 'OVERTIME') emp.ot++;
-          else if (log.status === 'WORK_FROM_HOME') emp.wfh++;
-          else if (log.status === 'HALF_DAY') emp.hd++;
-          else if (log.status === 'LOP') emp.lopCount++;
-          else if (log.status === 'PERSONAL_LEAVE') emp.personalLeaveCount++;
+        const [logYear, logMonth, logDay] = String(log.date).split('T')[0].split('-');
+        // Strictly match ONLY records belonging to the selected month!
+        if (logYear === yearStr && logMonth === monthStr) {
+          const day = parseInt(logDay, 10);
+          if (!isNaN(day)) {
+            emp.days[day] = log.status;
+            if (log.status === 'PRESENT') emp.presentCount++;
+            else if (log.status === 'ABSENT') emp.absentCount++;
+            else if (log.status === 'EARLY_LOGOUT') emp.earlyLogoutCount++;
+            else if (log.status === 'LATE_LOGIN') emp.lateLoginCount++;
+            else if (log.status === 'SICK_LEAVE') emp.sickLeaveCount++;
+            else if (log.status === 'EMERGENCY_LEAVE') emp.emergencyLeaveCount++;
+            else if (log.status === 'PAID_LEAVE') emp.paidLeaveCount++;
+            else if (log.status === 'LONG_LEAVE') emp.longLeaveCount++;
+            else if (log.status === 'CASUAL_LEAVE') emp.casualLeaveCount++;
+            else if (log.status === 'NATIONAL_HOLIDAY') emp.nationalHolidayCount++;
+            else if (log.status === 'FESTIVE_HOLIDAY') emp.festiveHolidayCount++;
+            else if (log.status === 'HOLIDAY') emp.holidayCount++;
+            else if (log.status === 'TRAINING') emp.trainingCount++;
+            else if (log.status === 'WEEKLY_OFF') emp.wo++;
+            else if (log.status === 'OVERTIME') emp.ot++;
+            else if (log.status === 'WORK_FROM_HOME') emp.wfh++;
+            else if (log.status === 'HALF_DAY') emp.hd++;
+            else if (log.status === 'LOP') emp.lopCount++;
+            else if (log.status === 'PERSONAL_LEAVE') emp.personalLeaveCount++;
+          }
         }
       }
     }
@@ -404,9 +405,26 @@ export default function AttendancePage() {
               
               const dayKey = keys.find(k => {
                 const cleanK = k.trim().replace(/[\u00a0\r\n\t]/g, ' ');
+                // Exact match: "1", "01", "21", "31"
                 if (cleanK === dayStr || cleanK === paddedDay) return true;
-                const m = cleanK.match(/^(?:day\s*)?0?([1-9]|[12]\d|3[01])(?:\b|[^\d])/i);
-                if (m && parseInt(m[1], 10) === i) return true;
+
+                // Exclude any summary, totals, or remarks column headers
+                if (/total|sum|count|leave|remark|status|reason|approved|mail|payable|salary/i.test(cleanK)) {
+                  return false;
+                }
+
+                // Match "Day 1", "Day 01", "D1", "D01"
+                const dayMatch = cleanK.match(/^(?:day|d)\s*0?([1-9]|[12]\d|3[01])$/i);
+                if (dayMatch && parseInt(dayMatch[1], 10) === i) return true;
+
+                // Match date patterns like "21-Aug", "21/08", "21-08-2026", "21 Aug"
+                const dateMatch = cleanK.match(/^0?([1-9]|[12]\d|3[01])(?:[-/\s](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|[0-9]{1,4}))+/i);
+                if (dateMatch && parseInt(dateMatch[1], 10) === i) return true;
+
+                // Match ISO date "2026-08-21"
+                const isoMatch = cleanK.match(/^\d{4}-\d{2}-0?([1-9]|[12]\d|3[01])$/);
+                if (isoMatch && parseInt(isoMatch[1], 10) === i) return true;
+
                 return false;
               });
 

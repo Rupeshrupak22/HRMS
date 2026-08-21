@@ -14,6 +14,17 @@ async function check() {
     return;
   }
 
+  console.log('Wiping all August 2026 records from AttendanceRecord for clean fresh import...');
+  const wipeRes = await prisma.attendanceRecord.deleteMany({
+    where: {
+      date: {
+        gte: new Date(Date.UTC(2026, 6, 31, 12, 0, 0, 0)), // 2026-07-31 12:00 UTC (start of Aug in IST)
+        lte: new Date(Date.UTC(2026, 7, 31, 23, 59, 59, 999)),
+      },
+    },
+  });
+  console.log('Deleted August attendance records count:', wipeRes.count);
+
   console.log('Dropping foreign key constraints on AttendanceRecord...');
   try {
     await prisma.$executeRawUnsafe(`
