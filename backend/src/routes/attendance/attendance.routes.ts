@@ -528,7 +528,7 @@ function parseTimeString(timeStr: string, baseDate: Date): Date | null {
 // PUT /api/attendance/monthly-update — update monthly attendance records from month view edit
 router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const { employeeId, employeeCode, employeeName, role, department, designation, month, records } = req.body;
+    const { employeeId, employeeCode, originalEmployeeCode, employeeName, role, department, designation, month, records } = req.body;
     // month format: "2026-08"
     if ((!employeeCode && !employeeId) || !month || !records || !Array.isArray(records)) {
       res.status(400).json({ success: false, message: 'employeeCode/employeeId, month, and records are required' });
@@ -536,11 +536,13 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
     }
 
     const empIdentifier = String(employeeId || employeeCode || '').trim();
+    const origCode = String(originalEmployeeCode || '').trim();
 
-    // 1. Find employee by ID, Code, CRM external ID, or Name
+    // 1. Find employee by original code, ID, Code, CRM external ID, or Name
     let employee = await prisma.employee.findFirst({
       where: {
         OR: [
+          ...(origCode ? [{ employeeCode: origCode }, { employeeCode: origCode.toUpperCase() }, { employeeCode: origCode.toLowerCase() }, { crmExternalId: origCode }] : []),
           { id: empIdentifier },
           { employeeCode: empIdentifier },
           { employeeCode: empIdentifier.toUpperCase() },
@@ -588,9 +590,12 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
       });
     }
 
-    // Update Employee details if provided
+    // Update Employee details if provided (including employeeCode)
     if (employee) {
       const updateData: any = {};
+      if (employeeCode && employeeCode.trim() !== '' && employeeCode !== employee.employeeCode) {
+        updateData.employeeCode = employeeCode.trim();
+      }
       if (employeeName) {
         const names = String(employeeName).trim().split(' ');
         updateData.firstName = names[0] || employee.firstName;

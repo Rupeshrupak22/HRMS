@@ -716,6 +716,8 @@ export default function AttendancePage() {
         department: editForm.department,
         designation: editForm.designation,
         role: editForm.role,
+        empId: editForm.empId || editEmployee.empId,
+        empName: editForm.empName || editEmployee.empName,
       };
 
       const records = [];
@@ -735,7 +737,7 @@ export default function AttendancePage() {
           });
         }
       }
-      const targetEmpId = editEmployee.isNew ? editForm.empId : (editEmployee.employeeId || editEmployee.id || editForm.empId || editEmployee.empId);
+      const targetEmpId = editEmployee.isNew ? editForm.empId : (editEmployee.employeeId || editEmployee.id || editEmployee.empId || editForm.empId);
       if (!targetEmpId) {
         alert("Employee ID is required");
         setSaving(false);
@@ -746,8 +748,9 @@ export default function AttendancePage() {
         method: 'PUT',
         body: JSON.stringify({
           employeeId: targetEmpId,
-          employeeCode: editForm.empId || editEmployee.empId,
-          employeeName: editForm.empName,
+          originalEmployeeCode: editEmployee.empId,
+          employeeCode: (editForm.empId || editEmployee.empId || '').trim(),
+          employeeName: (editForm.empName || editEmployee.empName || '').trim(),
           role: editForm.role,
           department: editForm.department,
           designation: editForm.designation,
