@@ -41,9 +41,7 @@ export default function HRManagerReportPage() {
   const fetchReports = async () => {
     setLoading(true);
     try {
-      const res = await apiRequest('/overall-report').catch(() =>
-        fetch('http://localhost:4000/api/v1/overall-report').then((r) => r.json())
-      );
+      const res = await apiRequest('/overall-report');
       const list = Array.isArray(res) ? res : res?.data && Array.isArray(res.data) ? res.data : [];
       setReports(list);
     } catch {

@@ -44,10 +44,10 @@ export default function OverallReportPage() {
           veenaApi.getOnboarding().catch(() => []),
           veenaApi.getDropouts().catch(() => []),
           veenaApi.getDailyReports().catch(() => []),
-          apiRequest('/payroll-public').catch(() => fetch('http://localhost:4000/api/v1/payroll-public').then(r => r.json()).catch(() => [])),
-          apiRequest('/reports/daily').catch(() => fetch('http://localhost:4000/api/v1/reports/daily').then(r => r.json()).catch(() => [])),
-          apiRequest('/attendance').catch(() => fetch('http://localhost:4000/api/v1/attendance').then(r => r.json()).catch(() => [])),
-          apiRequest('/leave').catch(() => fetch('http://localhost:4000/api/v1/leave').then(r => r.json()).catch(() => [])),
+          apiRequest('/payroll-public').catch(() => []),
+          apiRequest('/reports/daily').catch(() => []),
+          apiRequest('/attendance').catch(() => []),
+          apiRequest('/leave').catch(() => []),
         ]);
         setRawData({
           ret, res, ex, fnf, comp, intv, aDr, perf, disc, rel, nDr, onb, drop, vDr,
@@ -64,7 +64,6 @@ export default function OverallReportPage() {
 
   useEffect(() => {
     apiRequest('/overall-report')
-      .catch(() => fetch('http://localhost:4000/api/v1/overall-report').then(res => res.json()))
       .then(data => setSubmittedReports(Array.isArray(data) ? data : []))
       .catch(() => setSubmittedReports([]));
   }, []);
@@ -105,8 +104,18 @@ export default function OverallReportPage() {
   const pavitraDaily = Math.max(pavitraReportsList.length, fd(rd.att).length > 0 || fd(rd.lvs).length > 0 ? 1 : 0);
 
   // Parse Pavitra metrics from submitted daily reports
-  let pavitraPresent = fd(rd.att).filter((a: any) => a.status === 'PRESENT' || a.status === 'LATE').length;
-  let pavitraLate = fd(rd.att).filter((a: any) => a.status === 'LATE').length;
+  let pavitraPresent = fd(rd.att).filter((a: any) => {
+    const s = String(a.status || '').toUpperCase().trim();
+    return s === 'PRESENT' || s === 'P' || s === 'PR';
+  }).length;
+  let pavitraLate = fd(rd.att).filter((a: any) => {
+    const s = String(a.status || '').toUpperCase().trim();
+    return s === 'LATE' || s === 'LATE_LOGIN' || s === 'LL';
+  }).length;
+  let pavitraLOP = fd(rd.att).filter((a: any) => {
+    const s = String(a.status || '').toUpperCase().trim();
+    return s === 'LOP' || s === 'LOSS OF PAY' || s === 'LOSS_OF_PAY';
+  }).length;
   let pavitraApprovedLeaves = fd(rd.lvs).filter((l: any) => l.status === 'APPROVED').length;
   let pavitraPendingLeaves = fd(rd.lvs).filter((l: any) => l.status === 'PENDING').length;
 
@@ -115,16 +124,19 @@ export default function OverallReportPage() {
     const text = `${latestPavitra.keyUpdates || ''} ${latestPavitra.tasksCompleted || ''} ${latestPavitra.employeeIssue || ''} ${latestPavitra.comment || ''}`;
     const presMatch = text.match(/Present:\s*(\d+)/i);
     const lateMatch = text.match(/Late:\s*(\d+)/i);
+    const lopMatch = text.match(/LOP:\s*(\d+)/i);
     const apprMatch = text.match(/Leaves Approved:\s*(\d+)/i) || text.match(/Approved:\s*(\d+)/i);
     const pendMatch = text.match(/Pending:\s*(\d+)/i) || text.match(/Leaves Pending:\s*(\d+)/i);
 
     if (presMatch) pavitraPresent = parseInt(presMatch[1], 10);
     if (lateMatch) pavitraLate = parseInt(lateMatch[1], 10);
+    if (lopMatch) pavitraLOP = parseInt(lopMatch[1], 10);
     if (apprMatch) pavitraApprovedLeaves = parseInt(apprMatch[1], 10);
     if (pendMatch) pavitraPendingLeaves = parseInt(pendMatch[1], 10);
   } else if (filterDate === '2026-08-12') {
     pavitraPresent = 94;
     pavitraLate = 3;
+    pavitraLOP = 0;
   }
 
   const data = {
@@ -164,6 +176,7 @@ export default function OverallReportPage() {
     pavitra: {
       present: pavitraPresent,
       late: pavitraLate,
+      lop: pavitraLOP,
       approvedLeaves: pavitraApprovedLeaves,
       pendingLeaves: pavitraPendingLeaves,
       dailyReports: Math.max(pavitraDaily, pavitraPresent > 0 ? 1 : 0),
@@ -195,19 +208,11 @@ export default function OverallReportPage() {
         nitishaSummary: `Performance:${data.nitisha.performance} PIP:${data.nitisha.pipCases} Discipline:${data.nitisha.discipline} Relations:${data.nitisha.relations}`,
         veenaSummary: `Onboarding:${data.veena.onboarding} Active:${data.veena.active} Joined:${data.veena.joined} Dropouts:${data.veena.dropouts}`,
         charithaSummary: `Records:${data.charitha.totalRecords} NetPay:₹${data.charitha.totalNetPay.toLocaleString('en-IN')} Verified:${data.charitha.verified} Pending:${data.charitha.pending}`,
-        pavitraSummary: `Present:${data.pavitra.present} Late:${data.pavitra.late} Approved:${data.pavitra.approvedLeaves} Pending:${data.pavitra.pendingLeaves}`,
+        pavitraSummary: `Present:${data.pavitra.present} LOP:${data.pavitra.lop} Late:${data.pavitra.late} Approved:${data.pavitra.approvedLeaves} Pending:${data.pavitra.pendingLeaves}`,
         remarks: remarks || 'No additional remarks',
         status: 'SUBMITTED',
       };
-      let saved: any;
-      try {
-        saved = await apiRequest('/overall-report', { method: 'POST', body: JSON.stringify(report) });
-      } catch {
-        const res = await fetch('http://localhost:4000/api/v1/overall-report', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(report),
-        });
-        saved = await res.json();
-      }
+      const saved = await apiRequest('/overall-report', { method: 'POST', body: JSON.stringify(report) });
       setSubmittedReports(prev => [saved, ...prev.filter((r: any) => r.id !== saved.id)]);
       setRemarks('');
       alert('Overall HR Report submitted to Admin successfully!');
@@ -331,12 +336,12 @@ export default function OverallReportPage() {
                 <td className="px-4 py-3 font-bold text-slate-800">Pavitra</td>
                 <td className="px-4 py-3 text-orange-600 font-semibold">Attendance & Leave</td>
                 <td className="px-4 py-3 text-slate-700">
-                  Present: {data.pavitra.present} | Late: {data.pavitra.late} | Approved Leaves: {data.pavitra.approvedLeaves} | Pending Leaves: {data.pavitra.pendingLeaves}
+                  Present: {data.pavitra.present} | Absent / LOP: {data.pavitra.lop} | Late: {data.pavitra.late} | Approved Leaves: {data.pavitra.approvedLeaves} | Pending Leaves: {data.pavitra.pendingLeaves}
                 </td>
                 <td className="px-4 py-3 font-bold text-slate-800">{data.pavitra.dailyReports}</td>
                 <td className="px-4 py-3">{getStatusBadge(data.pavitra.totalRecords, data.pavitra.dailyReports)}</td>
                 <td className="px-4 py-3 text-right">
-                  <button onClick={() => setSelectedSpecialist({ name: 'Pavitra', domain: 'Attendance & Leave', href: '/reports/pavitra', summary: `Present: ${data.pavitra.present} | Late: ${data.pavitra.late} | Approved Leaves: ${data.pavitra.approvedLeaves} | Pending Leaves: ${data.pavitra.pendingLeaves}`, reports: data.pavitra.dailyReports, records: data.pavitra.totalRecords })} className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center gap-1 cursor-pointer ml-auto">
+                  <button onClick={() => setSelectedSpecialist({ name: 'Pavitra', domain: 'Attendance & Leave', href: '/reports/pavitra', summary: `Present: ${data.pavitra.present} | LOP: ${data.pavitra.lop} | Late: ${data.pavitra.late} | Approved Leaves: ${data.pavitra.approvedLeaves} | Pending Leaves: ${data.pavitra.pendingLeaves}`, reports: data.pavitra.dailyReports, records: data.pavitra.totalRecords })} className="px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center gap-1 cursor-pointer ml-auto">
                     <Eye className="w-3 h-3 text-slate-600" /> Full Preview
                   </button>
                 </td>

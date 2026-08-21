@@ -65,7 +65,13 @@ export interface CrmAttendance {
   workMinutes: number;
 }
 
-export type WebhookEvent = 'employee.created' | 'employee.updated' | 'employee.deactivated';
+export type WebhookEvent =
+  | 'employee.created'
+  | 'employee.updated'
+  | 'employee.deactivated'
+  | 'document.created'
+  | 'document.updated'
+  | 'document.deleted';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Signature Verification

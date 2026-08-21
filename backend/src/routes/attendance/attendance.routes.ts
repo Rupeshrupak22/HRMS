@@ -154,15 +154,23 @@ router.get('/today-stats', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 
     const totalEmployees = await prisma.employee.count({ where: { status: { in: ['ACTIVE', 'PROBATION'] } } });
     const todayRecords = await prisma.attendanceRecord.findMany({ where: { date: today } });
 
-    const present = todayRecords.filter((r) => r.status === 'PRESENT').length;
-    const late = todayRecords.filter((r) => r.status === 'LATE').length;
-    const halfDay = todayRecords.filter((r) => r.status === 'HALF_DAY').length;
-    const onLeave = todayRecords.filter((r) => r.status === 'ON_LEAVE').length;
-    const absent = Math.max(0, totalEmployees - present - late - halfDay - onLeave);
+    const isPresent = (s: string) => s === 'PRESENT' || s === 'P' || s === 'PR' || s === 'PRES' || s === '1' || s === 'WORK_FROM_HOME' || s === 'WFH';
+    const isLate = (s: string) => s === 'LATE' || s === 'LATE_LOGIN' || s === 'LL';
+    const isHalfDay = (s: string) => s === 'HALF_DAY' || s === 'HD' || s === '0.5';
+    const isLOP = (s: string) => s === 'LOP' || s === 'LOSS OF PAY' || s === 'LOSS_OF_PAY';
+    const isOnLeave = (s: string) => s === 'ON_LEAVE' || s === 'SICK_LEAVE' || s === 'SL' || s === 'CASUAL_LEAVE' || s === 'CL' || s === 'PAID_LEAVE' || s === 'PL' || s === 'EMERGENCY_LEAVE' || s === 'E_L' || s === 'LONG_LEAVE' || s === 'LLV' || s === 'PERSONAL_LEAVE' || s === 'PEL';
+
+    const present = todayRecords.filter((r) => isPresent(r.status)).length;
+    const late = todayRecords.filter((r) => isLate(r.status)).length;
+    const halfDay = todayRecords.filter((r) => isHalfDay(r.status)).length;
+    const lop = todayRecords.filter((r) => isLOP(r.status)).length;
+    const onLeave = todayRecords.filter((r) => isOnLeave(r.status)).length;
+    const explicitAbsent = todayRecords.filter((r) => r.status === 'ABSENT' || r.status === 'A').length;
+    const absent = Math.max(explicitAbsent, totalEmployees - present - late - halfDay - onLeave - lop);
 
     res.json({
       success: true,
-      data: { totalEmployees, present: present + late, absent, late, onLeave, halfDay },
+      data: { totalEmployees, present: present + late, absent, late, onLeave, halfDay, lop },
     });
   } catch (err) {
     next(err);

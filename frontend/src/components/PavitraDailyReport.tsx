@@ -27,6 +27,7 @@ interface AttendanceStats {
   late: number;
   onLeave: number;
   halfDay: number;
+  lop?: number;
 }
 
 interface LeaveRequest {
@@ -93,6 +94,7 @@ export function PavitraDailyReport() {
             late: d.todayLate || d.late || 0,
             onLeave: d.onLeave || 0,
             halfDay: d.halfDay || 0,
+            lop: d.lop || 0,
           };
           setStats(newStats);
           setFormData((f) => ({
@@ -101,6 +103,7 @@ export function PavitraDailyReport() {
             absentCount: newStats.absent,
             lateCount: newStats.late,
             onLeaveCount: newStats.onLeave,
+            lopCount: newStats.lop || f.lopCount,
           }));
         }
       }
@@ -198,7 +201,8 @@ export function PavitraDailyReport() {
     { label: 'Total Employees', value: stats.totalEmployees, icon: Users, color: 'bg-slate-100 text-slate-700 border-slate-200' },
     { label: 'Present Today', value: stats.present, icon: UserCheck, color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
     { label: 'Absent', value: stats.absent, icon: UserX, color: 'bg-red-50 text-red-700 border-red-200' },
-    { label: 'Late Arrivals', value: stats.late, icon: AlertTriangle, color: 'bg-amber-50 text-amber-700 border-amber-200' },
+    { label: 'Loss Of Pay (LOP)', value: stats.lop || 0, icon: AlertTriangle, color: 'bg-gray-100 text-gray-800 border-gray-300' },
+    { label: 'Late Arrivals', value: stats.late, icon: Clock, color: 'bg-amber-50 text-amber-700 border-amber-200' },
     { label: 'On Leave', value: stats.onLeave, icon: CalendarOff, color: 'bg-blue-50 text-blue-700 border-blue-200' },
     { label: 'Half Day', value: stats.halfDay, icon: Clock, color: 'bg-purple-50 text-purple-700 border-purple-200' },
   ];

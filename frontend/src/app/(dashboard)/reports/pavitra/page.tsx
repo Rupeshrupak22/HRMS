@@ -1,16 +1,35 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, Clock, Calendar, CheckCircle2, XCircle, Eye, X, Download, Users } from 'lucide-react';
+import {
+  FileText,
+  Clock,
+  Calendar,
+  CheckCircle2,
+  XCircle,
+  Eye,
+  X,
+  Download,
+  Users,
+  Search,
+  Filter,
+} from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { Pagination } from '@/components/Pagination';
+import * as XLSX from 'xlsx';
 
 export default function PavitraReportPage() {
   const [employees, setEmployees] = useState<any[]>([]);
   const [attendance, setAttendance] = useState<any[]>([]);
   const [leaves, setLeaves] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
+  const [selectedMonth, setSelectedMonth] = useState(() => {
+    const now = new Date();
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  });
   const [filterDate, setFilterDate] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [selectedDepartment, setSelectedDepartment] = useState('ALL');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
 
   // Pagination states (20 per page)
@@ -140,6 +159,214 @@ export default function PavitraReportPage() {
     }
   };
 
+  const normalizeStatusToCode = (status: string): string => {
+    const s = String(status || '').toUpperCase().trim();
+    if (!s) return '-';
+    if (s === 'PRESENT' || s === 'P' || s === 'PR' || s === 'PRES' || s === '1') return 'P';
+    if (s === 'ABSENT' || s === 'A' || s === 'AB' || s === 'ABS' || s === '0') return 'A';
+    if (s === 'CASUAL_LEAVE' || s === 'CL' || s === 'C.L' || s === 'CASUAL' || s === 'CASUAL LEAVE') return 'CL';
+    if (s === 'SICK_LEAVE' || s === 'SL' || s === 'S.L' || s === 'SICK' || s === 'SICK LEAVE') return 'SL';
+    if (s === 'HOLIDAY' || s === 'H' || s === 'HOL') return 'H';
+    if (s === 'WEEKLY_OFF' || s === 'WO' || s === 'W.O' || s === 'W/O' || s === 'OFF' || s === 'WEEKLY OFF' || s === 'WEEK OFF') return 'WO';
+    if (s === 'OVERTIME' || s === 'OT' || s === 'O.T' || s === 'OVERTIME') return 'OT';
+    if (s === 'WORK_FROM_HOME' || s === 'WFH' || s === 'W.F.H' || s === 'WORK FROM HOME') return 'WFH';
+    if (s === 'HALF_DAY' || s === 'HD' || s === 'H.D' || s === 'HALF DAY' || s === 'HALF-DAY' || s === '0.5' || s === '0.5P') return 'HD';
+    if (s === 'EARLY_LOGOUT' || s === 'EL' || s === 'E.L' || s === 'EARLY LOGOUT' || s === 'EARLY OUT') return 'EL';
+    if (s === 'LATE_LOGIN' || s === 'LATE' || s === 'LL' || s === 'L.L' || s === 'LATE LOGIN' || s === 'LATE IN') return 'LL';
+    if (s === 'EMERGENCY_LEAVE' || s === 'E_L' || s === 'E.L.' || s === 'EMERGENCY' || s === 'EMERGENCY LEAVE') return 'E_L';
+    if (s === 'PAID_LEAVE' || s === 'PL' || s === 'P.L' || s === 'PAID LEAVE') return 'PL';
+    if (s === 'LONG_LEAVE' || s === 'LLV' || s === 'L.L.V' || s === 'LONG LEAVE' || s === 'LONG LEAVES') return 'LLV';
+    if (s === 'NATIONAL_HOLIDAY' || s === 'NH' || s === 'N.H' || s === 'NATIONAL HOLIDAY') return 'NH';
+    if (s === 'FESTIVE_HOLIDAY' || s === 'FH' || s === 'F.H' || s === 'FESTIVE HOLIDAY') return 'FH';
+    if (s === 'TRAINING' || s === 'T' || s === 'TR' || s === 'TRAINING') return 'T';
+    if (s === 'LOP' || s === 'L.O.P' || s === 'LOSS OF PAY' || s === 'LOSS_OF_PAY') return 'LOP';
+    if (s === 'PERSONAL_LEAVE' || s === 'PEL' || s === 'PERSONAL LEAVE') return 'PeL';
+    return s;
+  };
+
+  const getStatusBadgeStyle = (code: string) => {
+    switch (code) {
+      case 'P': return 'bg-emerald-100 text-emerald-800 font-bold';
+      case 'A': return 'bg-red-100 text-red-800 font-bold';
+      case 'CL': return 'bg-amber-100 text-amber-800 font-bold';
+      case 'SL': return 'bg-orange-100 text-orange-800 font-bold';
+      case 'H': return 'bg-slate-200 text-slate-800 font-bold';
+      case 'WO': return 'bg-slate-200 text-slate-800 font-bold';
+      case 'OT': return 'bg-blue-100 text-blue-800 font-bold';
+      case 'WFH': return 'bg-teal-100 text-teal-800 font-bold';
+      case 'HD': return 'bg-pink-100 text-pink-800 font-bold';
+      case 'EL': return 'bg-yellow-100 text-yellow-800 font-bold';
+      case 'LL': return 'bg-amber-100 text-amber-800 font-bold';
+      case 'E_L': return 'bg-rose-100 text-rose-800 font-bold';
+      case 'PL': return 'bg-indigo-100 text-indigo-800 font-bold';
+      case 'LLV': return 'bg-purple-100 text-purple-800 font-bold';
+      case 'NH': return 'bg-cyan-100 text-cyan-800 font-bold';
+      case 'FH': return 'bg-lime-100 text-lime-800 font-bold';
+      case 'T': return 'bg-violet-100 text-violet-800 font-bold';
+      case 'LOP': return 'bg-gray-200 text-gray-800 font-bold';
+      case 'PeL': return 'bg-fuchsia-100 text-fuchsia-800 font-bold';
+      default: return 'bg-slate-50 text-slate-400';
+    }
+  };
+
+  const [yearStr, monthStr] = selectedMonth.split('-');
+  const daysInMonth = new Date(parseInt(yearStr, 10), parseInt(monthStr, 10), 0).getDate();
+
+  // Extract unique departments
+  const departments = useMemo(() => {
+    const set = new Set<string>();
+    employees.forEach((e) => {
+      const d = e.department?.name || e.department;
+      if (d && d !== '-' && d.trim() !== '') set.add(d);
+    });
+    attendance.forEach((a) => {
+      if (a.department && a.department !== '-' && a.department.trim() !== '') set.add(a.department);
+    });
+    return Array.from(set).sort();
+  }, [employees, attendance]);
+
+  // Grouped monthly attendance data
+  const groupedAttendance = useMemo(() => {
+    const empMap = new Map<
+      string,
+      {
+        empId: string;
+        empName: string;
+        department: string;
+        designation: string;
+        days: Record<number, string>;
+        presentCount: number;
+        absentCount: number;
+        lopCount: number;
+        sickLeaveCount: number;
+        casualLeaveCount: number;
+        lateLoginCount: number;
+        halfDayCount: number;
+        woCount: number;
+        holidayCount: number;
+        wfhCount: number;
+        earlyLogoutCount: number;
+        paidLeaveCount: number;
+      }
+    >();
+
+    // Seed with employee roster for completeness
+    for (const emp of employees) {
+      const key = emp.employeeCode || emp.id || 'unknown';
+      if (!empMap.has(key)) {
+        empMap.set(key, {
+          empId: key,
+          empName: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || 'Employee',
+          department: emp.department?.name || emp.department || '-',
+          designation: emp.designation?.title || emp.designation || '-',
+          days: {},
+          presentCount: 0,
+          absentCount: 0,
+          lopCount: 0,
+          sickLeaveCount: 0,
+          casualLeaveCount: 0,
+          lateLoginCount: 0,
+          halfDayCount: 0,
+          woCount: 0,
+          holidayCount: 0,
+          wfhCount: 0,
+          earlyLogoutCount: 0,
+          paidLeaveCount: 0,
+        });
+      }
+    }
+
+    // Populate attendance logs
+    for (const r of attendance) {
+      const dateStr = r.date || (r.createdAt ? r.createdAt.split('T')[0] : '');
+      if (!dateStr.startsWith(selectedMonth)) continue;
+      if (filterDate && dateStr !== filterDate) continue;
+
+      const key = r.empId || r.employeeId || r.employeeCode || 'unknown';
+      if (!empMap.has(key)) {
+        empMap.set(key, {
+          empId: key,
+          empName: r.empName || r.employeeName || 'Employee',
+          department: r.department || '-',
+          designation: r.designation || '-',
+          days: {},
+          presentCount: 0,
+          absentCount: 0,
+          lopCount: 0,
+          sickLeaveCount: 0,
+          casualLeaveCount: 0,
+          lateLoginCount: 0,
+          halfDayCount: 0,
+          woCount: 0,
+          holidayCount: 0,
+          wfhCount: 0,
+          earlyLogoutCount: 0,
+          paidLeaveCount: 0,
+        });
+      }
+
+      const day = parseInt(dateStr.split('-')[2], 10);
+      if (day >= 1 && day <= 31) {
+        const code = normalizeStatusToCode(r.status);
+        empMap.get(key)!.days[day] = code;
+        if (r.department && r.department !== '-' && empMap.get(key)!.department === '-') {
+          empMap.get(key)!.department = r.department;
+        }
+        if (r.empName && r.empName !== 'Employee' && empMap.get(key)!.empName === 'Employee') {
+          empMap.get(key)!.empName = r.empName;
+        }
+      }
+    }
+
+    // Calculate row stats
+    const list = Array.from(empMap.values());
+    for (const emp of list) {
+      let p = 0, a = 0, lop = 0, sl = 0, cl = 0, ll = 0, hd = 0, wo = 0, h = 0, wfh = 0, el = 0, pl = 0;
+      Object.values(emp.days).forEach((code) => {
+        if (code === 'P') p++;
+        else if (code === 'A') a++;
+        else if (code === 'LOP') lop++;
+        else if (code === 'SL') sl++;
+        else if (code === 'CL') cl++;
+        else if (code === 'LL') ll++;
+        else if (code === 'HD') { hd++; p += 0.5; }
+        else if (code === 'WO') wo++;
+        else if (code === 'H') h++;
+        else if (code === 'WFH') wfh++;
+        else if (code === 'EL') el++;
+        else if (code === 'PL') pl++;
+      });
+      emp.presentCount = p;
+      emp.absentCount = a;
+      emp.lopCount = lop;
+      emp.sickLeaveCount = sl;
+      emp.casualLeaveCount = cl;
+      emp.lateLoginCount = ll;
+      emp.halfDayCount = hd;
+      emp.woCount = wo;
+      emp.holidayCount = h;
+      emp.wfhCount = wfh;
+      emp.earlyLogoutCount = el;
+      emp.paidLeaveCount = pl;
+    }
+
+    return list;
+  }, [attendance, employees, selectedMonth, filterDate]);
+
+  // Filtered grouped attendance by search and department
+  const filteredGroupedAttendance = useMemo(() => {
+    return groupedAttendance.filter((emp) => {
+      const q = searchTerm.toLowerCase().trim();
+      const matchesSearch =
+        !q ||
+        emp.empName.toLowerCase().includes(q) ||
+        emp.empId.toLowerCase().includes(q) ||
+        emp.department.toLowerCase().includes(q);
+      const matchesDept = selectedDepartment === 'ALL' || emp.department === selectedDepartment;
+      return matchesSearch && matchesDept;
+    });
+  }, [groupedAttendance, searchTerm, selectedDepartment]);
+
   const filterByDate = (records: any[]) => {
     if (!filterDate) return records;
     return records.filter((r) => {
@@ -148,7 +375,6 @@ export default function PavitraReportPage() {
     });
   };
 
-  const filteredAttendance = filterByDate(attendance);
   const filteredLeaves = filterByDate(leaves);
   const filteredDailyReports = filterByDate(dailyReports);
 
@@ -159,8 +385,8 @@ export default function PavitraReportPage() {
 
   const paginatedAttendance = useMemo(() => {
     const start = (attPage - 1) * PAGE_SIZE;
-    return filteredAttendance.slice(start, start + PAGE_SIZE);
-  }, [filteredAttendance, attPage]);
+    return filteredGroupedAttendance.slice(start, start + PAGE_SIZE);
+  }, [filteredGroupedAttendance, attPage]);
 
   const paginatedLeaves = useMemo(() => {
     const start = (leavePage - 1) * PAGE_SIZE;
@@ -172,8 +398,38 @@ export default function PavitraReportPage() {
     return filteredDailyReports.slice(start, start + PAGE_SIZE);
   }, [filteredDailyReports, repPage]);
 
+  const downloadReportExcel = () => {
+    const headers = ['Sl#', 'Emp ID', 'Employee Name', 'Department'];
+    for (let i = 1; i <= daysInMonth; i++) headers.push(i.toString());
+    headers.push('Present (P)', 'Absent (A)', 'LOP', 'Sick Leave (SL)', 'Casual Leave (CL)', 'Late (LL)', 'Half Day (HD)', 'Weekly Off (WO)', 'WFH');
+
+    const rows = filteredGroupedAttendance.map((emp, idx) => {
+      const row: any[] = [idx + 1, emp.empId, emp.empName, emp.department];
+      for (let i = 1; i <= daysInMonth; i++) {
+        row.push(emp.days[i] || '-');
+      }
+      row.push(
+        emp.presentCount,
+        emp.absentCount,
+        emp.lopCount,
+        emp.sickLeaveCount,
+        emp.casualLeaveCount,
+        emp.lateLoginCount,
+        emp.halfDayCount,
+        emp.woCount,
+        emp.wfhCount
+      );
+      return row;
+    });
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Pavitra_Attendance_Report');
+    XLSX.writeFile(wb, `Pavitra_Attendance_Report_${selectedMonth}.xlsx`);
+  };
+
   return (
-    <div className="space-y-8 max-w-[1400px] mx-auto font-sans">
+    <div className="space-y-8 max-w-[1450px] mx-auto font-sans">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-3xl text-white shadow-xl">
         <div>
@@ -182,11 +438,23 @@ export default function PavitraReportPage() {
             <span>Pavitra&apos;s Complete Attendance & Leave Report</span>
           </h1>
           <p className="text-xs text-slate-300 mt-1">
-            Attendance verification, leave application workflow, and daily logs submitted by Pavitra
+            Attendance verification, standard status codes (P, A, LOP, SL, CL, LL, HD), leave applications, and daily work logs
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 border border-white/20 shadow-xs">
+        <div className="flex flex-wrap items-center gap-2.5">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 border border-white/20 shadow-xs text-xs">
+            <span className="font-bold text-slate-300">Month:</span>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => {
+                setSelectedMonth(e.target.value);
+                setAttPage(1);
+              }}
+              className="text-xs font-bold text-white border-none outline-none bg-transparent cursor-pointer"
+            />
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/10 border border-white/20 shadow-xs text-xs">
             <Calendar className="w-4 h-4 text-emerald-400" />
             <input
               type="date"
@@ -208,17 +476,26 @@ export default function PavitraReportPage() {
                 setLeavePage(1);
                 setRepPage(1);
               }}
-              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-red-500/20 hover:bg-red-500/30 text-xs font-bold text-red-200 transition cursor-pointer border border-red-400/30"
             >
               Clear Filter
             </button>
           )}
+          <button
+            onClick={downloadReportExcel}
+            className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition flex items-center gap-1.5 shadow-sm cursor-pointer"
+          >
+            <Download className="w-4 h-4" /> Export Report
+          </button>
         </div>
       </div>
 
       {filterDate && (
-        <div className="px-4 py-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800">
-          Showing verified records for: {filterDate}
+        <div className="px-4 py-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800 flex items-center justify-between">
+          <span>Showing records filtered strictly for date: {filterDate}</span>
+          <button onClick={() => setFilterDate('')} className="underline text-emerald-700 font-semibold cursor-pointer">
+            Reset to full month ({selectedMonth})
+          </button>
         </div>
       )}
 
@@ -275,123 +552,138 @@ export default function PavitraReportPage() {
         )}
       </section>
 
-      {/* 2. Attendance Records Section — Monthly Grouped View */}
-      <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
-        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <Clock className="w-4 h-4 text-emerald-600" /> Attendance Records — Monthly View ({filteredAttendance.length} logs)
-        </h2>
-        {filteredAttendance.length === 0 ? (
-          <p className="text-xs text-slate-400 py-4 text-center">No attendance records found for this date.</p>
-        ) : (() => {
-          // Group attendance by employee
-          const empMap = new Map<string, { empId: string; empName: string; department: string; days: Record<number, string> }>();
-          for (const r of filteredAttendance) {
-            const key = r.empId || r.employeeId || r.employeeCode || 'unknown';
-            if (!empMap.has(key)) {
-              empMap.set(key, {
-                empId: key,
-                empName: r.empName || r.employeeName || 'Employee',
-                department: r.department || '-',
-                days: {},
-              });
-            }
-            const dateStr = r.date || '';
-            const day = dateStr ? parseInt(dateStr.split('-')[2], 10) : 0;
-            if (day > 0 && day <= 31) {
-              const status = (r.status || 'PRESENT').charAt(0); // P, A, L, H
-              empMap.get(key)!.days[day] = status;
-            }
-          }
-          const grouped = Array.from(empMap.values());
-          const daysInMonth = 31; // show all 31 columns
-
-          const statusColor = (s: string) => {
-            switch (s) {
-              case 'P': return 'bg-green-100 text-green-700';
-              case 'L': return 'bg-amber-100 text-amber-700';
-              case 'A': return 'bg-red-100 text-red-700';
-              case 'H': return 'bg-blue-100 text-blue-700';
-              case 'W': return 'bg-purple-100 text-purple-700';
-              default: return 'bg-slate-50 text-slate-300';
-            }
-          };
-
-          const paginatedGrouped = grouped.slice((attPage - 1) * PAGE_SIZE, attPage * PAGE_SIZE);
-
-          return (
-            <div className="rounded-2xl border border-slate-200">
-              <div className="overflow-x-scroll [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-                <table className="text-[10px] text-center min-w-[1200px] w-full">
-                  <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
-                      <th className="px-3 py-2.5 text-left sticky left-0 bg-slate-50 z-10 min-w-[60px]">Emp ID</th>
-                      <th className="px-3 py-2.5 text-left sticky left-[60px] bg-slate-50 z-10 min-w-[120px]">Name</th>
-                      <th className="px-2 py-2.5 min-w-[60px]">Dept</th>
-                      {Array.from({ length: daysInMonth }, (_, i) => (
-                        <th key={i + 1} className="px-1 py-2.5 min-w-[26px]">{i + 1}</th>
-                      ))}
-                      <th className="px-2 py-2.5 min-w-[30px]">P</th>
-                      <th className="px-2 py-2.5 min-w-[30px]">A</th>
-                      <th className="px-2 py-2.5 min-w-[30px]">L</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {paginatedGrouped.map((emp, idx) => {
-                      let present = 0, absent = 0, late = 0;
-                      Object.values(emp.days).forEach(s => {
-                        if (s === 'P') present++;
-                        else if (s === 'A') absent++;
-                        else if (s === 'L') late++;
-                        else if (s === 'H') present += 0.5;
-                      });
-                      return (
-                        <tr key={emp.empId + idx} className="hover:bg-slate-50 transition">
-                          <td className="px-3 py-2 text-left font-bold text-slate-800 sticky left-0 bg-white z-10">{emp.empId}</td>
-                          <td className="px-3 py-2 text-left font-bold text-slate-900 sticky left-[60px] bg-white z-10 truncate max-w-[120px]">{emp.empName}</td>
-                          <td className="px-2 py-2 text-slate-600">{emp.department}</td>
-                          {Array.from({ length: daysInMonth }, (_, i) => {
-                            const s = emp.days[i + 1] || '';
-                            return (
-                              <td key={i + 1} className="px-0.5 py-1.5">
-                                {s ? (
-                                  <span className={`inline-block w-5 h-5 leading-5 rounded text-[9px] font-bold ${statusColor(s)}`}>
-                                    {s}
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-200">-</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                          <td className="px-2 py-2 font-bold text-green-700">{present}</td>
-                          <td className="px-2 py-2 font-bold text-red-700">{absent}</td>
-                          <td className="px-2 py-2 font-bold text-amber-700">{late}</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              <div className="p-2 border-t border-slate-100 flex items-center justify-between text-[10px] text-slate-500 px-4">
-                <div className="flex gap-3">
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-green-100"></span> P = Present</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-amber-100"></span> L = Late</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-100"></span> A = Absent</span>
-                  <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-blue-100"></span> H = Half Day</span>
-                </div>
-              </div>
-              <Pagination
-                currentPage={attPage}
-                totalItems={grouped.length}
-                pageSize={PAGE_SIZE}
-                onPageChange={setAttPage}
+      {/* 2. Attendance Records Section — Standard Monthly View Matching Attendance Page */}
+      <section className="space-y-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Clock className="w-4 h-4 text-emerald-600" />
+            <h2 className="text-sm font-black text-slate-900">
+              Attendance Records — Monthly Grid ({filteredGroupedAttendance.length} employees)
+            </h2>
+          </div>
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200">
+              <Search className="w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search name / ID / dept..."
+                value={searchTerm}
+                onChange={(e) => {
+                  setSearchTerm(e.target.value);
+                  setAttPage(1);
+                }}
+                className="bg-transparent text-xs font-semibold text-slate-700 outline-none w-36 sm:w-44"
               />
             </div>
-          );
-        })()}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200">
+              <Filter className="w-3.5 h-3.5 text-slate-400" />
+              <select
+                value={selectedDepartment}
+                onChange={(e) => {
+                  setSelectedDepartment(e.target.value);
+                  setAttPage(1);
+                }}
+                className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer"
+              >
+                <option value="ALL">All Departments</option>
+                {departments.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {filteredGroupedAttendance.length === 0 ? (
+          <p className="text-xs text-slate-400 py-8 text-center">No attendance records found for the selected criteria.</p>
+        ) : (
+          <div className="rounded-2xl border border-slate-200 overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="text-[10px] text-center min-w-[1350px] w-full border-collapse">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                    <th className="px-3 py-2.5 text-left sticky left-0 bg-slate-50 z-20 min-w-[65px]">Emp ID</th>
+                    <th className="px-3 py-2.5 text-left sticky left-[65px] bg-slate-50 z-20 min-w-[125px]">Name</th>
+                    <th className="px-2 py-2.5 min-w-[70px]">Dept</th>
+                    {Array.from({ length: daysInMonth }, (_, i) => (
+                      <th key={i + 1} className="px-1 py-2.5 min-w-[26px]">
+                        {i + 1}
+                      </th>
+                    ))}
+                    <th className="px-2 py-2.5 min-w-[34px] bg-emerald-50 text-emerald-800" title="Present">P</th>
+                    <th className="px-2 py-2.5 min-w-[34px] bg-red-50 text-red-800" title="Absent">A</th>
+                    <th className="px-2 py-2.5 min-w-[36px] bg-gray-100 text-gray-800" title="Loss of Pay">LOP</th>
+                    <th className="px-2 py-2.5 min-w-[34px] bg-orange-50 text-orange-800" title="Sick Leave">SL</th>
+                    <th className="px-2 py-2.5 min-w-[34px] bg-amber-50 text-amber-800" title="Casual Leave">CL</th>
+                    <th className="px-2 py-2.5 min-w-[34px] bg-yellow-50 text-yellow-800" title="Late Login">LL</th>
+                    <th className="px-2 py-2.5 min-w-[34px] bg-pink-50 text-pink-800" title="Half Day">HD</th>
+                    <th className="px-2 py-2.5 min-w-[34px] bg-slate-100 text-slate-800" title="Weekly Off">WO</th>
+                    <th className="px-2 py-2.5 min-w-[36px] bg-teal-50 text-teal-800" title="Work From Home">WFH</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {paginatedAttendance.map((emp, idx) => (
+                    <tr key={emp.empId + idx} className="hover:bg-slate-50/80 transition">
+                      <td className="px-3 py-2 text-left font-mono font-bold text-slate-800 sticky left-0 bg-white z-10">{emp.empId}</td>
+                      <td className="px-3 py-2 text-left font-bold text-slate-900 sticky left-[65px] bg-white z-10 truncate max-w-[125px]">{emp.empName}</td>
+                      <td className="px-2 py-2 text-slate-600 truncate max-w-[90px]">{emp.department}</td>
+                      {Array.from({ length: daysInMonth }, (_, i) => {
+                        const code = emp.days[i + 1] || '-';
+                        return (
+                          <td key={i + 1} className="px-0.5 py-1.5">
+                            {code !== '-' ? (
+                              <span className={`inline-block w-5 h-5 leading-5 rounded text-[9px] font-bold ${getStatusBadgeStyle(code)}`}>
+                                {code}
+                              </span>
+                            ) : (
+                              <span className="text-slate-200">-</span>
+                            )}
+                          </td>
+                        );
+                      })}
+                      <td className="px-2 py-2 font-bold text-emerald-700 bg-emerald-50/30">{emp.presentCount}</td>
+                      <td className="px-2 py-2 font-bold text-red-700 bg-red-50/30">{emp.absentCount}</td>
+                      <td className="px-2 py-2 font-bold text-gray-800 bg-gray-100/60">{emp.lopCount}</td>
+                      <td className="px-2 py-2 font-bold text-orange-700 bg-orange-50/30">{emp.sickLeaveCount}</td>
+                      <td className="px-2 py-2 font-bold text-amber-700 bg-amber-50/30">{emp.casualLeaveCount}</td>
+                      <td className="px-2 py-2 font-bold text-amber-700 bg-amber-50/30">{emp.lateLoginCount}</td>
+                      <td className="px-2 py-2 font-bold text-pink-700 bg-pink-50/30">{emp.halfDayCount}</td>
+                      <td className="px-2 py-2 font-bold text-slate-700 bg-slate-100/40">{emp.woCount}</td>
+                      <td className="px-2 py-2 font-bold text-teal-700 bg-teal-50/30">{emp.wfhCount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Comprehensive Status Codes Legend */}
+            <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-3 text-[10px] text-slate-600 px-4">
+              <div className="flex flex-wrap items-center gap-3">
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-emerald-100 text-emerald-800 font-bold flex items-center justify-center text-[8px]">P</span> Present</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-red-100 text-red-800 font-bold flex items-center justify-center text-[8px]">A</span> Absent</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-gray-200 text-gray-800 font-bold flex items-center justify-center text-[8px]">LOP</span> Loss Of Pay</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-orange-100 text-orange-800 font-bold flex items-center justify-center text-[8px]">SL</span> Sick Leave</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-amber-100 text-amber-800 font-bold flex items-center justify-center text-[8px]">CL</span> Casual Leave</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-amber-100 text-amber-800 font-bold flex items-center justify-center text-[8px]">LL</span> Late Login</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-pink-100 text-pink-800 font-bold flex items-center justify-center text-[8px]">HD</span> Half Day</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-slate-200 text-slate-800 font-bold flex items-center justify-center text-[8px]">WO</span> Weekly Off</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-teal-100 text-teal-800 font-bold flex items-center justify-center text-[8px]">WFH</span> Work From Home</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-yellow-100 text-yellow-800 font-bold flex items-center justify-center text-[8px]">EL</span> Early Out</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-indigo-100 text-indigo-800 font-bold flex items-center justify-center text-[8px]">PL</span> Paid Leave</span>
+              </div>
+            </div>
+
+            <Pagination
+              currentPage={attPage}
+              totalItems={filteredGroupedAttendance.length}
+              pageSize={PAGE_SIZE}
+              onPageChange={setAttPage}
+            />
+          </div>
+        )}
       </section>
 
-      {/* 2. Leave Applications Section */}
+      {/* 3. Leave Applications Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
           <Calendar className="w-4 h-4 text-purple-600" /> Leave Applications ({filteredLeaves.length})
@@ -444,7 +736,7 @@ export default function PavitraReportPage() {
         )}
       </section>
 
-      {/* 3. Daily Reports Section */}
+      {/* 4. Daily Reports Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
           <FileText className="w-4 h-4 text-indigo-600" /> Daily Reports Submitted ({filteredDailyReports.length})

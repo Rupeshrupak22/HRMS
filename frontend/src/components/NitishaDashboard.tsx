@@ -77,15 +77,20 @@ export function NitishaDashboard() {
             Employee performance tracking, issues management, PIP cases, discipline, and relations
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/employee-issues" className="px-4 py-2 rounded-xl bg-white text-orange-600 font-extrabold text-xs shadow-md">
-            Employee Issues Hub
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/daily-reports"
+            className="px-4 py-2 rounded-xl bg-white text-orange-600 font-extrabold text-xs shadow-md flex items-center gap-1.5 cursor-pointer hover:bg-orange-50 transition-colors"
+          >
+            <Send className="w-3.5 h-3.5" />
+            <span>Submit Daily Report</span>
           </Link>
-          <Link href="/discipline" className="px-4 py-2 rounded-xl bg-white/20 hover:bg-white/30 text-white font-extrabold text-xs border border-white/30">
-            Conduct Directory
-          </Link>
-          <Link href="/daily-reports" className="px-4 py-2 rounded-xl bg-black/20 text-white font-bold text-xs border border-white/20 flex items-center gap-1">
-            <Send className="w-3.5 h-3.5" /> Submit Daily Report
+          <Link
+            href="/employee-issues"
+            className="px-4 py-2 rounded-xl bg-black/20 text-white font-bold text-xs border border-white/20 flex items-center gap-1.5 cursor-pointer hover:bg-white/10 transition-colors"
+          >
+            <AlertCircle className="w-3.5 h-3.5" />
+            <span>Employee Issues Hub</span>
           </Link>
         </div>
       </div>
