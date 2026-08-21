@@ -14,6 +14,15 @@ async function check() {
     return;
   }
 
+  console.log('Adding missing columns to User table...');
+  await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "isActive" BOOLEAN NOT NULL DEFAULT true;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lastActivityAt" TIMESTAMP(3);`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "lockedAt" TIMESTAMP(3);`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "forceLogout" BOOLEAN NOT NULL DEFAULT false;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "activeDeviceId" TEXT;`);
+  await prisma.$executeRawUnsafe(`ALTER TABLE "User" ADD COLUMN IF NOT EXISTS "tokenVersion" INTEGER NOT NULL DEFAULT 0;`);
+  console.log('Successfully added all missing columns to User table!');
+
   console.log('Wiping all August 2026 records from AttendanceRecord for clean fresh import...');
   const wipeRes = await prisma.attendanceRecord.deleteMany({
     where: {
