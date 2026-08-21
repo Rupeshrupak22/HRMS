@@ -288,7 +288,7 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EM
   }
 });
 
-// POST /api/attendance/bulk-import — import attendance from XLSX/CSV
+// POST /api/attendance/bulk-import — ultra-fast batch import attendance from XLSX/CSV
 router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { records } = req.body;
@@ -297,176 +297,196 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE',
       return;
     }
 
-    let imported = 0;
+    // 1. Preload all employees, departments, and designations into memory caches
+    const allEmployees = await prisma.employee.findMany({
+      select: { id: true, employeeCode: true, firstName: true, lastName: true, departmentId: true, designationId: true },
+    });
+    const empByCode = new Map<string, typeof allEmployees[0]>();
+    const empByName = new Map<string, typeof allEmployees[0]>();
+    for (const emp of allEmployees) {
+      if (emp.employeeCode) {
+        empByCode.set(emp.employeeCode.toUpperCase().trim(), emp);
+      }
+      const fullName = `${emp.firstName || ''} ${emp.lastName || ''}`.toLowerCase().trim();
+      if (fullName) empByName.set(fullName, emp);
+      if (emp.firstName) empByName.set(emp.firstName.toLowerCase().trim(), emp);
+    }
+
+    const allDepts = await prisma.department.findMany();
+    const deptByName = new Map<string, typeof allDepts[0]>();
+    for (const d of allDepts) {
+      deptByName.set(d.name.toLowerCase().trim(), d);
+    }
+
+    const allDesigs = await prisma.designation.findMany();
+    const desigByTitle = new Map<string, typeof allDesigs[0]>();
+    for (const d of allDesigs) {
+      desigByTitle.set(d.title.toLowerCase().trim(), d);
+    }
+
+    // 2. Identify missing employees, departments, and designations upfront
+    const missingEmpCodes = new Set<string>();
+    const missingDepts = new Set<string>();
+    const missingDesigs = new Set<string>();
+
+    for (const r of records) {
+      const code = String(r.employeeCode || '').trim();
+      const codeUpper = code.toUpperCase();
+      const name = String(r.employeeName || '').toLowerCase().trim();
+      const firstWord = name.split(' ')[0] || '';
+      if (!empByCode.has(codeUpper) && !empByName.has(name) && !empByName.has(firstWord) && code) {
+        missingEmpCodes.add(code);
+      }
+      if (r.department && r.department !== '-' && !deptByName.has(String(r.department).toLowerCase().trim())) {
+        missingDepts.add(String(r.department).trim());
+      }
+      if (r.designation && r.designation !== '-' && !desigByTitle.has(String(r.designation).toLowerCase().trim())) {
+        missingDesigs.add(String(r.designation).trim());
+      }
+    }
+
+    // Create missing departments in parallel
+    for (const dName of missingDepts) {
+      try {
+        const d = await prisma.department.create({
+          data: {
+            name: dName,
+            code: (dName.slice(0, 4).toUpperCase() || 'DEPT') + Math.floor(Math.random() * 100),
+          },
+        });
+        deptByName.set(dName.toLowerCase().trim(), d);
+      } catch {}
+    }
+
+    // Create missing designations in parallel
+    for (const dTitle of missingDesigs) {
+      try {
+        const d = await prisma.designation.create({
+          data: {
+            title: dTitle,
+            code: (dTitle.slice(0, 4).toUpperCase() || 'DESIG') + Math.floor(Math.random() * 100),
+          },
+        });
+        desigByTitle.set(dTitle.toLowerCase().trim(), d);
+      } catch {}
+    }
+
+    // Create missing employees in parallel
+    for (const empCode of missingEmpCodes) {
+      try {
+        const matchingRecord = records.find(r => String(r.employeeCode || '').trim() === empCode);
+        const empName = matchingRecord ? String(matchingRecord.employeeName || '').trim() : '';
+        const role = matchingRecord ? String(matchingRecord.role || '').trim() : '';
+        const email = `${empCode.toLowerCase().replace(/[^a-z0-9]/g, '') || 'emp'}@adyapan.com`;
+
+        let user = await prisma.user.findUnique({ where: { email } });
+        if (!user) {
+          user = await prisma.user.create({
+            data: {
+              email,
+              passwordHash: '$2b$10$dummyhashplaceholderforattendancerecordcreation',
+              role: role || 'EMPLOYEE',
+            },
+          });
+        }
+        const names = (empName || 'Employee').split(' ');
+        const emp = await prisma.employee.create({
+          data: {
+            employeeCode: empCode,
+            userId: user.id,
+            firstName: names[0] || 'Employee',
+            lastName: names.slice(1).join(' ') || '',
+          },
+        });
+        empByCode.set(empCode.toUpperCase().trim(), emp);
+        const fullName = `${emp.firstName} ${emp.lastName}`.toLowerCase().trim();
+        empByName.set(fullName, emp);
+      } catch {}
+    }
+
+    // 3. Prepare all records for atomic bulk insert
     let skipped = 0;
+    const insertPayload: any[] = [];
+    const touchedEmployees = new Set<string>();
+    let minDateObj: Date | null = null;
+    let maxDateObj: Date | null = null;
 
     for (const record of records) {
-      try {
-        const empCode = String(record.employeeCode || '').trim();
-        const empName = String(record.employeeName || '').trim();
-        const department = record.department ? String(record.department).trim() : '';
-        const designation = record.designation ? String(record.designation).trim() : '';
-        const role = record.role ? String(record.role).trim() : '';
+      const empCode = String(record.employeeCode || '').trim().toUpperCase();
+      const empName = String(record.employeeName || '').toLowerCase().trim();
+      const firstWord = empName.split(' ')[0] || '';
 
-        // 1. Find employee by code (exact, trimmed, or uppercase)
-        let employee = await prisma.employee.findFirst({
-          where: {
-            OR: [
-              { employeeCode: empCode },
-              { employeeCode: empCode.toUpperCase() },
-              { employeeCode: empCode.toLowerCase() },
-            ],
-          },
-        });
-
-        // 2. Fallback: match by name if code match fails
-        if (!employee && empName) {
-          const firstWord = empName.split(' ')[0];
-          employee = await prisma.employee.findFirst({
-            where: {
-              OR: [
-                { firstName: { contains: firstWord, mode: 'insensitive' } },
-                { lastName: { contains: firstWord, mode: 'insensitive' } },
-              ],
-            },
-          });
-        }
-
-        // 3. Auto provision employee with exact employeeCode if missing
-        if (!employee && empCode) {
-          const email = `${empCode.toLowerCase().replace(/[^a-z0-9]/g, '') || 'emp'}@adyapan.com`;
-          let user = await prisma.user.findUnique({ where: { email } });
-          if (!user) {
-            user = await prisma.user.create({
-              data: {
-                email,
-                passwordHash: '$2b$10$dummyhashplaceholderforattendancerecordcreation',
-                role: role || 'EMPLOYEE',
-              },
-            });
-          }
-          const names = (empName || 'Employee').trim().split(' ');
-          employee = await prisma.employee.create({
-            data: {
-              employeeCode: empCode,
-              userId: user.id,
-              firstName: names[0] || 'Employee',
-              lastName: names.slice(1).join(' ') || '',
-            },
-          });
-        }
-
-        if (!employee) {
-          skipped++;
-          continue;
-        }
-
-        // 4. Update employee department / designation if passed in Excel
-        const updateData: any = {};
-        if (department && department !== '-') {
-          let dept = await prisma.department.findFirst({ where: { name: { equals: department, mode: 'insensitive' } } });
-          if (!dept) {
-            dept = await prisma.department.create({
-              data: {
-                name: department,
-                code: (department.slice(0, 4).toUpperCase() || 'DEPT') + Math.floor(Math.random() * 100),
-              },
-            });
-          }
-          updateData.departmentId = dept.id;
-        }
-
-        if (designation && designation !== '-') {
-          let desig = await prisma.designation.findFirst({ where: { title: { equals: designation, mode: 'insensitive' } } });
-          if (!desig) {
-            desig = await prisma.designation.create({
-              data: {
-                title: designation,
-                code: (designation.slice(0, 4).toUpperCase() || 'DESIG') + Math.floor(Math.random() * 100),
-              },
-            });
-          }
-          updateData.designationId = desig.id;
-        }
-
-        if (empName && (!employee.firstName || employee.firstName === 'Employee')) {
-          const names = empName.split(' ');
-          updateData.firstName = names[0] || employee.firstName;
-          updateData.lastName = names.slice(1).join(' ') || employee.lastName;
-        }
-
-        if (Object.keys(updateData).length > 0) {
-          await prisma.employee.update({
-            where: { id: employee.id },
-            data: updateData,
-          });
-        }
-
-        let dateObj: Date;
-        if (record.date) {
-          const parts = String(record.date).split('T')[0].split('-');
-          if (parts.length === 3) {
-            dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          } else {
-            dateObj = new Date(record.date);
-          }
-        } else {
-          dateObj = new Date();
-        }
-        dateObj.setHours(0, 0, 0, 0);
-
-        // Parse check-in/out times
-        let checkInTime: Date | null = null;
-        let checkOutTime: Date | null = null;
-
-        if (record.checkInTime) {
-          checkInTime = parseTimeString(record.checkInTime, dateObj);
-        }
-        if (record.checkOutTime) {
-          checkOutTime = parseTimeString(record.checkOutTime, dateObj);
-        }
-
-        const workHours = checkInTime && checkOutTime
-          ? Math.round(((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)) * 100) / 100
-          : 0;
-
-        // Build metadata notes
-        let notesToStore: string | null = record.remarks || null;
-        if (record.summary || department || designation || role) {
-          notesToStore = JSON.stringify({
-            ...(record.summary || {}),
-            department: department || undefined,
-            designation: designation || undefined,
-            role: role || undefined,
-            remarks: record.remarks || undefined,
-          });
-        }
-
-        await prisma.attendanceRecord.upsert({
-          where: { employeeId_date: { employeeId: employee.id, date: dateObj } },
-          update: {
-            status: record.status || 'PRESENT',
-            checkInTime,
-            checkOutTime,
-            workHours,
-            notes: notesToStore,
-            source: 'IMPORT',
-          },
-          create: {
-            employeeId: employee.id,
-            date: dateObj,
-            status: record.status || 'PRESENT',
-            checkInTime,
-            checkOutTime,
-            workHours,
-            notes: notesToStore,
-            source: 'IMPORT',
-          },
-        });
-        imported++;
-      } catch {
+      const employee = empByCode.get(empCode) || empByName.get(empName) || empByName.get(firstWord);
+      if (!employee) {
         skipped++;
+        continue;
       }
+
+      let dateObj: Date;
+      if (record.date) {
+        const parts = String(record.date).split('T')[0].split('-');
+        if (parts.length === 3) {
+          dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        } else {
+          dateObj = new Date(record.date);
+        }
+      } else {
+        dateObj = new Date();
+      }
+      dateObj.setHours(0, 0, 0, 0);
+
+      if (!minDateObj || dateObj < minDateObj) minDateObj = dateObj;
+      if (!maxDateObj || dateObj > maxDateObj) maxDateObj = dateObj;
+
+      let checkInTime: Date | null = null;
+      let checkOutTime: Date | null = null;
+      if (record.checkInTime) checkInTime = parseTimeString(record.checkInTime, dateObj);
+      if (record.checkOutTime) checkOutTime = parseTimeString(record.checkOutTime, dateObj);
+
+      const workHours = checkInTime && checkOutTime
+        ? Math.round(((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)) * 100) / 100
+        : 0;
+
+      let notesToStore: string | null = record.remarks || null;
+      if (record.summary || record.department || record.designation || record.role) {
+        notesToStore = JSON.stringify({
+          ...(record.summary || {}),
+          department: record.department || undefined,
+          designation: record.designation || undefined,
+          role: record.role || undefined,
+          remarks: record.remarks || undefined,
+        });
+      }
+
+      touchedEmployees.add(employee.id);
+      insertPayload.push({
+        employeeId: employee.id,
+        date: dateObj,
+        status: record.status || 'PRESENT',
+        checkInTime,
+        checkOutTime,
+        workHours,
+        notes: notesToStore,
+        source: 'IMPORT',
+      });
+    }
+
+    let imported = 0;
+    if (insertPayload.length > 0 && minDateObj && maxDateObj) {
+      // 1. Delete existing records for touched employees in this date range
+      await prisma.attendanceRecord.deleteMany({
+        where: {
+          employeeId: { in: Array.from(touchedEmployees) },
+          date: { gte: minDateObj, lte: maxDateObj },
+        },
+      });
+
+      // 2. Ultra-fast bulk insert with createMany
+      const result = await prisma.attendanceRecord.createMany({
+        data: insertPayload,
+        skipDuplicates: true,
+      });
+      imported = result.count;
     }
 
     res.json({ success: true, data: { imported, skipped, total: records.length } });

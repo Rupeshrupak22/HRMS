@@ -235,7 +235,7 @@ export function EmployeeMaster() {
           const dbMapped = internalList
             .filter((emp: any) => {
               const email = (emp.user?.email || emp.email || '').toLowerCase().trim();
-              const code = String(emp.employeeCode || '').toLowerCase().trim();
+              const code = String(emp.employeeCode || emp.id || '').toLowerCase().trim();
               return (!email || !existingEmails.has(email)) && (!code || !existingCodes.has(code));
             })
             .map((emp: any) => ({

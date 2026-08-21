@@ -31,6 +31,12 @@ export default function PavitraReportPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('ALL');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  // Employee Master directory filters
+  const [empStatusFilter, setEmpStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
+  const [empSearchTerm, setEmpSearchTerm] = useState('');
+  const [empDeptFilter, setEmpDeptFilter] = useState('ALL');
 
   // Pagination states (20 per page)
   const [empPage, setEmpPage] = useState(1);
@@ -38,6 +44,47 @@ export default function PavitraReportPage() {
   const [leavePage, setLeavePage] = useState(1);
   const [repPage, setRepPage] = useState(1);
   const PAGE_SIZE = 20;
+
+  const fetchAttendanceData = async () => {
+    setLoading(true);
+    try {
+      const [year, month] = selectedMonth.split('-');
+      const startDate = new Date(parseInt(year, 10), parseInt(month, 10) - 1, 1).toISOString();
+      const endDate = new Date(parseInt(year, 10), parseInt(month, 10), 0, 23, 59, 59).toISOString();
+      const res = await apiRequest(`/attendance/all-logs?startDate=${startDate}&endDate=${endDate}`);
+      let logs: any[] = [];
+      if (Array.isArray(res)) {
+        logs = res;
+      } else if (res?.data && Array.isArray(res.data)) {
+        logs = res.data;
+      } else if (res?.success && Array.isArray(res.data)) {
+        logs = res.data;
+      }
+
+      const savedAtt = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_attendance_logs') : null;
+      let localAtt: any[] = [];
+      try { localAtt = savedAtt ? JSON.parse(savedAtt) : []; } catch { localAtt = []; }
+
+      const map = new Map();
+      for (const item of logs) {
+        const key = item.id || `${item.empId || item.employeeId || item.employeeCode}_${item.date}`;
+        map.set(key, item);
+      }
+      for (const item of localAtt) {
+        const key = item.id || `${item.empId || item.employeeId || item.employeeCode}_${item.date}`;
+        if (!map.has(key)) map.set(key, item);
+      }
+      setAttendance(Array.from(map.values()));
+    } catch (error) {
+      console.error('Failed to fetch attendance', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAttendanceData();
+  }, [selectedMonth]);
 
   useEffect(() => {
     // 0. Employee Master roster — CRM + internal DB
@@ -51,14 +98,16 @@ export default function PavitraReportPage() {
           const crmList = Array.isArray(crmJson) ? crmJson : (crmJson.employees || crmJson.data || []);
           list = crmList.map((emp: any) => ({
             id: emp.id,
-            employeeCode: emp.employeeId || '',
+            employeeCode: emp.employeeId || emp.employeeCode || '',
             firstName: emp.name?.split(' ')[0] || '',
             lastName: emp.name?.split(' ').slice(1).join(' ') || '',
             name: emp.name || '',
             email: emp.email || '',
             department: { name: emp.department || '-' },
             designation: { title: emp.designation || '-' },
-            status: emp.isActive !== false ? 'ACTIVE' : 'INACTIVE',
+            status: emp.status || (emp.isActive !== false ? 'ACTIVE' : 'INACTIVE'),
+            isActive: emp.isActive !== false,
+            employeeStatus: emp.employeeStatus || emp.status || '',
             joiningDate: emp.joiningDate || '',
           }));
         }
@@ -67,38 +116,33 @@ export default function PavitraReportPage() {
       try {
         const res = await apiRequest('/employees');
         const fetched = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
-        const existingEmails = new Set(list.map((e: any) => (e.email || '').toLowerCase()).filter(Boolean));
-        const dbOnly = fetched.filter((e: any) => {
-          const email = (e.user?.email || e.email || '').toLowerCase();
-          return !email || !existingEmails.has(email);
-        });
+        const existingEmails = new Set(list.map((e: any) => (e.email || '').toLowerCase().trim()).filter(Boolean));
+        const existingCodes = new Set(list.map((e: any) => String(e.employeeCode || e.employeeId || e.id || '').toLowerCase().trim()).filter(Boolean));
+        const dbOnly = fetched
+          .filter((e: any) => {
+            const email = (e.user?.email || e.email || '').toLowerCase().trim();
+            const code = String(e.employeeCode || e.id || '').toLowerCase().trim();
+            return (!email || !existingEmails.has(email)) && (!code || !existingCodes.has(code));
+          })
+          .map((emp: any) => ({
+            id: emp.id,
+            employeeCode: emp.employeeCode || emp.id,
+            employeeId: emp.employeeCode || emp.id,
+            firstName: emp.firstName || '',
+            lastName: emp.lastName || '',
+            name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || 'Employee',
+            email: emp.user?.email || emp.email || '',
+            department: { name: emp.department?.name || (typeof emp.department === 'string' ? emp.department : '-') },
+            designation: { title: emp.designation?.title || (typeof emp.designation === 'string' ? emp.designation : '-') },
+            status: emp.status || 'ACTIVE',
+            isActive: emp.status === 'ACTIVE',
+            employeeStatus: emp.status || '',
+            joiningDate: emp.joiningDate || emp.createdAt || '',
+          }));
         list = [...list, ...dbOnly];
       } catch {}
       setEmployees(list);
     })();
-
-    // 1. Attendance logs
-    const savedAtt = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_attendance_logs') : null;
-    let localAtt: any[] = [];
-    try { localAtt = savedAtt ? JSON.parse(savedAtt) : []; } catch { localAtt = []; }
-
-    apiRequest('/attendance/all-logs')
-      .catch(() => apiRequest('/attendance'))
-      .then((d) => {
-        const fetched = Array.isArray(d) ? d : (d?.data && Array.isArray(d.data) ? d.data : []);
-        const map = new Map();
-        for (const item of fetched) {
-          const key = item.id || `${item.empId || item.employeeId || item.employeeCode}_${item.date}`;
-          map.set(key, item);
-        }
-        for (const item of localAtt) {
-          const key = item.id || `${item.empId || item.employeeId || item.employeeCode}_${item.date}`;
-          if (!map.has(key)) map.set(key, item);
-        }
-        setAttendance(Array.from(map.values()));
-      }).catch(() => {
-        setAttendance(localAtt);
-      });
 
     // 2. Leave requests
     const savedLeave = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_leave_requests') : null;
@@ -232,6 +276,7 @@ export default function PavitraReportPage() {
       {
         empId: string;
         empName: string;
+        role: string;
         department: string;
         designation: string;
         days: Record<number, string>;
@@ -250,45 +295,18 @@ export default function PavitraReportPage() {
       }
     >();
 
-    // Seed with employee roster for completeness
-    for (const emp of employees) {
-      const key = emp.employeeCode || emp.id || 'unknown';
+    // 1. Populate from attendance logs first (exact match with attendance page)
+    for (const log of attendance) {
+      const key = log.empId || log.employeeId || log.employeeCode;
+      if (!key) continue;
+
       if (!empMap.has(key)) {
         empMap.set(key, {
           empId: key,
-          empName: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || 'Employee',
-          department: emp.department?.name || emp.department || '-',
-          designation: emp.designation?.title || emp.designation || '-',
-          days: {},
-          presentCount: 0,
-          absentCount: 0,
-          lopCount: 0,
-          sickLeaveCount: 0,
-          casualLeaveCount: 0,
-          lateLoginCount: 0,
-          halfDayCount: 0,
-          woCount: 0,
-          holidayCount: 0,
-          wfhCount: 0,
-          earlyLogoutCount: 0,
-          paidLeaveCount: 0,
-        });
-      }
-    }
-
-    // Populate attendance logs
-    for (const r of attendance) {
-      const dateStr = r.date || (r.createdAt ? r.createdAt.split('T')[0] : '');
-      if (!dateStr.startsWith(selectedMonth)) continue;
-      if (filterDate && dateStr !== filterDate) continue;
-
-      const key = r.empId || r.employeeId || r.employeeCode || 'unknown';
-      if (!empMap.has(key)) {
-        empMap.set(key, {
-          empId: key,
-          empName: r.empName || r.employeeName || 'Employee',
-          department: r.department || '-',
-          designation: r.designation || '-',
+          empName: log.empName || log.employeeName || 'Employee',
+          role: log.role && log.role !== '-' ? log.role : '-',
+          department: log.department && log.department !== '-' ? log.department : '-',
+          designation: log.designation && log.designation !== '-' ? log.designation : '-',
           days: {},
           presentCount: 0,
           absentCount: 0,
@@ -305,20 +323,43 @@ export default function PavitraReportPage() {
         });
       }
 
-      const day = parseInt(dateStr.split('-')[2], 10);
-      if (day >= 1 && day <= 31) {
-        const code = normalizeStatusToCode(r.status);
-        empMap.get(key)!.days[day] = code;
-        if (r.department && r.department !== '-' && empMap.get(key)!.department === '-') {
-          empMap.get(key)!.department = r.department;
-        }
-        if (r.empName && r.empName !== 'Employee' && empMap.get(key)!.empName === 'Employee') {
-          empMap.get(key)!.empName = r.empName;
+      const emp = empMap.get(key)!;
+
+      let meta: any = log.summary || {};
+      if (log.notes && typeof log.notes === 'string' && log.notes.trim().startsWith('{')) {
+        try {
+          meta = { ...meta, ...JSON.parse(log.notes) };
+        } catch {}
+      }
+
+      if (log.department && log.department !== '-' && (!emp.department || emp.department === '-')) {
+        emp.department = log.department;
+      }
+      if (log.designation && log.designation !== '-' && (!emp.designation || emp.designation === '-')) {
+        emp.designation = log.designation;
+      }
+      if (log.role && log.role !== '-' && (!emp.role || emp.role === '-')) {
+        emp.role = log.role;
+      }
+      if (log.empName && log.empName !== 'Employee' && (emp.empName === 'Employee' || !emp.empName)) {
+        emp.empName = log.empName;
+      }
+
+      if (meta.department && meta.department !== '-') emp.department = meta.department;
+      if (meta.designation && meta.designation !== '-') emp.designation = meta.designation;
+      if (meta.role && meta.role !== '-') emp.role = meta.role;
+
+      const dateStr = log.date || (log.createdAt ? log.createdAt.split('T')[0] : '');
+      if (dateStr && (!filterDate || dateStr === filterDate)) {
+        const day = parseInt(dateStr.split('-')[2], 10);
+        if (!isNaN(day) && day >= 1 && day <= 31) {
+          const code = normalizeStatusToCode(log.status);
+          emp.days[day] = code;
         }
       }
     }
 
-    // Calculate row stats
+    // 2. Calculate row stats
     const list = Array.from(empMap.values());
     for (const emp of list) {
       let p = 0, a = 0, lop = 0, sl = 0, cl = 0, ll = 0, hd = 0, wo = 0, h = 0, wfh = 0, el = 0, pl = 0;
@@ -351,7 +392,7 @@ export default function PavitraReportPage() {
     }
 
     return list;
-  }, [attendance, employees, selectedMonth, filterDate]);
+  }, [attendance, selectedMonth, filterDate]);
 
   // Filtered grouped attendance by search and department
   const filteredGroupedAttendance = useMemo(() => {
@@ -378,10 +419,93 @@ export default function PavitraReportPage() {
   const filteredLeaves = filterByDate(leaves);
   const filteredDailyReports = filterByDate(dailyReports);
 
+  const getEmpStatus = (emp: any): 'ACTIVE' | 'INACTIVE' => {
+    const raw = String(emp.status || emp.employeeStatus || '').trim().toUpperCase();
+    if (
+      raw === 'INACTIVE' ||
+      raw === 'TERMINATED' ||
+      raw === 'RESIGNED' ||
+      raw === 'EXITED' ||
+      raw.includes('INACT') ||
+      raw.includes('RESIGN') ||
+      raw.includes('EXIT')
+    ) {
+      return 'INACTIVE';
+    }
+
+    const activeVal: any = emp.isActive;
+    if (activeVal !== undefined && activeVal !== null) {
+      if (
+        activeVal === false ||
+        activeVal === 0 ||
+        activeVal === '0' ||
+        String(activeVal).toLowerCase() === 'false'
+      ) {
+        return 'INACTIVE';
+      }
+      if (
+        activeVal === true ||
+        activeVal === 1 ||
+        activeVal === '1' ||
+        String(activeVal).toLowerCase() === 'true'
+      ) {
+        return 'ACTIVE';
+      }
+    }
+
+    if (raw === 'ACTIVE' || raw === 'CONFIRMED' || raw === 'PROBATION' || raw.includes('ACT')) {
+      return 'ACTIVE';
+    }
+
+    return 'ACTIVE';
+  };
+
+  const empMetrics = useMemo(() => {
+    let active = 0;
+    let inactive = 0;
+    employees.forEach((e) => {
+      const s = getEmpStatus(e);
+      if (s === 'ACTIVE') active++;
+      else inactive++;
+    });
+    return {
+      total: employees.length,
+      active,
+      inactive,
+    };
+  }, [employees]);
+
+  const filteredEmployees = useMemo(() => {
+    return employees.filter((emp) => {
+      const q = empSearchTerm.toLowerCase().trim();
+      const name = `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || '';
+      const code = String(emp.employeeCode || emp.id || '').toLowerCase();
+      const email = String(emp.user?.email || emp.email || '').toLowerCase();
+      const dept = String(emp.department?.name || emp.department || '');
+      const status = getEmpStatus(emp);
+
+      const matchesSearch =
+        !q ||
+        name.toLowerCase().includes(q) ||
+        code.includes(q) ||
+        email.includes(q) ||
+        dept.toLowerCase().includes(q);
+
+      const matchesStatus =
+        empStatusFilter === 'ALL' ||
+        (empStatusFilter === 'ACTIVE' && status === 'ACTIVE') ||
+        (empStatusFilter === 'INACTIVE' && status === 'INACTIVE');
+
+      const matchesDept = empDeptFilter === 'ALL' || dept === empDeptFilter;
+
+      return matchesSearch && matchesStatus && matchesDept;
+    });
+  }, [employees, empSearchTerm, empStatusFilter, empDeptFilter]);
+
   const paginatedEmployees = useMemo(() => {
     const start = (empPage - 1) * PAGE_SIZE;
-    return employees.slice(start, start + PAGE_SIZE);
-  }, [employees, empPage]);
+    return filteredEmployees.slice(start, start + PAGE_SIZE);
+  }, [filteredEmployees, empPage]);
 
   const paginatedAttendance = useMemo(() => {
     const start = (attPage - 1) * PAGE_SIZE;
@@ -500,12 +624,99 @@ export default function PavitraReportPage() {
       )}
 
       {/* 1. Employee Master Roster Section */}
-      <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
-        <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <Users className="w-4 h-4 text-blue-600" /> Employee Master Directory ({employees.length})
-        </h2>
-        {employees.length === 0 ? (
-          <p className="text-xs text-slate-400 py-4 text-center">No employee master records found.</p>
+      <section className="space-y-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-blue-600" />
+            <h2 className="text-sm font-black text-slate-900">
+              Employee Master Directory ({filteredEmployees.length})
+            </h2>
+          </div>
+
+          {/* Status Filter Tabs & Search */}
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {/* Status Pills */}
+            <div className="flex items-center bg-slate-100 p-0.5 rounded-xl border border-slate-200">
+              <button
+                onClick={() => {
+                  setEmpStatusFilter('ALL');
+                  setEmpPage(1);
+                }}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer ${
+                  empStatusFilter === 'ALL'
+                    ? 'bg-white text-slate-900 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                All ({empMetrics.total})
+              </button>
+              <button
+                onClick={() => {
+                  setEmpStatusFilter('ACTIVE');
+                  setEmpPage(1);
+                }}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                  empStatusFilter === 'ACTIVE'
+                    ? 'bg-white text-emerald-700 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                Active ({empMetrics.active})
+              </button>
+              <button
+                onClick={() => {
+                  setEmpStatusFilter('INACTIVE');
+                  setEmpPage(1);
+                }}
+                className={`px-3 py-1 rounded-lg text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                  empStatusFilter === 'INACTIVE'
+                    ? 'bg-white text-red-700 shadow-xs'
+                    : 'text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
+                Inactive ({empMetrics.inactive})
+              </button>
+            </div>
+
+            {/* Search */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200">
+              <Search className="w-3.5 h-3.5 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search employee..."
+                value={empSearchTerm}
+                onChange={(e) => {
+                  setEmpSearchTerm(e.target.value);
+                  setEmpPage(1);
+                }}
+                className="bg-transparent text-xs font-semibold text-slate-700 outline-none w-32 sm:w-40"
+              />
+            </div>
+
+            {/* Department Filter */}
+            <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200">
+              <Filter className="w-3.5 h-3.5 text-slate-400" />
+              <select
+                value={empDeptFilter}
+                onChange={(e) => {
+                  setEmpDeptFilter(e.target.value);
+                  setEmpPage(1);
+                }}
+                className="bg-transparent text-xs font-semibold text-slate-700 outline-none cursor-pointer"
+              >
+                <option value="ALL">All Departments</option>
+                {departments.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {filteredEmployees.length === 0 ? (
+          <p className="text-xs text-slate-400 py-8 text-center">No employee records match the selected filter criteria.</p>
         ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
@@ -522,29 +733,34 @@ export default function PavitraReportPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paginatedEmployees.map((emp, idx) => (
-                    <tr key={emp.id || idx} className="hover:bg-slate-50 transition whitespace-nowrap">
-                      <td className="px-4 py-2.5 font-bold text-slate-800">{emp.employeeCode || emp.id}</td>
-                      <td className="px-4 py-2.5 font-bold text-slate-900">{`${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || 'Employee'}</td>
-                      <td className="px-4 py-2.5 text-slate-600">{emp.user?.email || emp.email || '-'}</td>
-                      <td className="px-4 py-2.5 text-slate-600">{emp.department?.name || emp.department || '-'}</td>
-                      <td className="px-4 py-2.5 text-slate-600">{emp.designation?.title || emp.designation || '-'}</td>
-                      <td className="px-4 py-2.5">
-                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          emp.status === 'ACTIVE' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-700'
-                        }`}>
-                          {emp.status || 'ACTIVE'}
-                        </span>
-                      </td>
-                      <td className="px-4 py-2.5 text-slate-600 font-medium">{(emp.joiningDate || emp.dateOfJoining || '').split('T')[0] || '-'}</td>
-                    </tr>
-                  ))}
+                  {paginatedEmployees.map((emp, idx) => {
+                    const empStatus = getEmpStatus(emp);
+                    const isActive = empStatus === 'ACTIVE';
+                    return (
+                      <tr key={emp.id || idx} className="hover:bg-slate-50 transition whitespace-nowrap">
+                        <td className="px-4 py-2.5 font-bold text-slate-800">{emp.employeeCode || emp.id}</td>
+                        <td className="px-4 py-2.5 font-bold text-slate-900">{`${emp.firstName || ''} ${emp.lastName || ''}`.trim() || emp.name || 'Employee'}</td>
+                        <td className="px-4 py-2.5 text-slate-600">{emp.user?.email || emp.email || '-'}</td>
+                        <td className="px-4 py-2.5 text-slate-600">{emp.department?.name || emp.department || '-'}</td>
+                        <td className="px-4 py-2.5 text-slate-600">{emp.designation?.title || emp.designation || '-'}</td>
+                        <td className="px-4 py-2.5">
+                          <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold ${
+                            isActive ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            <span className={`w-1.5 h-1.5 rounded-full ${isActive ? 'bg-emerald-500' : 'bg-red-500'}`}></span>
+                            {empStatus}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2.5 text-slate-600 font-medium">{(emp.joiningDate || emp.dateOfJoining || '').split('T')[0] || '-'}</td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
             <Pagination
               currentPage={empPage}
-              totalItems={employees.length}
+              totalItems={filteredEmployees.length}
               pageSize={PAGE_SIZE}
               onPageChange={setEmpPage}
             />
