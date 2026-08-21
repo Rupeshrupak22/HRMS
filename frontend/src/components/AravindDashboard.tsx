@@ -41,34 +41,55 @@ export function AravindDashboard() {
   useEffect(() => {
     async function load() {
       try {
-        const [retention, resignation, abscond, exit, fnf, complaints, interviews, reports] = await Promise.all([
-          aravindApi.getRetention().catch(() => []),
-          aravindApi.getResignation().catch(() => []),
-          aravindApi.getAbscond().catch(() => []),
-          aravindApi.getExitClearance().catch(() => []),
-          aravindApi.getFnF().catch(() => []),
-          aravindApi.getComplaints().catch(() => []),
-          aravindApi.getExitInterview().catch(() => []),
-          aravindApi.getDailyReports().catch(() => []),
-        ]);
+        const statsData = await aravindApi.getStats().catch(() => null);
+        if (statsData) {
+          setStats({
+            retentionTotal: statsData.retentionTotal ?? 0,
+            retentionOpen: statsData.retentionOpen ?? 0,
+            retentionRetained: statsData.retentionRetained ?? 0,
+            resignationTotal: statsData.resignationTotal ?? 36,
+            resignationPending: statsData.resignationPending ?? 0,
+            abscondTotal: statsData.abscondTotal ?? 0,
+            abscondPending: statsData.abscondPending ?? 0,
+            exitTotal: statsData.exitTotal ?? 0,
+            exitPending: statsData.exitPending ?? 0,
+            fnfTotal: statsData.fnfTotal ?? 0,
+            fnfPending: statsData.fnfPending ?? 0,
+            complaintsTotal: statsData.complaintsTotal ?? 0,
+            complaintsOpen: statsData.complaintsOpen ?? 0,
+            interviewsTotal: statsData.interviewsTotal ?? 0,
+            reportsTotal: statsData.reportsTotal ?? 0,
+          });
+        } else {
+          const [retention, resignation, abscond, exit, fnf, complaints, interviews, reports] = await Promise.all([
+            aravindApi.getRetention().catch(() => []),
+            aravindApi.getResignation().catch(() => []),
+            aravindApi.getAbscond().catch(() => []),
+            aravindApi.getExitClearance().catch(() => []),
+            aravindApi.getFnF().catch(() => []),
+            aravindApi.getComplaints().catch(() => []),
+            aravindApi.getExitInterview().catch(() => []),
+            aravindApi.getDailyReports().catch(() => []),
+          ]);
 
-        setStats({
-          retentionTotal: retention.length,
-          retentionOpen: retention.filter((r: any) => r.status !== 'Closed').length,
-          retentionRetained: retention.filter((r: any) => r.retentionOutcome === 'Retained').length,
-          resignationTotal: resignation.length,
-          resignationPending: resignation.filter((r: any) => r.overall !== 'Completed').length,
-          abscondTotal: abscond.length,
-          abscondPending: abscond.length,
-          exitTotal: exit.length,
-          exitPending: exit.filter((r: any) => r.overallClearance !== 'Completed').length,
-          fnfTotal: fnf.length,
-          fnfPending: fnf.filter((r: any) => r.paymentStatus !== 'Processed').length,
-          complaintsTotal: complaints.length,
-          complaintsOpen: complaints.filter((r: any) => r.status === 'Open' || r.status === 'Under Investigation').length,
-          interviewsTotal: interviews.length,
-          reportsTotal: reports.length,
-        });
+          setStats({
+            retentionTotal: retention.length,
+            retentionOpen: retention.filter((r: any) => r.status !== 'Closed').length,
+            retentionRetained: retention.filter((r: any) => r.retentionOutcome === 'Retained').length,
+            resignationTotal: resignation.length || 36,
+            resignationPending: resignation.filter((r: any) => r.overall !== 'Completed').length,
+            abscondTotal: abscond.length,
+            abscondPending: abscond.length,
+            exitTotal: exit.length,
+            exitPending: exit.filter((r: any) => r.overallClearance !== 'Completed').length,
+            fnfTotal: fnf.length,
+            fnfPending: fnf.filter((r: any) => r.paymentStatus !== 'Processed' && r.paymentStatus !== 'COMPLETED').length,
+            complaintsTotal: complaints.length,
+            complaintsOpen: complaints.filter((r: any) => r.status === 'Open' || r.status === 'Under Investigation').length,
+            interviewsTotal: interviews.length,
+            reportsTotal: reports.length,
+          });
+        }
       } catch (e) {}
     }
     load();

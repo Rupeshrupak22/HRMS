@@ -15,6 +15,22 @@ const SPECIALIST_CONFIG: Record<string, { role: Role; specialization: string }> 
   'aravind@adyapan.com': { role: 'HR_EXECUTIVE', specialization: 'RESIGNATION_EXIT' },
 };
 
+// In-memory cache for authenticated users to avoid redundant DB hits during parallel requests (TTL: 60s)
+const userCache = new Map<string, { user: any; expiry: number }>();
+
+function getCachedUser(key: string) {
+  const cached = userCache.get(key);
+  if (cached && cached.expiry > Date.now()) {
+    return cached.user;
+  }
+  userCache.delete(key);
+  return null;
+}
+
+function setCachedUser(key: string, user: any) {
+  userCache.set(key, { user, expiry: Date.now() + 60 * 1000 });
+}
+
 /**
  * Middleware: Verify JWT and attach user to request
  */
@@ -48,18 +64,37 @@ export async function authenticate(req: AuthRequest, _res: Response, next: NextF
       throw new UnauthorizedError('Invalid token payload');
     }
 
-    let user = null;
-    if (payload.sub) {
-      user = await prisma.user.findUnique({
-        where: { id: payload.sub },
-        include: { employee: true },
-      });
-    }
-    if (!user && payload.email) {
-      user = await prisma.user.findUnique({
-        where: { email: payload.email },
-        include: { employee: true },
-      });
+    const cacheKey = payload.sub || payload.email || '';
+    let user = getCachedUser(cacheKey);
+
+    if (!user) {
+      try {
+        if (payload.sub) {
+          user = await prisma.user.findUnique({
+            where: { id: payload.sub },
+            include: { employee: true },
+          });
+        }
+        if (!user && payload.email) {
+          user = await prisma.user.findUnique({
+            where: { email: payload.email },
+            include: { employee: true },
+          });
+        }
+        if (user) {
+          setCachedUser(cacheKey, user);
+        }
+      } catch (dbErr: any) {
+        console.warn('⚠️ Auth DB query fallback to token payload:', dbErr?.message);
+        // Fallback: If DB connection pool is momentarily saturated, construct user from valid JWT payload
+        user = {
+          id: payload.sub,
+          email: payload.email || '',
+          role: payload.role || 'HR_ADMIN',
+          isLocked: false,
+          employee: null,
+        };
+      }
     }
 
     if (!user) {

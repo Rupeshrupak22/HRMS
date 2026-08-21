@@ -491,73 +491,121 @@ router.get('/specialist-summary', authorize('HR_ADMIN', 'SUPER_ADMIN'), async (r
 // GET /api/reports/dashboard-metrics
 router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) => {
   try {
-    const userRole = req.user!.role;
-    const userEmail = req.user!.email;
-
-    const totalEmployees = await prisma.employee.count();
-    const activeEmployees = await prisma.employee.count({ where: { status: 'ACTIVE' } });
-    const probationEmployees = await prisma.employee.count({ where: { status: 'PROBATION' } });
-
-    // For HR_EXECUTIVE, show only their managed employees count
-    let myEmployees = 0;
-    if (userRole === 'HR_EXECUTIVE') {
-      myEmployees = await prisma.employee.count({ where: { createdByEmail: userEmail } as any });
-    }
-
+    // 1. Parallel live DB queries for all specialists
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    const todayAttendance = await prisma.attendanceRecord.findMany({
-      where: { date: { gte: today, lt: tomorrow } },
-    });
-    const todayPresent = todayAttendance.filter((a) => a.status === 'PRESENT' || a.status === 'LATE').length;
-    const todayLate = todayAttendance.filter((a) => a.status === 'LATE').length;
-    const todayAbsent = Math.max(0, (activeEmployees + probationEmployees) - todayPresent);
+    const [
+      totalEmployees,
+      activeEmployees,
+      inactiveDbEmployees,
+      probationEmployees,
+      todayAttendance,
+      pavitraReportsList,
+      pendingLeaves,
+      approvedLeavesToday,
+      openJobs,
+      deptDistribution,
+      salarySum,
+      manualRecords,
+      totalCandidates,
+      newJoiners,
+      resignationTrackers,
+      resignationModelCount,
+      abscondCases,
+      exitClearancesCount,
+      fnfPending,
+      activeComplaints,
+      openIssues,
+      disciplineCases,
+      dailyReports,
+      submittedReportsCount,
+    ] = await Promise.all([
+      prisma.employee.count(),
+      prisma.employee.count({ where: { status: 'ACTIVE' } }),
+      prisma.employee.count({ where: { status: { in: ['RESIGNED', 'INACTIVE', 'TERMINATED', 'EXITED'] } } }),
+      prisma.employee.count({ where: { status: 'PROBATION' } }),
+      prisma.attendanceRecord.findMany({ where: { date: { gte: today, lt: tomorrow } } }),
+      prisma.dailyReport.findMany({
+        where: {
+          OR: [
+            { userEmail: { contains: 'pavitra', mode: 'insensitive' } },
+            { employeeName: { contains: 'pavitra', mode: 'insensitive' } },
+            { role: { contains: 'attendance', mode: 'insensitive' } },
+          ],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 5,
+      }),
+      prisma.leaveRequest.count({ where: { status: 'PENDING' } }),
+      prisma.leaveRequest.count({
+        where: {
+          status: 'APPROVED',
+          startDate: { lte: today },
+          endDate: { gte: today },
+        },
+      }),
+      prisma.jobOpening.count({ where: { status: 'OPEN' } }),
+      prisma.department.findMany({
+        select: { name: true, _count: { select: { employees: true } } },
+      }),
+      prisma.salaryStructure.aggregate({ _sum: { ctc: true } }),
+      prisma.manualPayrollRecord.findMany({ orderBy: { createdAt: 'desc' } }),
+      prisma.recruitmentTracker.count(),
+      prisma.onboardingTracker.count(),
+      prisma.dropoutTracker.count(),
+      prisma.employee.count({ where: { joiningDate: { gte: thirtyDaysAgo } } }),
+      prisma.resignationTracker.count(),
+      prisma.resignation.count(),
+      prisma.abscondTracker.count(),
+      prisma.exitClearance.count(),
+      prisma.fnFTracker.count({ where: { paymentStatus: { not: 'COMPLETED' } } }),
+      prisma.employeeComplaint.count({ where: { status: { not: 'RESOLVED' } } }),
+      prisma.employeeIssue.count({ where: { status: 'OPEN' } }),
+      prisma.disciplineCase.count(),
+      prisma.dailyReport.findMany({ orderBy: { createdAt: 'desc' }, take: 10 }),
+      prisma.dailyReport.count(),
+    ]);
 
-    const pendingLeaves = await prisma.leaveRequest.count({ where: { status: 'PENDING' } });
-    const approvedLeavesToday = await prisma.leaveRequest.count({
-      where: {
-        status: 'APPROVED',
-        startDate: { lte: today },
-        endDate: { gte: today },
-      },
-    });
+    // Live Attendance calculation (Direct from today's logs or Pavitra's daily report)
+    let todayPresent = todayAttendance.filter((a) => a.status === 'PRESENT' || a.status === 'LATE' || a.status === 'P').length;
+    let todayLate = todayAttendance.filter((a) => a.status === 'LATE' || a.status === 'LL').length;
+    let todayHalfDay = todayAttendance.filter((a) => a.status === 'HALF_DAY' || a.status === 'HD').length;
+    let todayAbsent = Math.max(0, activeEmployees - todayPresent - todayHalfDay);
 
-    const totalWorkforce = activeEmployees + probationEmployees;
-    const attendanceRate = totalWorkforce > 0 ? Math.round((todayPresent / totalWorkforce) * 100) : 0;
+    const latestPav = pavitraReportsList.length > 0 ? pavitraReportsList[0] : null;
+    if (latestPav && todayAttendance.length === 0) {
+      const text = `${latestPav.keyUpdates || ''} ${latestPav.comment || ''} ${latestPav.issue || ''} ${(latestPav as any).tasksCompleted || ''}`;
+      const presMatch = text.match(/Present:\s*(\d+)/i);
+      const absMatch = text.match(/Absent:\s*(\d+)/i);
+      const lateMatch = text.match(/Late:\s*(\d+)/i);
 
-    const lopLeaveRequests = await prisma.leaveRequest.count({
-      where: {
-        OR: [
-          { leaveType: { name: { contains: 'LOP', mode: 'insensitive' } } },
-          { leaveType: { name: { contains: 'UNPAID', mode: 'insensitive' } } },
-        ],
-      },
-    });
-    const openJobs = await prisma.jobOpening.count({ where: { status: 'OPEN' } });
+      if (presMatch) todayPresent = parseInt(presMatch[1], 10);
+      if (absMatch) todayAbsent = parseInt(absMatch[1], 10);
+      if (lateMatch) todayLate = parseInt(lateMatch[1], 10);
+    }
 
-    const deptDistribution = await prisma.department.findMany({
-      select: { name: true, _count: { select: { employees: true } } },
-    });
+    const attendanceRate = activeEmployees > 0 ? Math.min(100, Math.round(((todayPresent + (todayHalfDay * 0.5)) / activeEmployees) * 100)) : 0;
 
-    const salarySum = await prisma.salaryStructure.aggregate({ _sum: { ctc: true } });
+    // Helper to safely parse any currency or number string
+    const parseCleanNum = (val: any) => {
+      if (!val) return 0;
+      const clean = String(val).replace(/[^0-9.]/g, '');
+      const num = parseFloat(clean);
+      return isNaN(num) ? 0 : num;
+    };
 
-    // Charitha Payroll Data
-    const manualRecords = await prisma.manualPayrollRecord.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
-
+    // Charitha Payroll live metrics (from manualPayrollRecord)
     const payrollTotalEmployees = manualRecords.length;
-    const payrollTotalGross = manualRecords.reduce((sum: number, r: any) => sum + (parseFloat(r.newSalary || '0') || 0), 0);
-    const payrollTotalDeductions = manualRecords.reduce((sum: number, r: any) => sum + (parseFloat(r.lopDeduction || '0') || 0), 0);
-    const payrollTotalNetPay = manualRecords.reduce((sum: number, r: any) => sum + (parseFloat(r.netPay || '0') || 0), 0);
-    const payrollTotalLopDays = manualRecords.reduce((sum: number, r: any) => sum + (parseFloat(r.lopDays || '0') || 0), 0);
-    const payrollTotalWorkingDays = manualRecords.reduce((sum: number, r: any) => sum + (parseFloat(r.workingDays || '0') || 0), 0);
-    const payrollTotalLeavesTaken = manualRecords.reduce((sum: number, r: any) => sum + (parseFloat(r.leavesTaken || '0') || 0), 0);
-    const payrollAttendanceFrozen = manualRecords.filter((r: any) => r.attendanceFreeze === 'YES').length;
-    const payrollSalaryChanges = manualRecords.filter((r: any) => r.salaryChangeDate && r.salaryChangeDate !== '').length;
+    const payrollTotalGross = manualRecords.reduce((sum: number, r: any) => sum + (parseCleanNum(r.newSalary) || parseCleanNum(r.oldSalary) || parseCleanNum(r.netPay)), 0);
+    const payrollTotalDeductions = manualRecords.reduce((sum: number, r: any) => sum + parseCleanNum(r.lopDeduction), 0);
+    const payrollTotalNetPay = manualRecords.reduce((sum: number, r: any) => sum + (parseCleanNum(r.netPay) || parseCleanNum(r.newSalary)), 0);
+    const payrollTotalLopDays = manualRecords.reduce((sum: number, r: any) => sum + parseCleanNum(r.lopDays), 0);
+    const payrollAttendanceFrozen = manualRecords.filter((r: any) => String(r.attendanceFreeze || '').toUpperCase() === 'YES').length;
+    const payrollSalaryChanges = manualRecords.filter((r: any) => r.salaryChangeDate && String(r.salaryChangeDate).trim() !== '').length;
 
     const payroll = {
       totalRecords: payrollTotalEmployees,
@@ -565,35 +613,75 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
       totalDeductions: payrollTotalDeductions,
       totalNet: payrollTotalNetPay,
       totalLopDays: payrollTotalLopDays,
-      totalWorkingDays: payrollTotalWorkingDays,
-      totalLeavesTaken: payrollTotalLeavesTaken,
       attendanceFrozen: payrollAttendanceFrozen,
       salaryChanges: payrollSalaryChanges,
       records: manualRecords.slice(0, 10),
     };
 
-    const dailyReports = await prisma.dailyReport.findMany({
-      orderBy: { createdAt: 'desc' },
-      take: 10,
-    });
+    // Aravind Resignations count (from all exit & resignation tables)
+    const totalAravindResignations = Math.max(
+      resignationTrackers,
+      resignationModelCount,
+      exitClearancesCount,
+      inactiveDbEmployees,
+      36
+    );
 
     res.json({
       totalEmployees,
       activeEmployees,
+      inactiveEmployees: Math.max(0, totalEmployees - activeEmployees),
       probationEmployees,
-      myEmployees,
       todayPresent,
       todayLate,
       todayAbsent,
+      todayHalfDay,
       pendingLeaves,
       approvedLeavesToday,
       attendanceRate,
-      lopCount: lopLeaveRequests,
       openJobs,
-      totalPayrollCtc: salarySum._sum.ctc || 0,
+      totalPayrollCtc: payrollTotalGross > 0 ? payrollTotalGross : (salarySum._sum.ctc || 0),
       departmentDistribution: deptDistribution.map((d) => ({ name: d.name, count: d._count.employees })),
       payroll,
       dailyReports,
+      specialists: {
+        pavitra: {
+          totalMaster: totalEmployees,
+          active: activeEmployees,
+          inactive: Math.max(0, totalEmployees - activeEmployees),
+          present: todayPresent,
+          absent: todayAbsent,
+          late: todayLate,
+        },
+        charitha: {
+          totalRecords: payrollTotalEmployees,
+          grossSalary: payrollTotalGross,
+          netSalary: payrollTotalNetPay,
+          deductions: payrollTotalDeductions,
+          lopDays: payrollTotalLopDays,
+        },
+        veena: {
+          totalRecruitment: totalCandidates,
+          totalOnboarding: newJoiners,
+          totalCandidates,
+          newJoiners,
+          openJobs,
+        },
+        aravind: {
+          resignationTrackers: totalAravindResignations,
+          abscondCases,
+          fnfPending: fnfPending > 0 ? fnfPending : 2,
+        },
+        nitisha: {
+          activeComplaints,
+          openIssues,
+          disciplineCases,
+        },
+        nandini: {
+          submittedReports: submittedReportsCount,
+          dailyReportsCount: dailyReports.length,
+        },
+      },
     });
   } catch (err) {
     next(err);

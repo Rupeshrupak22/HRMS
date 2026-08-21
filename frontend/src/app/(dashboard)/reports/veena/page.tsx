@@ -23,70 +23,63 @@ export default function VeenaReportPage() {
   const PAGE_SIZE = 20;
 
   useEffect(() => {
-    // 1. Recruitment candidates strictly from DB
-    veenaApi.getRecruitment().then((res) => {
-      const list = Array.isArray(res) ? res : [];
-      setRecruitment(list);
-    }).catch(() => {
-      setRecruitment([]);
-    });
+    async function loadData() {
+      try {
+        const [recRes, onbRes, dropRes, dailyRes] = await Promise.allSettled([
+          veenaApi.getRecruitment().catch(() => []),
+          veenaApi.getOnboarding().catch(() => []),
+          veenaApi.getDropouts().catch(() => []),
+          apiRequest('/reports/daily').catch(() => veenaApi.getDailyReports()),
+        ]);
 
-    // 2. Onboarding employees strictly from DB
-    veenaApi.getOnboarding().then((res) => {
-      const list = Array.isArray(res) ? res : [];
-      setOnboarding(list);
-    }).catch(() => {
-      setOnboarding([]);
-    });
-
-    // 3. Dropout candidates strictly from DB
-    veenaApi.getDropouts().then((res) => {
-      const list = Array.isArray(res) ? res : [];
-      setDropouts(list);
-    }).catch(() => {
-      setDropouts([]);
-    });
-
-    // 4. Daily reports
-    apiRequest('/reports/daily').then((res) => {
-      const arr = Array.isArray(res) ? res : [];
-      setDailyReports(arr.filter((r: any) => 
-        r.userEmail === 'veena@adyapan.com' || 
-        r.specialization === 'ONBOARDING_HIRING' || 
-        (r.employeeName || '').toLowerCase().includes('veena')
-      ));
-    }).catch(() => {
-      veenaApi.getDailyReports().then((res) => {
-        const arr = Array.isArray(res) ? res : [];
-        setDailyReports(arr.filter((r: any) => 
-          r.userEmail === 'veena@adyapan.com' || 
-          r.specialization === 'ONBOARDING_HIRING' || 
-          (r.employeeName || '').toLowerCase().includes('veena')
-        ));
-      }).catch(() => setDailyReports([]));
-    });
+        if (recRes.status === 'fulfilled' && Array.isArray(recRes.value)) {
+          setRecruitment(recRes.value);
+        }
+        if (onbRes.status === 'fulfilled' && Array.isArray(onbRes.value)) {
+          setOnboarding(onbRes.value);
+        }
+        if (dropRes.status === 'fulfilled' && Array.isArray(dropRes.value)) {
+          setDropouts(dropRes.value);
+        }
+        if (dailyRes.status === 'fulfilled' && Array.isArray(dailyRes.value)) {
+          setDailyReports(
+            dailyRes.value.filter(
+              (r: any) =>
+                r.userEmail === 'veena@adyapan.com' ||
+                r.specialization === 'ONBOARDING_HIRING' ||
+                (r.employeeName || '').toLowerCase().includes('veena')
+            )
+          );
+        }
+      } catch (err) {
+        console.error('Failed to load Veena report data:', err);
+      }
+    }
+    loadData();
   }, []);
 
-  const filterRecords = (records: any[]) => {
+  const filterCandidates = (records: any[]) => {
+    if (!searchTerm) return records;
+    const q = searchTerm.toLowerCase().trim();
     return records.filter((r) => {
-      const created = r.date || r.applicationDate || r.dropoutDate || (r.createdAt ? r.createdAt.split('T')[0] : '');
-      const matchesDate = !filterDate || created === filterDate;
-
-      const q = searchTerm.toLowerCase().trim();
       const name = (r.candidateName || r.name || r.employeeName || '').toLowerCase();
       const phone = (r.phoneNumber || r.mobileNumber || r.phone || '').toLowerCase();
       const role = (r.roleApplied || r.role || r.department || '').toLowerCase();
       const status = (r.status || r.currentStage || '').toLowerCase();
-
-      const matchesSearch = !q || name.includes(q) || phone.includes(q) || role.includes(q) || status.includes(q);
-      return matchesDate && matchesSearch;
+      return name.includes(q) || phone.includes(q) || role.includes(q) || status.includes(q);
     });
   };
 
-  const filteredRecruitment = filterRecords(recruitment);
-  const filteredOnboarding = filterRecords(onboarding);
-  const filteredDropouts = filterRecords(dropouts);
-  const filteredDailyReports = filterRecords(dailyReports);
+  const filteredRecruitment = filterCandidates(recruitment);
+  const filteredOnboarding = filterCandidates(onboarding);
+  const filteredDropouts = filterCandidates(dropouts);
+
+  const filteredDailyReports = filterDate
+    ? dailyReports.filter((r) => {
+        const created = r.reportDate || r.date || (r.createdAt ? r.createdAt.split('T')[0] : '');
+        return created === filterDate;
+      })
+    : dailyReports;
 
   return (
     <div className="space-y-8 max-w-[1400px] mx-auto font-sans">
@@ -143,6 +136,33 @@ export default function VeenaReportPage() {
               Clear
             </button>
           )}
+        </div>
+      </div>
+
+      {/* Live Metric KPI Summary Row */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-2xl border border-amber-100 shadow-xs">
+          <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Recruitment Tracker</p>
+          <p className="text-2xl font-black text-amber-900 mt-1">{recruitment.length}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">{filteredRecruitment.length} Matched in Filter</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-xs">
+          <p className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Onboarding Pipeline</p>
+          <p className="text-2xl font-black text-blue-900 mt-1">{onboarding.length}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">{filteredOnboarding.length} Matched in Filter</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-rose-100 shadow-xs">
+          <p className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">Dropout Records</p>
+          <p className="text-2xl font-black text-rose-900 mt-1">{dropouts.length}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">{filteredDropouts.length} Matched in Filter</p>
+        </div>
+
+        <div className="bg-white p-4 rounded-2xl border border-indigo-100 shadow-xs">
+          <p className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">Daily Submissions</p>
+          <p className="text-2xl font-black text-indigo-900 mt-1">{dailyReports.length}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">{filteredDailyReports.length} Matched in Filter</p>
         </div>
       </div>
 

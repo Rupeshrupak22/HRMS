@@ -71,15 +71,7 @@ function crud(model: any) {
   return {
     getAll: async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
-        const where: any = {};
-        const isVeenaLead =
-          req.user!.email === 'veena@adyapan.com' ||
-          req.user!.specialization === 'ONBOARDING_HIRING' ||
-          ['SUPER_ADMIN', 'HR_ADMIN'].includes(req.user!.role);
-        if (!isVeenaLead && req.user!.role === 'HR_EXECUTIVE') {
-          where.createdByEmail = req.user!.email;
-        }
-        const list = await model.findMany({ where, orderBy: { createdAt: 'desc' } });
+        const list = await model.findMany({ orderBy: { createdAt: 'desc' } });
         return res.json(list);
       } catch (e: any) {
         next(e);
@@ -90,7 +82,7 @@ function crud(model: any) {
         const dbCreated = await model.create({
           data: {
             ...req.body,
-            createdByEmail: req.user!.email,
+            createdByEmail: req.user?.email || 'veena@adyapan.com',
           },
         });
         return res.status(201).json(dbCreated);
@@ -133,92 +125,13 @@ function crud(model: any) {
 // ----------------------------------------------------
 const onboardingCrud = crud(prisma.onboardingTracker);
 
-// GET /onboarding with auto-sync of recruitment candidates having status in Active, Selected, Joining, Joined, Onboarding without duplicates
-router.get('/onboarding', async (req: AuthRequest, res: Response) => {
+// GET /onboarding (Ultra fast pure DB query)
+router.get('/onboarding', async (_req: AuthRequest, res: Response) => {
   try {
-    const where: any = {};
-    const isVeenaLead =
-      req.user!.email === 'veena@adyapan.com' ||
-      req.user!.specialization === 'ONBOARDING_HIRING' ||
-      ['SUPER_ADMIN', 'HR_ADMIN'].includes(req.user!.role);
-    if (!isVeenaLead && req.user!.role === 'HR_EXECUTIVE') {
-      where.createdByEmail = req.user!.email;
-    }
-
-    // 1. Fetch current onboarding tracker records
-    const rawOnboarding = await prisma.onboardingTracker.findMany({
-      where,
+    const list = await prisma.onboardingTracker.findMany({
       orderBy: { createdAt: 'desc' },
     });
-
-    // 2. Fetch all recruitment candidates
-    const recCandidates = await prisma.recruitmentTracker.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
-
-    // Deduplicate existing onboarding records by candidate name
-    const seenNames = new Set<string>();
-    const deduplicatedOnboarding: any[] = [];
-    const duplicateIdsToDelete: string[] = [];
-
-    for (const item of rawOnboarding) {
-      const normName = (item.candidateName || '').toLowerCase().replace(/\s+/g, ' ').trim();
-      if (!normName) continue;
-      if (seenNames.has(normName)) {
-        duplicateIdsToDelete.push(item.id);
-      } else {
-        seenNames.add(normName);
-        deduplicatedOnboarding.push(item);
-      }
-    }
-
-    if (duplicateIdsToDelete.length > 0) {
-      prisma.onboardingTracker
-        .deleteMany({ where: { id: { in: duplicateIdsToDelete } } })
-        .catch((e) => console.error('Error cleaning duplicate onboarding rows:', e));
-    }
-
-    // 3. Auto-sync any qualifying recruitment candidate that is not yet in onboarding
-    const qualifyingRec = recCandidates.filter((r) => qualifiesForOnboarding(r.status || ''));
-
-    for (const rec of qualifyingRec) {
-      const normName = (rec.candidateName || '').toLowerCase().replace(/\s+/g, ' ').trim();
-      if (!normName) continue;
-
-      if (!seenNames.has(normName)) {
-        try {
-          const created = await prisma.onboardingTracker.create({
-            data: {
-              employeeId: '',
-              candidateName: rec.candidateName,
-              phoneNumber: rec.phoneNumber || '',
-              email: rec.email || '',
-              college: rec.college || '',
-              location: rec.location || '',
-              source: rec.source || 'Recruitment',
-              roleApplied: rec.roleApplied || 'Sales',
-              recruiter: rec.recruiter || 'Abbu Veena',
-              applicationDate: rec.applicationDate || '',
-              currentStage: rec.currentStage || 'Joining',
-              status: rec.status || 'Active',
-              interviews: rec.interviews || '',
-              selection: rec.selection || 'Selected',
-              offers: rec.offers || '',
-              joining: rec.joining || 'Yes',
-              onboarding: rec.onboarding || 'Pending',
-              offerRemarks: rec.offerRemarks || '',
-              createdByEmail: rec.createdByEmail || req.user!.email,
-            },
-          });
-          seenNames.add(normName);
-          deduplicatedOnboarding.push(created);
-        } catch (err) {
-          console.error('Failed to auto-sync recruitment candidate to onboarding:', err);
-        }
-      }
-    }
-
-    return res.json(deduplicatedOnboarding);
+    return res.json(list || []);
   } catch (e: any) {
     console.error('Database onboarding query error:', e?.message);
     return res.status(500).json({ error: 'Database query failed' });
@@ -475,11 +388,67 @@ router.delete('/recruitment/:id', recruitmentCrud.remove);
 // ----------------------------------------------------
 // DROPOUTS & DAILY REPORTS
 // ----------------------------------------------------
-const dropouts = crud(prisma.dropoutRecord);
-router.get('/dropouts', dropouts.getAll);
-router.post('/dropouts', dropouts.create);
-router.put('/dropouts/:id', dropouts.update);
-router.delete('/dropouts/:id', dropouts.remove);
+router.get('/dropouts', async (_req: AuthRequest, res: Response) => {
+  try {
+    const list = await prisma.dropoutRecord.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json(list || []);
+  } catch (err: any) {
+    console.error('Failed to fetch dropouts:', err?.message);
+    return res.json([]);
+  }
+});
+
+router.post('/dropouts', async (req: AuthRequest, res: Response) => {
+  try {
+    const created = await prisma.dropoutRecord.create({
+      data: {
+        candidateName: String(req.body.candidateName || req.body.name || '').trim(),
+        employeeId: req.body.employeeId ? String(req.body.employeeId).trim() : '',
+        role: req.body.role ? String(req.body.role).trim() : (req.body.roleApplied ? String(req.body.roleApplied).trim() : 'Sales'),
+        source: req.body.source ? String(req.body.source).trim() : 'Direct',
+        dropoutDate: req.body.dropoutDate ? String(req.body.dropoutDate).trim() : (req.body.date ? String(req.body.date).trim() : ''),
+        dropoutStage: req.body.dropoutStage ? String(req.body.dropoutStage).trim() : (req.body.stage ? String(req.body.stage).trim() : 'Recruitment'),
+        dropoutReason: req.body.dropoutReason ? String(req.body.dropoutReason).trim() : (req.body.reason ? String(req.body.reason).trim() : 'Dropped'),
+        recruiter: req.body.recruiter ? String(req.body.recruiter).trim() : 'Abbu Veena',
+        remarks: req.body.remarks ? String(req.body.remarks).trim() : '',
+        createdByEmail: req.user?.email || 'veena@adyapan.com',
+      },
+    });
+    return res.status(201).json(created);
+  } catch (e: any) {
+    console.error('Create dropout error:', e?.message);
+    return res.status(500).json({ error: e?.message || 'Failed to create dropout record' });
+  }
+});
+
+router.put('/dropouts/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const updated = await prisma.dropoutRecord.update({
+      where: { id },
+      data: req.body,
+    });
+    return res.json(updated);
+  } catch (e: any) {
+    console.error('Update dropout error:', e?.message);
+    return res.status(500).json({ error: e?.message || 'Failed to update dropout record' });
+  }
+});
+
+router.delete('/dropouts/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    await prisma.dropoutRecord.delete({ where: { id } }).catch(async () => {
+      // If not in DropoutRecord, update status in RecruitmentTracker
+      await prisma.recruitmentTracker.update({ where: { id }, data: { status: 'Active' } }).catch(() => {});
+    });
+    return res.json({ success: true });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'Failed to delete dropout record' });
+  }
+});
 
 const dailyReports = crud(prisma.veenaDailyReport);
 router.get('/daily-reports', dailyReports.getAll);

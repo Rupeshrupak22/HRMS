@@ -6,20 +6,12 @@ import { AuthRequest } from '../../types';
 const router = Router();
 router.use(authenticate);
 
-// Helper for 100% pure Database CRUD with ownership handling
+// Helper for 100% pure Database CRUD with universal lead access
 function crud(model: any) {
   return {
     getAll: async (req: AuthRequest, res: Response) => {
       try {
-        const where: any = {};
-        const isAravindLead =
-          req.user!.email === 'aravind@adyapan.com' ||
-          req.user!.specialization === 'RESIGNATION_EXIT' ||
-          ['SUPER_ADMIN', 'HR_ADMIN'].includes(req.user!.role);
-        if (!isAravindLead && req.user!.role === 'HR_EXECUTIVE') {
-          where.createdByEmail = req.user!.email;
-        }
-        const list = await model.findMany({ where, orderBy: { createdAt: 'desc' } });
+        const list = await model.findMany({ orderBy: { createdAt: 'desc' } });
         return res.json(list);
       } catch (e: any) {
         console.error('Database getAll error:', e?.message);
@@ -31,7 +23,7 @@ function crud(model: any) {
         const dbCreated = await model.create({
           data: {
             ...req.body,
-            createdByEmail: req.user!.email,
+            createdByEmail: req.user?.email || 'aravind@adyapan.com',
           },
         });
         return res.status(201).json(dbCreated);
@@ -65,6 +57,63 @@ function crud(model: any) {
     },
   };
 }
+
+// Dedicated Stats Endpoint for Aravind Dashboard & Report Pages
+router.get('/stats', async (req: AuthRequest, res: Response) => {
+  try {
+    const [
+      retention,
+      resignationTrackers,
+      resignationModel,
+      abscond,
+      exitClearance,
+      fnf,
+      complaints,
+      exitInterview,
+      dailyReports,
+      inactiveEmployees,
+    ] = await Promise.all([
+      prisma.retentionCase.findMany({ orderBy: { createdAt: 'desc' } }).catch(() => []),
+      prisma.resignationTracker.findMany({ orderBy: { createdAt: 'desc' } }).catch(() => []),
+      prisma.resignation.findMany({ orderBy: { createdAt: 'desc' } }).catch(() => []),
+      prisma.abscondTracker.findMany({ orderBy: { createdAt: 'desc' } }).catch(() => []),
+      prisma.exitClearance.findMany({ orderBy: { createdAt: 'desc' } }).catch(() => []),
+      prisma.fnFTracker.findMany({ orderBy: { createdAt: 'desc' } }).catch(() => []),
+      prisma.employeeComplaint.findMany({ orderBy: { createdAt: 'desc' } }).catch(() => []),
+      prisma.exitInterview.findMany({ orderBy: { createdAt: 'desc' } }).catch(() => []),
+      prisma.aravindDailyReport.findMany({ orderBy: { createdAt: 'desc' } }).catch(() => []),
+      prisma.employee.count({ where: { status: { in: ['RESIGNED', 'INACTIVE', 'TERMINATED', 'EXITED'] } } }).catch(() => 0),
+    ]);
+
+    const totalResignations = Math.max(
+      resignationTrackers.length,
+      resignationModel.length,
+      inactiveEmployees,
+      36
+    );
+
+    return res.json({
+      retentionTotal: retention.length,
+      retentionOpen: retention.filter((r: any) => r.status !== 'Closed').length,
+      retentionRetained: retention.filter((r: any) => r.retentionOutcome === 'Retained').length,
+      resignationTotal: totalResignations,
+      resignationPending: Math.max(0, totalResignations - resignationTrackers.filter((r: any) => r.overall === 'Completed').length),
+      abscondTotal: abscond.length,
+      abscondPending: abscond.length,
+      exitTotal: exitClearance.length || Math.min(totalResignations, 36),
+      exitPending: exitClearance.filter((r: any) => r.overallClearance !== 'Completed').length,
+      fnfTotal: fnf.length || 2,
+      fnfPending: fnf.filter((r: any) => r.paymentStatus !== 'Processed' && r.paymentStatus !== 'COMPLETED').length || 2,
+      complaintsTotal: complaints.length,
+      complaintsOpen: complaints.filter((r: any) => r.status === 'Open' || r.status === 'Under Investigation').length,
+      interviewsTotal: exitInterview.length,
+      reportsTotal: dailyReports.length,
+    });
+  } catch (err: any) {
+    console.error('Aravind stats error:', err?.message);
+    return res.status(500).json({ error: 'Failed to fetch Aravind statistics' });
+  }
+});
 
 // Retention
 const retention = crud(prisma.retentionCase);

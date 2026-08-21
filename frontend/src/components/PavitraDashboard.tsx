@@ -39,25 +39,7 @@ export function PavitraDashboard() {
           r.specialization === 'ATTENDANCE_LEAVE' ||
           (r.employeeName || '').toLowerCase().includes('pavitra')
         );
-
-        const yesterdayReport = {
-          id: 'rep-pav-12',
-          employeeName: 'Pavitra (Attendance & Leave)',
-          userEmail: 'pavitra@adyapan.com',
-          specialization: 'ATTENDANCE_LEAVE',
-          date: '2026-08-12',
-          keyUpdates: 'Attendance Summary — Present: 94, Absent: 0, Late: 3, On Leave: 0, LOP: 0. Leaves Approved: 0, Rejected: 0.',
-          issue: 'No issues logged',
-          comment: 'Daily attendance logs verified and synchronized for yesterday.',
-          status: 'APPROVED',
-          createdAt: '2026-08-12T17:00:00.000Z',
-        };
-
-        // Filter out Today (2026-08-13) reports so Today is clean until submitted
-        const nonTodayReports = pavitraReports.filter((r: any) => (r.date || r.createdAt?.split('T')[0]) !== '2026-08-13');
-        const hasYesterday = nonTodayReports.some((r: any) => (r.date || r.createdAt?.split('T')[0]) === '2026-08-12');
-        const finalReports = hasYesterday ? nonTodayReports : [yesterdayReport, ...nonTodayReports];
-        setReports(finalReports);
+        setReports(pavitraReports);
       } catch (err) {
         console.error('Failed to load Pavitra daily reports:', err);
         setReports([]);

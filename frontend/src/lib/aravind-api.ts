@@ -90,4 +90,7 @@ export const aravindApi = {
   createAbscond: (data: any) => request('/abscond', { method: 'POST', body: JSON.stringify(data) }),
   updateAbscond: (id: string, data: any) => request(`/abscond/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteAbscond: (id: string) => request(`/abscond/${id}`, { method: 'DELETE' }),
+
+  // Unified Stats
+  getStats: () => request('/stats'),
 };

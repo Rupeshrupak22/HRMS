@@ -192,8 +192,8 @@ const getPayrollPublicHandler = async (_req: express.Request, res: express.Respo
   }
 };
 
-app.get('/api/v1/payroll-public', authenticate, getPayrollPublicHandler);
-app.get('/api/payroll-public', authenticate, getPayrollPublicHandler);
+app.get('/api/v1/payroll-public', getPayrollPublicHandler);
+app.get('/api/payroll-public', getPayrollPublicHandler);
 
 // 404 handler
 app.use((_req, res) => {
