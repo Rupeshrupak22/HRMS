@@ -14,6 +14,28 @@ async function check() {
     return;
   }
 
+  console.log('Dropping foreign key constraints on AttendanceRecord...');
+  try {
+    await prisma.$executeRawUnsafe(`
+      DO $$
+      DECLARE
+        r RECORD;
+      BEGIN
+        FOR r IN (
+          SELECT constraint_name
+          FROM information_schema.table_constraints
+          WHERE table_name = 'AttendanceRecord' AND constraint_type = 'FOREIGN KEY'
+        ) LOOP
+          EXECUTE 'ALTER TABLE "AttendanceRecord" DROP CONSTRAINT IF EXISTS ' || quote_ident(r.constraint_name) || ' CASCADE;';
+          RAISE NOTICE 'Dropped constraint: %', r.constraint_name;
+        END LOOP;
+      END $$;
+    `);
+    console.log('Successfully dropped all foreign keys on AttendanceRecord!');
+  } catch (err: any) {
+    console.error('Error dropping constraint:', err.message);
+  }
+
   console.log('Cleaning up Employee table...');
   const res = await prisma.employee.deleteMany({});
   console.log('Deleted employee rows:', res.count);
