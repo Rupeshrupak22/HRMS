@@ -55,6 +55,10 @@ router.get('/', async (req: AuthRequest, res: Response, next) => {
 router.post('/check-in', validate(checkInSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const employeeId = req.body.employeeId || req.user!.employeeId;
+    if (!employeeId) {
+      res.status(400).json({ success: false, message: 'No employee profile linked to this account' });
+      return;
+    }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -87,11 +91,15 @@ router.post('/check-in', validate(checkInSchema), async (req: AuthRequest, res: 
 router.post('/check-out', async (req: AuthRequest, res: Response, next) => {
   try {
     const employeeId = req.user!.employeeId;
+    if (!employeeId) {
+      res.status(400).json({ success: false, message: 'No employee profile linked to this account' });
+      return;
+    }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const existing = await prisma.attendanceRecord.findUnique({
-      where: { employeeId_date: { employeeId: employeeId!, date: today } },
+      where: { employeeId_date: { employeeId, date: today } },
     });
 
     if (!existing) {

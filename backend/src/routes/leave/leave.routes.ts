@@ -81,6 +81,10 @@ router.get('/requests', async (req: AuthRequest, res: Response, next) => {
 router.post('/apply', validate(applyLeaveSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const { leaveTypeId, startDate, endDate, reason } = req.body;
+    if (!req.user!.employeeId) {
+      res.status(400).json({ success: false, message: 'No employee profile linked to this account' });
+      return;
+    }
     const start = new Date(startDate);
     const end = new Date(endDate);
     const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
@@ -89,7 +93,7 @@ router.post('/apply', validate(applyLeaveSchema), async (req: AuthRequest, res: 
 
     // Check balance
     const balance = await prisma.leaveBalance.findFirst({
-      where: { employeeId: req.user!.employeeId!, leaveTypeId, year: new Date().getFullYear() },
+      where: { employeeId: req.user!.employeeId, leaveTypeId, year: new Date().getFullYear() },
     });
 
     if (balance && (balance.totalDays - balance.usedDays) < totalDays) {
@@ -98,7 +102,7 @@ router.post('/apply', validate(applyLeaveSchema), async (req: AuthRequest, res: 
 
     const request = await prisma.leaveRequest.create({
       data: {
-        employeeId: req.user!.employeeId!,
+        employeeId: req.user!.employeeId,
         leaveTypeId,
         startDate: start,
         endDate: end,

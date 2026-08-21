@@ -22,26 +22,6 @@ import { PavitraDailyReport } from '@/components/PavitraDailyReport';
 export default function DailyReportsPage() {
   const { user } = useAuth();
 
-  // Show Aravind-specific daily report
-  if (user?.specialization === 'RESIGNATION_EXIT') {
-    return <AravindDailyReport />;
-  }
-
-  // Show Nitisha-specific daily report
-  if (user?.specialization === 'DISCIPLINE_POSH') {
-    return <NitishaDailyReport />;
-  }
-
-  // Show Veena-specific daily report
-  if (user?.specialization === 'ONBOARDING_HIRING') {
-    return <VeenaDailyReport />;
-  }
-
-  // Show Pavitra-specific daily report
-  if (user?.specialization === 'ATTENDANCE_LEAVE' || user?.email === 'pavitra@adyapan.com') {
-    return <PavitraDailyReport />;
-  }
-
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
@@ -64,63 +44,7 @@ export default function DailyReportsPage() {
       const data = await apiRequest('/reports/daily');
       setReports(Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []);
     } catch (err) {
-      setReports([
-        {
-          id: 'rep-001',
-          employeeName: 'Pavitra (HR Attendance & Leave)',
-          userEmail: 'pavitra@adyapan.com',
-          date: new Date().toISOString().split('T')[0],
-          hoursWorked: 8.5,
-          tasksCompleted: 'Processed 14 leave applications and updated Loss of Pay (LOP) log for Technology department.',
-          blockers: 'None',
-          status: 'APPROVED',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'rep-002',
-          employeeName: 'Charitha (HR Salary & Payroll)',
-          userEmail: 'charitha@adyapan.com',
-          date: new Date().toISOString().split('T')[0],
-          hoursWorked: 9.0,
-          tasksCompleted: 'Verified CTC breakdown and prepared August monthly salary disbursement bank register.',
-          blockers: 'Awaiting 2 bank account verification details from operations team.',
-          status: 'SUBMITTED',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'rep-003',
-          employeeName: 'Abbu Veena (HR Onboarding & Hiring)',
-          userEmail: 'veena@adyapan.com',
-          date: new Date().toISOString().split('T')[0],
-          hoursWorked: 8.0,
-          tasksCompleted: 'Screened 18 candidate resumes via AI ATS, issued 2 offer letters, and completed document checks.',
-          blockers: 'None',
-          status: 'SUBMITTED',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'rep-004',
-          employeeName: 'Nitisha (HR Discipline & POSH)',
-          userEmail: 'nitisha@adyapan.com',
-          date: new Date().toISOString().split('T')[0],
-          hoursWorked: 8.5,
-          tasksCompleted: 'Conducted annual POSH compliance awareness session and reviewed 1 conduct warning case.',
-          blockers: 'None',
-          status: 'APPROVED',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'rep-005',
-          employeeName: 'Aravind Madhesh Kumar (HR Resignation & Exit)',
-          userEmail: 'aravind@adyapan.com',
-          date: new Date().toISOString().split('T')[0],
-          hoursWorked: 8.0,
-          tasksCompleted: 'Processed 1 exit clearance form, calculated Full & Final (F&F) balance, and issued No-Dues certificate.',
-          blockers: 'Pending IT hardware asset return sign-off.',
-          status: 'SUBMITTED',
-          createdAt: new Date().toISOString(),
-        },
-      ]);
+      setReports([]);
     } finally {
       setLoading(false);
     }

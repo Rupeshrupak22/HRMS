@@ -55,11 +55,11 @@ app.use(helmet({
 app.use(cors({
   origin: (origin, callback) => {
     const allowedOrigins = env.CORS_ORIGIN.split(',').map(o => o.trim());
-    // Allow requests with no origin (mobile apps, curl, etc.)
+    // Allow requests with no origin (mobile apps, curl, Postman, etc.)
     if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error(`Origin ${origin} not allowed by CORS`));
     }
   },
   credentials: true,
@@ -117,6 +117,19 @@ apiRouter.use('/expenses', expenseRoutes);
 apiRouter.use('/exit', exitRoutes);
 apiRouter.use('/assets', assetRoutes);
 apiRouter.use('/organization', organizationRoutes);
+
+// Teams endpoint (used by frontend employees page)
+apiRouter.get('/teams', authenticate, async (_req, res) => {
+  try {
+    const teams = await prisma.team.findMany({
+      include: { department: { select: { name: true } } },
+      orderBy: { name: 'asc' },
+    });
+    res.json({ success: true, data: teams });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to fetch teams' });
+  }
+});
 apiRouter.use('/training', trainingRoutes);
 apiRouter.use('/reports', reportRoutes);
 apiRouter.use('/notifications', notificationRoutes);

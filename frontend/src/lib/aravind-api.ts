@@ -1,6 +1,12 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000/api/v1';
 const BASE = API_BASE + '/aravind';
 
+function getCsrfToken(): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 async function request(endpoint: string, options: RequestInit = {}) {
   const token = typeof window !== 'undefined' ? localStorage.getItem('adyapan_access_token') : null;
   const headers: Record<string, string> = {
@@ -9,6 +15,15 @@ async function request(endpoint: string, options: RequestInit = {}) {
     ...(options.headers as Record<string, string>),
   };
 
+  // Add CSRF token for state-changing requests
+  const method = (options.method || 'GET').toUpperCase();
+  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
+    const csrfToken = getCsrfToken();
+    if (csrfToken) {
+      headers['X-CSRF-Token'] = csrfToken;
+    }
+  }
+
   const res = await fetch(`${BASE}${endpoint}`, {
     cache: 'no-store',
     credentials: 'include',
@@ -16,7 +31,10 @@ async function request(endpoint: string, options: RequestInit = {}) {
     headers,
   });
 
-  if (!res.ok) throw new Error(`API error: ${res.statusText}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }));
+    throw new Error(err.message || err.error || `API error: ${res.statusText}`);
+  }
   const result = await res.json();
   if (result && typeof result === 'object' && result.success && result.data !== undefined) {
     return result.data;

@@ -52,10 +52,15 @@ router.post('/courses', authorize('HR_ADMIN', 'HR_MANAGER'), validate(createCour
 // POST /api/training/enroll
 router.post('/enroll', validate(enrollSchema), async (req: AuthRequest, res: Response, next) => {
   try {
+    const employeeId = req.body.employeeId || req.user!.employeeId;
+    if (!employeeId) {
+      res.status(400).json({ success: false, message: 'No employee profile linked to this account' });
+      return;
+    }
     const enrollment = await prisma.trainingEnrollment.create({
       data: {
         courseId: req.body.courseId,
-        employeeId: req.body.employeeId || req.user!.employeeId!,
+        employeeId,
       },
     });
     res.status(201).json({ success: true, data: enrollment });
@@ -83,8 +88,12 @@ router.patch('/enrollments/:id', validate(updateProgressSchema), async (req: Aut
 // GET /api/training/my-enrollments
 router.get('/my-enrollments', async (req: AuthRequest, res: Response, next) => {
   try {
+    if (!req.user!.employeeId) {
+      res.json({ success: true, data: [] });
+      return;
+    }
     const enrollments = await prisma.trainingEnrollment.findMany({
-      where: { employeeId: req.user!.employeeId! },
+      where: { employeeId: req.user!.employeeId },
       include: { course: true },
       orderBy: { createdAt: 'desc' },
     });

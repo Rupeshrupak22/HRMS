@@ -45,10 +45,14 @@ router.get('/', async (req: AuthRequest, res: Response, next) => {
 // POST /api/expenses
 router.post('/', validate(createExpenseSchema), async (req: AuthRequest, res: Response, next) => {
   try {
+    if (!req.user!.employeeId) {
+      res.status(400).json({ success: false, message: 'No employee profile linked to this account' });
+      return;
+    }
     const claim = await prisma.expenseClaim.create({
       data: {
         ...req.body,
-        employeeId: req.user!.employeeId!,
+        employeeId: req.user!.employeeId,
         expenseDate: new Date(req.body.expenseDate),
       },
     });

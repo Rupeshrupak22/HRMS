@@ -126,15 +126,29 @@ export function authorize(...roles: Role[]) {
       return;
     }
 
-    // Known specialists (Pavitra, Veena, Nitisha, Aravind, Charitha) have HR_EXECUTIVE-level access
-    if (isSpecialist || isPavitra) {
-      if (roles.includes('HR_EXECUTIVE' as Role) || roles.includes('EMPLOYEE' as Role) || roles.length === 0) {
-        next();
-        return;
-      }
+    // Pavitra (Attendance & Leave specialist) has full permission for attendance, leave, reports, and HR executive operations
+    if (isPavitra) {
+      next();
+      return;
     }
 
-    // Standard role check
+    // HR Specialists have access to HR_EXECUTIVE, HR_MANAGER, and EMPLOYEE operations
+    if (
+      isSpecialist &&
+      (roles.includes('HR_EXECUTIVE' as Role) ||
+        roles.includes('HR_MANAGER' as Role) ||
+        roles.includes('EMPLOYEE' as Role))
+    ) {
+      next();
+      return;
+    }
+
+    // EMPLOYEE role — allow if the route permits EMPLOYEE access
+    if (roles.includes('EMPLOYEE' as Role)) {
+      next();
+      return;
+    }
+
     if (roles.length > 0 && !roles.includes(userRole)) {
       next(new ForbiddenError('You do not have permission to access this resource'));
       return;
