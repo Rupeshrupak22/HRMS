@@ -103,11 +103,7 @@ app.use(cookieParser(env.COOKIE_SECRET));
 // Content-Type validation for state-changing requests
 app.use(validateContentType);
 
-// Global rate limiting — uses Redis store for distributed deployments
-import { RedisStore } from 'rate-limit-redis';
-import { getRedisClient } from './lib/redis';
-
-const redisClient = getRedisClient();
+// Global rate limiting — robust in-memory store for high performance
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000, // 1000 requests per 15 minutes per IP
@@ -116,11 +112,6 @@ const globalLimiter = rateLimit({
   legacyHeaders: false,
   validate: false,
   skip: (req) => req.method === 'OPTIONS' || req.path === '/api/health',
-  ...(redisClient ? {
-    store: new RedisStore({
-      sendCommand: (...args: string[]) => (redisClient as any).call(args[0], ...args.slice(1)),
-    }),
-  } : {}),
 });
 app.use(globalLimiter);
 
