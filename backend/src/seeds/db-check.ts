@@ -14,6 +14,12 @@ async function check() {
     return;
   }
 
+  console.log('Cleaning up Employee table...');
+  const res = await prisma.employee.deleteMany({});
+  console.log('Deleted employee rows:', res.count);
+  const remaining = await prisma.employee.count();
+  console.log('Remaining employees:', remaining);
+
   console.log('');
   console.log('=== TABLE ROW COUNTS ===');
   console.log('  users:', await prisma.user.count());
