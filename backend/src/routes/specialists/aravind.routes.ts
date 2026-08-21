@@ -1,58 +1,64 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import prisma from '../../lib/prisma';
-import { authenticate } from '../../middleware/auth';
+import { authenticate, authorize } from '../../middleware/auth';
 import { AuthRequest } from '../../types';
 
 const router = Router();
 router.use(authenticate);
+router.use(authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'));
 
-// Helper for 100% pure Database CRUD with universal lead access
+// Helper for Database CRUD with ownership handling and proper error forwarding
 function crud(model: any) {
   return {
-    getAll: async (req: AuthRequest, res: Response) => {
+    getAll: async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const list = await model.findMany({ orderBy: { createdAt: 'desc' } });
         return res.json(list);
       } catch (e: any) {
-        console.error('Database getAll error:', e?.message);
-        return res.status(500).json({ error: 'Database query failed' });
+        next(e);
       }
     },
-    create: async (req: AuthRequest, res: Response) => {
+    create: async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
+        // Strip any dangerous fields from body
+        const { id, _id, createdAt, updatedAt, ...safeBody } = req.body;
         const dbCreated = await model.create({
           data: {
-            ...req.body,
-            createdByEmail: req.user?.email || 'aravind@adyapan.com',
+            ...safeBody,
+            createdByEmail: req.user!.email,
           },
         });
         return res.status(201).json(dbCreated);
       } catch (e: any) {
-        console.error('Database create error:', e?.message);
-        return res.status(500).json({ error: e?.message || 'Database create failed' });
+        next(e);
       }
     },
-    update: async (req: AuthRequest, res: Response) => {
+    update: async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const id = String(req.params.id);
+        const { id: _bodyId, _id, createdAt, updatedAt, createdByEmail, ...safeBody } = req.body;
         const updated = await model.update({
           where: { id },
-          data: req.body,
+          data: safeBody,
         });
         return res.json(updated);
       } catch (e: any) {
-        console.error('Database update error:', e?.message);
-        return res.status(500).json({ error: e?.message || 'Database update failed' });
+        if (e?.code === 'P2025') {
+          return res.status(404).json({ success: false, message: 'Record not found' });
+        }
+        next(e);
       }
     },
-    remove: async (req: AuthRequest, res: Response) => {
+    remove: async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const id = String(req.params.id);
         await model.delete({ where: { id } });
         return res.json({ success: true });
       } catch (e: any) {
-        console.error('Database delete error:', e?.message);
-        return res.status(500).json({ error: e?.message || 'Database delete failed' });
+        if (e?.code === 'P2025') {
+          return res.status(404).json({ success: false, message: 'Record not found' });
+        }
+        next(e);
       }
     },
   };

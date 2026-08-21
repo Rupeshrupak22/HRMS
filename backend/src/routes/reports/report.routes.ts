@@ -679,7 +679,7 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
         },
         nandini: {
           submittedReports: submittedReportsCount,
-          dailyReportsCount: Array.isArray(dailyReports) ? dailyReports.length : (submittedReportsCount || 0),
+          dailyReportsCount: submittedReportsCount,
         },
       },
     });

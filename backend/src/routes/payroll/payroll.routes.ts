@@ -14,6 +14,33 @@ const createCycleSchema = z.object({
   year: z.number().min(2020),
 });
 
+const manualPayrollSchema = z.object({
+  employeeId: z.string().max(100).nullable().optional(),
+  employeeName: z.string().max(200).nullable().optional(),
+  department: z.string().max(100).nullable().optional(),
+  joinDate: z.string().max(50).nullable().optional(),
+  exitDate: z.string().max(50).nullable().optional(),
+  workingDays: z.string().max(20).nullable().optional(),
+  attendanceFreeze: z.string().max(20).nullable().optional(),
+  freezeReason: z.string().max(500).nullable().optional(),
+  leavesTaken: z.string().max(20).nullable().optional(),
+  lopDays: z.string().max(20).nullable().optional(),
+  salaryChangeDate: z.string().max(50).nullable().optional(),
+  oldSalary: z.string().max(30).nullable().optional(),
+  newSalary: z.string().max(30).nullable().optional(),
+  salaryChangeReason: z.string().max(500).nullable().optional(),
+  performanceRating: z.string().max(50).nullable().optional(),
+  performanceComment: z.string().max(1000).nullable().optional(),
+  deductionType: z.string().max(100).nullable().optional(),
+  lopDeduction: z.string().max(30).nullable().optional(),
+  netPay: z.string().max(30).nullable().optional(),
+  verifiedBy: z.string().max(200).nullable().optional(),
+  verificationDate: z.string().max(50).nullable().optional(),
+  headApproval: z.string().max(100).nullable().optional(),
+  headApprovalDate: z.string().max(50).nullable().optional(),
+  headSignature: z.string().max(500).nullable().optional(),
+});
+
 const processCycleSchema = z.object({
   cycleId: z.string().uuid(),
 });
@@ -159,7 +186,7 @@ router.get('/manual', async (req: AuthRequest, res: Response, next) => {
 });
 
 // POST /api/payroll/manual
-router.post('/manual', async (req: AuthRequest, res: Response, next) => {
+router.post('/manual', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), validate(manualPayrollSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, employeeName, department, joinDate, exitDate, workingDays,
       attendanceFreeze, freezeReason, leavesTaken, lopDays, salaryChangeDate,
@@ -203,7 +230,7 @@ router.post('/manual', async (req: AuthRequest, res: Response, next) => {
 });
 
 // PUT /api/payroll/manual/:id
-router.put('/manual/:id', async (req: AuthRequest, res: Response, next) => {
+router.put('/manual/:id', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), validate(manualPayrollSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, employeeName, department, joinDate, exitDate, workingDays,
       attendanceFreeze, freezeReason, leavesTaken, lopDays, salaryChangeDate,
@@ -248,7 +275,7 @@ router.put('/manual/:id', async (req: AuthRequest, res: Response, next) => {
 });
 
 // DELETE /api/payroll/manual/:id
-router.delete('/manual/:id', async (req: AuthRequest, res: Response, next) => {
+router.delete('/manual/:id', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     await prisma.manualPayrollRecord.delete({
       where: { id: String(req.params.id) }
@@ -260,15 +287,37 @@ router.delete('/manual/:id', async (req: AuthRequest, res: Response, next) => {
 });
 
 // POST /api/payroll/manual/bulk
-router.post('/manual/bulk', async (req: AuthRequest, res: Response, next) => {
+router.post('/manual/bulk', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const records = req.body;
     if (!Array.isArray(records)) {
        res.status(400).json({ success: false, message: 'Expected an array' });
        return;
     }
+    if (records.length > 500) {
+      res.status(400).json({ success: false, message: 'Maximum 500 records per bulk import' });
+      return;
+    }
+
+    // Validate each record against schema
+    const validatedRecords = [];
+    for (let i = 0; i < records.length; i++) {
+      const parsed = manualPayrollSchema.safeParse(records[i]);
+      if (!parsed.success) {
+        res.status(400).json({
+          success: false,
+          message: `Validation error in record ${i + 1}`,
+          errors: parsed.error.errors,
+        });
+        return;
+      }
+      validatedRecords.push(parsed.data);
+    }
+
     const created = await prisma.$transaction(
-      records.map((r: any) => prisma.manualPayrollRecord.create({ data: { ...r, createdByEmail: req.user!.email } }))
+      validatedRecords.map((r: any) => prisma.manualPayrollRecord.create({
+        data: { ...r, createdByEmail: req.user!.email },
+      }))
     );
     res.status(201).json({ success: true, data: created });
   } catch (err) {

@@ -6,6 +6,8 @@ export type AuditAction =
   | 'LOGOUT'
   | 'PASSWORD_CHANGE'
   | 'ACCOUNT_LOCKED'
+  | 'TOKEN_THEFT_DETECTED'
+  | 'FORCE_LOGOUT'
   | 'EMPLOYEE_CREATED'
   | 'EMPLOYEE_UPDATED'
   | 'EMPLOYEE_DELETED'
@@ -66,7 +68,7 @@ export async function logAudit(entry: AuditEntry): Promise<void> {
  * Derive module name from action
  */
 function deriveModule(action: string): string {
-  if (action.startsWith('LOGIN') || action.startsWith('LOGOUT') || action === 'ACCOUNT_LOCKED' || action === 'PASSWORD_CHANGE') {
+  if (action.startsWith('LOGIN') || action.startsWith('LOGOUT') || action === 'ACCOUNT_LOCKED' || action === 'PASSWORD_CHANGE' || action === 'TOKEN_THEFT_DETECTED' || action === 'FORCE_LOGOUT') {
     return 'AUTH';
   }
   if (action.startsWith('EMPLOYEE')) return 'EMPLOYEE';

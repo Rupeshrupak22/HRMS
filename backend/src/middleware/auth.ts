@@ -105,6 +105,30 @@ export async function authenticate(req: AuthRequest, _res: Response, next: NextF
       throw new UnauthorizedError('User account is locked. Contact HR admin.');
     }
 
+    // Check if account is deactivated
+    if (!user.isActive) {
+      throw new UnauthorizedError('Your account has been deactivated.');
+    }
+
+    // Check tokenVersion — invalidates all JWTs issued before password change
+    const tokenVersion = (payload as any).tokenVersion;
+    if (tokenVersion !== undefined && user.tokenVersion !== undefined && tokenVersion !== user.tokenVersion) {
+      throw new UnauthorizedError('Session expired due to security update. Please log in again.');
+    }
+
+    // Check force-logout flag (another device logged in)
+    const tokenDeviceId = (payload as any).deviceId;
+    if (user.forceLogout && tokenDeviceId && user.activeDeviceId !== tokenDeviceId) {
+      throw new UnauthorizedError('FORCE_LOGOUT');
+    }
+
+    // Record activity (non-blocking)
+    prisma.user.update({
+      where: { id: user.id },
+      data: { lastActivityAt: new Date() },
+    }).catch(() => {});
+
+
     const emailKey = (user.email || '').toLowerCase().trim();
     const specialistInfo = SPECIALIST_CONFIG[emailKey];
 
@@ -152,38 +176,27 @@ export function authorize(...roles: Role[]) {
     const email = (req.user.email || '').toLowerCase().trim();
     const userRole = (req.user.role || 'EMPLOYEE') as Role;
     const isSpecialist = Boolean(req.user.specialization) || Boolean(SPECIALIST_CONFIG[email]);
-    const isPavitra = email === 'pavitra@adyapan.com' || req.user.specialization === 'ATTENDANCE_LEAVE';
     const isNandini = email === 'nandini@adyapan.com' || email === 'nandani@adyapan.com' || req.user.specialization === 'HR_MANAGER_ALL';
 
-    // SUPER_ADMIN and HR_ADMIN bypass all role checks
-    if (userRole === 'SUPER_ADMIN' || userRole === 'HR_ADMIN' || isNandini) {
+    // SUPER_ADMIN always has access
+    if (userRole === 'SUPER_ADMIN') {
       next();
       return;
     }
 
-    // Pavitra (Attendance & Leave specialist) has full permission for attendance, leave, reports, and HR executive operations
-    if (isPavitra) {
+    // HR_ADMIN and Nandini (HR Manager) have access to admin-level routes
+    if (userRole === 'HR_ADMIN' || isNandini) {
       next();
       return;
     }
 
-    // HR Specialists have access to HR_EXECUTIVE, HR_MANAGER, and EMPLOYEE operations
-    if (
-      isSpecialist &&
-      (roles.includes('HR_EXECUTIVE' as Role) ||
-        roles.includes('HR_MANAGER' as Role) ||
-        roles.includes('EMPLOYEE' as Role))
-    ) {
+    // HR Specialists (including Pavitra) get HR_EXECUTIVE level access
+    if (isSpecialist && roles.includes('HR_EXECUTIVE' as Role)) {
       next();
       return;
     }
 
-    // EMPLOYEE role — allow if the route permits EMPLOYEE access
-    if (roles.includes('EMPLOYEE' as Role)) {
-      next();
-      return;
-    }
-
+    // Standard role check: user's role must be in the allowed list
     if (roles.length > 0 && !roles.includes(userRole)) {
       next(new ForbiddenError('You do not have permission to access this resource'));
       return;

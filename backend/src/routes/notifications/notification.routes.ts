@@ -23,11 +23,19 @@ router.get('/', async (req: AuthRequest, res: Response, next) => {
 // PATCH /api/notifications/:id/read
 router.patch('/:id/read', async (req: AuthRequest, res: Response, next) => {
   try {
-    const notification = await prisma.notification.update({
+    // BOLA: verify notification belongs to the requesting user
+    const notification = await prisma.notification.findUnique({
+      where: { id: String(req.params.id) },
+    });
+    if (!notification || notification.userId !== req.user!.id) {
+      res.status(404).json({ success: false, message: 'Notification not found' });
+      return;
+    }
+    const updated = await prisma.notification.update({
       where: { id: String(req.params.id) },
       data: { isRead: true },
     });
-    res.json({ success: true, data: notification });
+    res.json({ success: true, data: updated });
   } catch (err) {
     next(err);
   }

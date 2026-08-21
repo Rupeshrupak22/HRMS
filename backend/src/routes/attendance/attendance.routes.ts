@@ -153,7 +153,7 @@ router.post('/mark', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_MANAGER', 'HR_EXEC
 });
 
 // GET /api/attendance/today-stats — attendance stats for today
-router.get('/today-stats', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
+router.get('/today-stats', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -226,7 +226,7 @@ router.get('/my-logs', async (req: AuthRequest, res: Response, next) => {
 });
 
 // GET /api/attendance/all-logs — admin view all employee attendance
-router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
+router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { month, startDate, endDate, status } = req.query as any;
     const where: any = {};
@@ -302,8 +302,8 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EM
   }
 });
 
-// POST /api/attendance/bulk-import — ultra-fast batch import attendance from XLSX/CSV
-router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
+// POST /api/attendance/bulk-import — batch import attendance from XLSX/CSV
+router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { records } = req.body;
     if (!records || !Array.isArray(records) || records.length === 0) {
@@ -431,7 +431,7 @@ function parseTimeString(timeStr: string, baseDate: Date): Date | null {
 }
 
 // PUT /api/attendance/monthly-update — update monthly attendance records from month view edit
-router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
+router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, employeeCode, originalEmployeeCode, month, records } = req.body;
     if ((!employeeCode && !employeeId) || !month || !records || !Array.isArray(records)) {
@@ -510,7 +510,7 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
 });
 
 // DELETE /api/attendance/monthly-delete — delete a whole month's records for an employee
-router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
+router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, employeeCode, originalEmployeeCode, month } = req.body;
     if ((!employeeId && !employeeCode) || !month) {
@@ -544,7 +544,7 @@ router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUT
 });
 
 // DELETE /api/attendance/daily-delete — delete a specific date's record
-router.delete('/daily-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
+router.delete('/daily-delete', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, employeeCode, date } = req.body;
     if ((!employeeId && !employeeCode) || !date) {
