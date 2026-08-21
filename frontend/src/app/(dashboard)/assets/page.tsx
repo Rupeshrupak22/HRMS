@@ -12,16 +12,9 @@ export default function AssetsPage() {
   const loadAssets = async () => {
     try {
       const data = await apiRequest('/assets');
-      setAssets(data.length > 0 ? data : [
-        { id: 'ast-1', name: 'MacBook Pro M3 Max', assetTag: 'AST-9912', category: 'LAPTOP', status: 'ASSIGNED' },
-        { id: 'ast-2', name: 'Dell UltraSharp 27" Monitor', assetTag: 'AST-8810', category: 'MONITOR', status: 'AVAILABLE' },
-        { id: 'ast-3', name: 'ThinkPad X1 Carbon', assetTag: 'AST-7711', category: 'LAPTOP', status: 'IN_USE' },
-      ]);
+      setAssets(Array.isArray(data) ? data : []);
     } catch (err) {
-      setAssets([
-        { id: 'ast-1', name: 'MacBook Pro M3 Max', assetTag: 'AST-9912', category: 'LAPTOP', status: 'ASSIGNED' },
-        { id: 'ast-2', name: 'Dell UltraSharp 27" Monitor', assetTag: 'AST-8810', category: 'MONITOR', status: 'AVAILABLE' },
-      ]);
+      setAssets([]);
     }
   };
 

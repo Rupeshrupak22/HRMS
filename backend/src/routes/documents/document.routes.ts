@@ -57,10 +57,15 @@ router.get('/', async (req: AuthRequest, res: Response, next) => {
 // POST /api/documents
 router.post('/', validate(uploadSchema), async (req: AuthRequest, res: Response, next) => {
   try {
+    const employeeId = req.body.employeeId || req.user!.employeeId;
+    if (!employeeId) {
+      res.status(400).json({ success: false, message: 'No employee profile linked to this account' });
+      return;
+    }
     const doc = await prisma.employeeDocument.create({
       data: {
         ...req.body,
-        employeeId: req.body.employeeId || req.user!.employeeId!,
+        employeeId,
       },
     });
     res.status(201).json({ success: true, data: doc });

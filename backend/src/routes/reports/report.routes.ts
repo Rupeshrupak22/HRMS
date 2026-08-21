@@ -620,14 +620,11 @@ router.delete('/daily/clear-all', async (req: AuthRequest, res: Response, next) 
     const todayStr = new Date().toISOString().split('T')[0];
     await prisma.dailyReport.deleteMany({
       where: {
-        userEmail: req.user?.email || 'pavitra@adyapan.com',
-        OR: [
-          { date: todayStr },
-          { date: '2026-08-13' }
-        ]
+        userEmail: req.user!.email,
+        date: todayStr,
       }
     });
-    res.json({ success: true, message: 'Today daily reports deleted from DB successfully' });
+    res.json({ success: true, message: "Today's daily reports deleted from DB successfully" });
   } catch (err) {
     next(err);
   }

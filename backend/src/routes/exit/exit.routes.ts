@@ -38,9 +38,13 @@ router.get('/resignations', authorize('HR_ADMIN', 'HR_MANAGER', 'MANAGER'), asyn
 // POST /api/exit/resign
 router.post('/resign', validate(resignationSchema), async (req: AuthRequest, res: Response, next) => {
   try {
+    if (!req.user!.employeeId) {
+      res.status(400).json({ success: false, message: 'No employee profile linked to this account' });
+      return;
+    }
     const resignation = await prisma.resignation.create({
       data: {
-        employeeId: req.user!.employeeId!,
+        employeeId: req.user!.employeeId,
         lastWorkingDay: new Date(req.body.lastWorkingDay),
         reason: req.body.reason,
       },

@@ -14,26 +14,10 @@ export default function ExitManagementPage() {
     try {
       if (['SUPER_ADMIN', 'HR_ADMIN', 'FINANCE', 'DEPARTMENT_HEAD'].includes(user?.role || '')) {
         const rData = await apiRequest('/exit/resignations');
-        setResignations(rData.length > 0 ? rData : [
-          {
-            id: 'res-1',
-            employee: { firstName: 'Ramesh', lastName: 'Kumar', employeeCode: 'EMP-088', department: { name: 'Sales' } },
-            lastWorkingDay: '2026-08-31',
-            reason: 'Relocating to another city for higher education.',
-            status: 'CLEARANCE_IN_PROGRESS',
-          },
-        ]);
+        setResignations(Array.isArray(rData) ? rData : []);
       }
     } catch (err) {
-      setResignations([
-        {
-          id: 'res-1',
-          employee: { firstName: 'Ramesh', lastName: 'Kumar', employeeCode: 'EMP-088', department: { name: 'Sales' } },
-          lastWorkingDay: '2026-08-31',
-          reason: 'Relocating to another city for higher education.',
-          status: 'CLEARANCE_IN_PROGRESS',
-        },
-      ]);
+      setResignations([]);
     }
   };
 
@@ -85,7 +69,13 @@ export default function ExitManagementPage() {
                 </span>
 
                 <button
-                  onClick={() => handleCalculateFnF(r.employee?.id || 'emp-005')}
+                  onClick={() => {
+                    if (!r.employee?.id) {
+                      alert('Employee ID not available for this resignation');
+                      return;
+                    }
+                    handleCalculateFnF(r.employee.id);
+                  }}
                   className="px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 text-white font-semibold text-xs flex items-center gap-1.5 transition-all cursor-pointer"
                 >
                   <Calculator className="w-3.5 h-3.5" /> Calculate F&F

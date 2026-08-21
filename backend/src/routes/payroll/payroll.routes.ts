@@ -110,8 +110,12 @@ router.get('/records/:cycleId', authorize('HR_ADMIN', 'HR_MANAGER'), async (req,
 // GET /api/payroll/my-payslips
 router.get('/my-payslips', async (req: AuthRequest, res: Response, next) => {
   try {
+    if (!req.user!.employeeId) {
+      res.json({ success: true, data: [] });
+      return;
+    }
     const records = await prisma.payrollRecord.findMany({
-      where: { employeeId: req.user!.employeeId! },
+      where: { employeeId: req.user!.employeeId },
       include: { payrollCycle: true },
       orderBy: { payrollCycle: { year: 'desc' } },
     });
@@ -157,8 +161,40 @@ router.get('/manual', async (req: AuthRequest, res: Response, next) => {
 // POST /api/payroll/manual
 router.post('/manual', async (req: AuthRequest, res: Response, next) => {
   try {
+    const { employeeId, employeeName, department, joinDate, exitDate, workingDays,
+      attendanceFreeze, freezeReason, leavesTaken, lopDays, salaryChangeDate,
+      oldSalary, newSalary, salaryChangeReason, performanceRating, performanceComment,
+      deductionType, lopDeduction, netPay, verifiedBy, verificationDate,
+      headApproval, headApprovalDate, headSignature } = req.body;
+
     const record = await prisma.manualPayrollRecord.create({
-      data: { ...req.body, createdByEmail: req.user!.email }
+      data: {
+        employeeId: employeeId || null,
+        employeeName: employeeName || null,
+        department: department || null,
+        joinDate: joinDate || null,
+        exitDate: exitDate || null,
+        workingDays: workingDays || null,
+        attendanceFreeze: attendanceFreeze || null,
+        freezeReason: freezeReason || null,
+        leavesTaken: leavesTaken || null,
+        lopDays: lopDays || null,
+        salaryChangeDate: salaryChangeDate || null,
+        oldSalary: oldSalary || null,
+        newSalary: newSalary || null,
+        salaryChangeReason: salaryChangeReason || null,
+        performanceRating: performanceRating || null,
+        performanceComment: performanceComment || null,
+        deductionType: deductionType || null,
+        lopDeduction: lopDeduction || null,
+        netPay: netPay || null,
+        verifiedBy: verifiedBy || null,
+        verificationDate: verificationDate || null,
+        headApproval: headApproval || null,
+        headApprovalDate: headApprovalDate || null,
+        headSignature: headSignature || null,
+        createdByEmail: req.user!.email,
+      }
     });
     res.status(201).json({ success: true, data: record });
   } catch (err) {
@@ -169,9 +205,41 @@ router.post('/manual', async (req: AuthRequest, res: Response, next) => {
 // PUT /api/payroll/manual/:id
 router.put('/manual/:id', async (req: AuthRequest, res: Response, next) => {
   try {
+    const { employeeId, employeeName, department, joinDate, exitDate, workingDays,
+      attendanceFreeze, freezeReason, leavesTaken, lopDays, salaryChangeDate,
+      oldSalary, newSalary, salaryChangeReason, performanceRating, performanceComment,
+      deductionType, lopDeduction, netPay, verifiedBy, verificationDate,
+      headApproval, headApprovalDate, headSignature } = req.body;
+
+    const data: any = {};
+    if (employeeId !== undefined) data.employeeId = employeeId;
+    if (employeeName !== undefined) data.employeeName = employeeName;
+    if (department !== undefined) data.department = department;
+    if (joinDate !== undefined) data.joinDate = joinDate;
+    if (exitDate !== undefined) data.exitDate = exitDate;
+    if (workingDays !== undefined) data.workingDays = workingDays;
+    if (attendanceFreeze !== undefined) data.attendanceFreeze = attendanceFreeze;
+    if (freezeReason !== undefined) data.freezeReason = freezeReason;
+    if (leavesTaken !== undefined) data.leavesTaken = leavesTaken;
+    if (lopDays !== undefined) data.lopDays = lopDays;
+    if (salaryChangeDate !== undefined) data.salaryChangeDate = salaryChangeDate;
+    if (oldSalary !== undefined) data.oldSalary = oldSalary;
+    if (newSalary !== undefined) data.newSalary = newSalary;
+    if (salaryChangeReason !== undefined) data.salaryChangeReason = salaryChangeReason;
+    if (performanceRating !== undefined) data.performanceRating = performanceRating;
+    if (performanceComment !== undefined) data.performanceComment = performanceComment;
+    if (deductionType !== undefined) data.deductionType = deductionType;
+    if (lopDeduction !== undefined) data.lopDeduction = lopDeduction;
+    if (netPay !== undefined) data.netPay = netPay;
+    if (verifiedBy !== undefined) data.verifiedBy = verifiedBy;
+    if (verificationDate !== undefined) data.verificationDate = verificationDate;
+    if (headApproval !== undefined) data.headApproval = headApproval;
+    if (headApprovalDate !== undefined) data.headApprovalDate = headApprovalDate;
+    if (headSignature !== undefined) data.headSignature = headSignature;
+
     const record = await prisma.manualPayrollRecord.update({
       where: { id: String(req.params.id) },
-      data: req.body
+      data,
     });
     res.json({ success: true, data: record });
   } catch (err) {
