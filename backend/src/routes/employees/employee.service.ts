@@ -56,7 +56,6 @@ export async function findOne(id: string) {
       salaryStructure: true,
       leaveBalances: { include: { leaveType: true } },
       leaveRequests: { include: { leaveType: true }, take: 10, orderBy: { createdAt: 'desc' } },
-      attendances: { take: 30, orderBy: { date: 'desc' } },
       documents: true,
       goals: { orderBy: { dueDate: 'asc' } },
       reviews: { orderBy: { createdAt: 'desc' } },

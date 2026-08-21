@@ -556,7 +556,7 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
       prisma.manualPayrollRecord.findMany({ orderBy: { createdAt: 'desc' } }),
       prisma.recruitmentTracker.count(),
       prisma.onboardingTracker.count(),
-      prisma.dropoutTracker.count(),
+      prisma.dropoutRecord.count(),
       prisma.employee.count({ where: { joiningDate: { gte: thirtyDaysAgo } } }),
       prisma.resignationTracker.count(),
       prisma.resignation.count(),
@@ -571,9 +571,9 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
     ]);
 
     // Live Attendance calculation (Direct from today's logs or Pavitra's daily report)
-    let todayPresent = todayAttendance.filter((a) => a.status === 'PRESENT' || a.status === 'LATE' || a.status === 'P').length;
-    let todayLate = todayAttendance.filter((a) => a.status === 'LATE' || a.status === 'LL').length;
-    let todayHalfDay = todayAttendance.filter((a) => a.status === 'HALF_DAY' || a.status === 'HD').length;
+    let todayPresent = todayAttendance.filter((a: any) => a.status === 'PRESENT' || a.status === 'LATE' || a.status === 'P').length;
+    let todayLate = todayAttendance.filter((a: any) => a.status === 'LATE' || a.status === 'LL').length;
+    let todayHalfDay = todayAttendance.filter((a: any) => a.status === 'HALF_DAY' || a.status === 'HD').length;
     let todayAbsent = Math.max(0, activeEmployees - todayPresent - todayHalfDay);
 
     const latestPav = pavitraReportsList.length > 0 ? pavitraReportsList[0] : null;
@@ -641,7 +641,7 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
       attendanceRate,
       openJobs,
       totalPayrollCtc: payrollTotalGross > 0 ? payrollTotalGross : (salarySum._sum.ctc || 0),
-      departmentDistribution: deptDistribution.map((d) => ({ name: d.name, count: d._count.employees })),
+      departmentDistribution: deptDistribution.map((d: any) => ({ name: d.name, count: d._count.employees })),
       payroll,
       dailyReports,
       specialists: {
@@ -679,7 +679,7 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
         },
         nandini: {
           submittedReports: submittedReportsCount,
-          dailyReportsCount: dailyReports.length,
+          dailyReportsCount: Array.isArray(dailyReports) ? dailyReports.length : (submittedReportsCount || 0),
         },
       },
     });

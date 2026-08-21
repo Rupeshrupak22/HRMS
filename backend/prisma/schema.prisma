@@ -125,7 +125,6 @@ model Employee {
   manager            Employee?     @relation("ReportingManager", fields: [reportingManagerId], references: [id])
   subordinates       Employee[]    @relation("ReportingManager")
 
-  attendances        AttendanceRecord[]
   leaveBalances      LeaveBalance[]
   leaveRequests      LeaveRequest[]
   salaryStructure    SalaryStructure?
@@ -169,8 +168,6 @@ model AttendanceRecord {
   isDeleted     Boolean  @default(false)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
-
-  employee      Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
 
   @@unique([employeeId, date])
 }
