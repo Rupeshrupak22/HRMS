@@ -1,20 +1,39 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { Eye, EyeOff, LogIn, User, Lock } from 'lucide-react';
+import { Eye, EyeOff, LogIn, User, Lock, AlertTriangle, Info } from 'lucide-react';
+import { SessionConfirmationPopup } from '@/components/SessionConfirmationPopup';
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, loading } = useAuth();
+  const { login, loading, sessionConfirmation, user } = useAuth();
 
   const [identifier, setIdentifier] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
+  const [logoutReason, setLogoutReason] = useState('');
+
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) router.push('/dashboard');
+  }, [user, router]);
+
+  // Show logout reason toast (force-logout, idle timeout, etc.)
+  useEffect(() => {
+    const reason = sessionStorage.getItem('adyapan_logout_reason');
+    if (reason) {
+      setLogoutReason(reason);
+      sessionStorage.removeItem('adyapan_logout_reason');
+      // Auto-dismiss after 8 seconds
+      const timer = setTimeout(() => setLogoutReason(''), 8000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -23,12 +42,25 @@ export default function LoginPage() {
       await login(identifier, password);
       router.push('/dashboard');
     } catch (err: any) {
-      setError(err.message || 'Authentication failed. Please check your credentials.');
+      const msg = err.message || 'Authentication failed. Please check your credentials.';
+      if (msg === 'FORCE_LOGOUT') return; // handled by context
+      setError(msg);
     }
   };
 
   return (
     <div className="min-h-screen w-full flex items-center justify-center bg-gradient-to-br from-slate-100 via-gray-100 to-slate-200 p-4 relative overflow-hidden">
+      {/* Session Confirmation Popup */}
+      <SessionConfirmationPopup />
+
+      {/* Logout Reason Toast */}
+      {logoutReason && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-5 py-3 rounded-xl bg-amber-50 border border-amber-200 shadow-lg flex items-center gap-3 max-w-md">
+          <Info className="w-4 h-4 text-amber-600 shrink-0" />
+          <p className="text-xs text-amber-800 font-medium">{logoutReason}</p>
+          <button onClick={() => setLogoutReason('')} className="text-amber-500 hover:text-amber-700 ml-2 text-lg leading-none">&times;</button>
+        </div>
+      )}
       {/* Decorative Background Circles */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         {/* Large top-left circle */}

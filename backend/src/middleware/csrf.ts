@@ -60,10 +60,19 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction):
     return;
   }
 
-  // If using Authorization header (API clients), CSRF is less critical
+  // If using Authorization header (API clients), still validate origin if present
   if (req.headers.authorization) {
-    next();
-    return;
+    // For Bearer token requests, origin validation (above) is sufficient
+    // Don't skip CSRF entirely — if origin is present and valid, allow it
+    if (origin && isOriginAllowed(origin)) {
+      next();
+      return;
+    }
+    // If no origin (server-to-server, mobile apps), allow Bearer auth
+    if (!origin) {
+      next();
+      return;
+    }
   }
 
   res.status(403).json({ success: false, message: 'CSRF validation failed' });

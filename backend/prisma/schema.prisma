@@ -20,13 +20,19 @@ model User {
   email           String         @unique
   passwordHash    String
   role            String         @default("EMPLOYEE")
+  isActive        Boolean        @default(true)
   isEmailVerified Boolean        @default(false)
   isMfaEnabled    Boolean        @default(false)
   mfaSecret       String?
   refreshToken    String?
   lastLoginAt     DateTime?
+  lastActivityAt  DateTime?
   failedAttempts  Int            @default(0)
   isLocked        Boolean        @default(false)
+  lockedAt        DateTime?
+  forceLogout     Boolean        @default(false)
+  activeDeviceId  String?
+  tokenVersion    Int            @default(0)
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 

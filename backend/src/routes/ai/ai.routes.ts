@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import prisma from '../../lib/prisma';
 import { authenticate } from '../../middleware/auth';
 
@@ -6,7 +6,7 @@ const router = Router();
 router.use(authenticate);
 
 // POST /api/v1/ai/copilot/query — Global HRMS Data Analysis Copilot
-router.post('/copilot/query', async (req: Request, res: Response) => {
+router.post('/copilot/query', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rawQuery = (req.body.query || '').trim();
     // Sanitize user input — strip HTML/script tags to prevent XSS
@@ -256,11 +256,9 @@ I'm here to help with any HR-related query!`;
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to process AI Copilot query',
-      error: error.message,
-    });
+    // Never expose internal error details to client
+    console.error('[AI Copilot] Error:', error?.message);
+    next(error);
   }
 });
 

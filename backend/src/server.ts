@@ -1,8 +1,11 @@
 import app from './app';
-import { env } from './lib/env';
+import { env, validateSecrets } from './lib/env';
 import prisma from './lib/prisma';
 
 async function main() {
+  // Validate security configuration before anything else
+  validateSecrets();
+
   // Verify database connection (retry up to 3 times)
   let connected = false;
   for (let i = 0; i < 3; i++) {

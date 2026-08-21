@@ -1,10 +1,11 @@
 import { Router, Response, NextFunction } from 'express';
 import prisma from '../../lib/prisma';
-import { authenticate } from '../../middleware/auth';
+import { authenticate, authorize } from '../../middleware/auth';
 import { AuthRequest } from '../../types';
 
 const router = Router();
 router.use(authenticate);
+router.use(authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'));
 
 function sanitizeRecruitment(item: any, userEmail: string) {
   return {
@@ -125,21 +126,20 @@ function crud(model: any) {
 // ----------------------------------------------------
 const onboardingCrud = crud(prisma.onboardingTracker);
 
-// GET /onboarding (Ultra fast pure DB query)
-router.get('/onboarding', async (_req: AuthRequest, res: Response) => {
+// GET /onboarding
+router.get('/onboarding', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const list = await prisma.onboardingTracker.findMany({
       orderBy: { createdAt: 'desc' },
     });
     return res.json(list || []);
   } catch (e: any) {
-    console.error('Database onboarding query error:', e?.message);
-    return res.status(500).json({ error: 'Database query failed' });
+    next(e);
   }
 });
 
 // POST /onboarding (single)
-router.post('/onboarding', async (req: AuthRequest, res: Response) => {
+router.post('/onboarding', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const data = sanitizeOnboarding(req.body, req.user!.email);
     if (!data.candidateName) {
@@ -148,13 +148,12 @@ router.post('/onboarding', async (req: AuthRequest, res: Response) => {
     const dbCreated = await prisma.onboardingTracker.create({ data });
     return res.status(201).json(dbCreated);
   } catch (e: any) {
-    console.error('Database onboarding create error:', e?.message);
-    return res.status(500).json({ error: e?.message || 'Database create failed' });
+    next(e);
   }
 });
 
 // POST /onboarding/bulk (fast batch import)
-router.post('/onboarding/bulk', async (req: AuthRequest, res: Response) => {
+router.post('/onboarding/bulk', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const rawItems: any[] = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.items) ? req.body.items : []);
     if (rawItems.length === 0) {
@@ -181,12 +180,11 @@ router.post('/onboarding/bulk', async (req: AuthRequest, res: Response) => {
 
     return res.status(201).json({ success: true, count, message: `Successfully saved ${count} record(s) to Database` });
   } catch (e: any) {
-    console.error('Database onboarding bulk error:', e?.message);
-    return res.status(500).json({ error: e?.message || 'Database bulk import failed' });
+    next(e);
   }
 });
 
-router.put('/onboarding/:id', async (req: AuthRequest, res: Response) => {
+router.put('/onboarding/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = String(req.params.id);
     const data = sanitizeOnboarding(req.body, req.user!.email);
@@ -196,8 +194,7 @@ router.put('/onboarding/:id', async (req: AuthRequest, res: Response) => {
     });
     return res.json(updated);
   } catch (e: any) {
-    console.error('Database onboarding update error:', e?.message);
-    return res.status(500).json({ error: e?.message || 'Database update failed' });
+    next(e);
   }
 });
 
@@ -211,7 +208,7 @@ const recruitmentCrud = crud(prisma.recruitmentTracker);
 router.get('/recruitment', recruitmentCrud.getAll);
 
 // POST recruitment with auto-sync to onboarding if status in Active, Selected, Joining, Joined, Onboarding
-router.post('/recruitment', async (req: AuthRequest, res: Response) => {
+router.post('/recruitment', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const data = sanitizeRecruitment(req.body, req.user!.email);
     if (!data.candidateName) {
@@ -258,13 +255,12 @@ router.post('/recruitment', async (req: AuthRequest, res: Response) => {
 
     return res.status(201).json(dbCreated);
   } catch (e: any) {
-    console.error('Database recruitment create error:', e?.message);
-    return res.status(500).json({ error: e?.message || 'Database create failed' });
+    next(e);
   }
 });
 
 // POST /recruitment/bulk (fast batch import)
-router.post('/recruitment/bulk', async (req: AuthRequest, res: Response) => {
+router.post('/recruitment/bulk', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const rawItems: any[] = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.items) ? req.body.items : []);
     if (rawItems.length === 0) {
@@ -325,13 +321,12 @@ router.post('/recruitment/bulk', async (req: AuthRequest, res: Response) => {
 
     return res.status(201).json({ success: true, count, message: `Successfully saved ${count} candidate(s) to Database` });
   } catch (e: any) {
-    console.error('Database recruitment bulk error:', e?.message);
-    return res.status(500).json({ error: e?.message || 'Database bulk import failed' });
+    next(e);
   }
 });
 
 // PUT recruitment with auto-sync to onboarding if updated to status in Active, Selected, Joining, Joined, Onboarding
-router.put('/recruitment/:id', async (req: AuthRequest, res: Response) => {
+router.put('/recruitment/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = String(req.params.id);
     const data = sanitizeRecruitment(req.body, req.user!.email);
@@ -378,8 +373,7 @@ router.put('/recruitment/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json(updated);
   } catch (e: any) {
-    console.error('Database recruitment update error:', e?.message);
-    return res.status(500).json({ error: e?.message || 'Database update failed' });
+    next(e);
   }
 });
 
