@@ -70,6 +70,24 @@ export async function authenticate(req: AuthRequest, _res: Response, next: NextF
       throw new UnauthorizedError('User account is locked. Contact HR admin.');
     }
 
+    // Check if account is deactivated
+    if (!user.isActive) {
+      throw new UnauthorizedError('Your account has been deactivated.');
+    }
+
+    // Check force-logout flag (another device logged in)
+    const tokenDeviceId = (payload as any).deviceId;
+    if (user.forceLogout && tokenDeviceId && user.activeDeviceId !== tokenDeviceId) {
+      throw new UnauthorizedError('FORCE_LOGOUT');
+    }
+
+    // Record activity (non-blocking)
+    prisma.user.update({
+      where: { id: user.id },
+      data: { lastActivityAt: new Date() },
+    }).catch(() => {});
+
+
     const emailKey = (user.email || '').toLowerCase().trim();
     const specialistInfo = SPECIALIST_CONFIG[emailKey];
 

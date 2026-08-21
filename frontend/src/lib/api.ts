@@ -33,14 +33,36 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
   try {
     const res = await fetch(`${API_BASE}${endpoint}`, {
       cache: 'no-store',
-      credentials: 'include', // Send httpOnly cookies with requests
+      credentials: 'include',
       ...options,
       headers,
     });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ message: res.statusText }));
-      throw new Error(err.message || 'API request failed');
+      const errorMessage = err.message || 'API request failed';
+
+      // Detect force-logout (401 with FORCE_LOGOUT message)
+      if (res.status === 401 && errorMessage === 'FORCE_LOGOUT') {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:force-logout', {
+            detail: { message: 'Session ended. You have been logged in on another device.' },
+          }));
+        }
+        throw new Error('FORCE_LOGOUT');
+      }
+
+      // Detect deactivation or session compromise
+      if (res.status === 401 && (errorMessage.includes('deactivated') || errorMessage.includes('compromised'))) {
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent('auth:force-logout', {
+            detail: { message: errorMessage },
+          }));
+        }
+        throw new Error(errorMessage);
+      }
+
+      throw new Error(errorMessage);
     }
 
     const result = await res.json();
@@ -49,7 +71,9 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
     }
     return result;
   } catch (error: any) {
-    console.warn(`API call ${endpoint} error:`, error.message);
+    if (error.message !== 'FORCE_LOGOUT') {
+      console.warn(`API call ${endpoint} error:`, error.message);
+    }
     throw error;
   }
 }

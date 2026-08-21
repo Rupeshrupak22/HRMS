@@ -17,10 +17,10 @@ const COOKIE_OPTIONS = {
   path: '/',
 };
 
-// Rate limiting: max 5 login attempts per IP per 15 minutes
+// Rate limiting: max 10 login attempts per IP per 15 minutes
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: 10,
   message: { success: false, message: 'Too many login attempts. Please try again after 15 minutes.' },
   standardHeaders: true,
   legacyHeaders: false,
@@ -30,7 +30,14 @@ const loginLimiter = rateLimit({
 // POST /api/auth/login
 router.post('/login', loginLimiter, validate(loginSchema), async (req, res: Response, next) => {
   try {
-    const result = await authService.login(req.body);
+    const { forceLogin, deviceId, ...credentials } = req.body;
+    const result = await authService.login({ ...credentials, forceLogin, deviceId });
+
+    // If session confirmation is required, return early
+    if ('requireSessionConfirmation' in result) {
+      res.json(result);
+      return;
+    }
 
     // Set tokens as httpOnly cookies
     res.cookie('access_token', result.accessToken, {
@@ -40,10 +47,9 @@ router.post('/login', loginLimiter, validate(loginSchema), async (req, res: Resp
     res.cookie('refresh_token', result.refreshToken, {
       ...COOKIE_OPTIONS,
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-      path: '/api/auth/refresh', // Only sent to refresh endpoint
+      path: '/api/auth/refresh',
     });
 
-    // Also return tokens in response body for backward compatibility
     res.json(result);
   } catch (err) {
     next(err);
@@ -53,7 +59,6 @@ router.post('/login', loginLimiter, validate(loginSchema), async (req, res: Resp
 // POST /api/auth/refresh
 router.post('/refresh', async (req, res: Response, next) => {
   try {
-    // Try to get refresh token from cookie first, then body
     const refreshToken = req.cookies?.refresh_token || req.body?.refreshToken;
     if (!refreshToken) {
       res.status(401).json({ success: false, message: 'No refresh token provided' });
@@ -62,7 +67,7 @@ router.post('/refresh', async (req, res: Response, next) => {
 
     const result = await authService.refreshToken({ refreshToken });
 
-    // Update cookies with new tokens
+    // Update cookies with new rotated tokens
     res.cookie('access_token', result.accessToken, {
       ...COOKIE_OPTIONS,
       maxAge: 8 * 60 * 60 * 1000,
@@ -99,12 +104,22 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
   res.json(req.user);
 });
 
+// GET /api/auth/session-status — Check if current session is still valid
+router.get('/session-status', authenticate, async (req: AuthRequest, res: Response, next) => {
+  try {
+    const status = await authService.checkSession(req.user!.id);
+    res.json(status);
+  } catch (err) {
+    next(err);
+  }
+});
+
 // GET /api/auth/csrf-token — CSRF protection token endpoint
 router.get('/csrf-token', authenticate, async (req: AuthRequest, res: Response) => {
   const crypto = await import('crypto');
   const csrfToken = crypto.randomBytes(32).toString('hex');
   res.cookie('csrf_token', csrfToken, {
-    httpOnly: false, // Must be readable by frontend JS
+    httpOnly: false,
     secure: env.IS_PRODUCTION,
     sameSite: env.IS_PRODUCTION ? 'strict' as const : 'lax' as const,
     maxAge: 8 * 60 * 60 * 1000,
