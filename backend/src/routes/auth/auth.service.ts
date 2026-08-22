@@ -92,15 +92,18 @@ export async function login(dto: LoginDto) {
     }
   }
 
-  // Reset failed attempts, update lastLogin
+  // Increment tokenVersion to invalidate ALL previous sessions instantly
+  const newTokenVersion = ((user as any).tokenVersion || 0) + 1;
+
+  // Reset failed attempts, update lastLogin, increment tokenVersion
   await prisma.user.update({
     where: { id: user.id },
-    data: { failedAttempts: 0, lastLoginAt: new Date() },
+    data: { failedAttempts: 0, lastLoginAt: new Date(), tokenVersion: newTokenVersion } as any,
   });
 
   logAudit({ action: 'LOGIN_SUCCESS', userId: user.id, userEmail: user.email });
 
-  const tokens = generateTokens(user.id, user.email, user.role, sessionId);
+  const tokens = generateTokens(user.id, user.email, user.role, sessionId, newTokenVersion);
   await updateRefreshToken(user.id, tokens.refreshToken);
 
   return {
@@ -135,11 +138,12 @@ export async function refreshToken(dto: RefreshTokenDto) {
 
     const isTokenMatching = await bcrypt.compare(dto.refreshToken, user.refreshToken);
     if (!isTokenMatching) {
-      throw new UnauthorizedError('Session expired. You have been logged in on another device.');
+      throw new UnauthorizedError('Your account has been logged in on another device. For security reasons, you have been signed out.');
     }
 
     const sessionId = (payload as any).sessionId || crypto.randomBytes(16).toString('hex');
-    const tokens = generateTokens(user.id, user.email, user.role, sessionId);
+    const tokenVersion = (user as any).tokenVersion || 0;
+    const tokens = generateTokens(user.id, user.email, user.role, sessionId, tokenVersion);
     await updateRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;
@@ -158,8 +162,8 @@ export async function logout(userId: string) {
   return { success: true, message: 'Logged out successfully' };
 }
 
-function generateTokens(userId: string, email: string, role: string, sessionId?: string) {
-  const payload: any = { sub: userId, email, role, sessionId: sessionId || crypto.randomBytes(16).toString('hex') };
+function generateTokens(userId: string, email: string, role: string, sessionId?: string, tokenVersion?: number) {
+  const payload: any = { sub: userId, email, role, sessionId: sessionId || crypto.randomBytes(16).toString('hex'), tv: tokenVersion || 0 };
   const accessToken = jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as any });
   const refreshToken = jwt.sign(payload, env.JWT_REFRESH_SECRET, { expiresIn: env.JWT_REFRESH_EXPIRES_IN as any });
   return { accessToken, refreshToken };

@@ -108,35 +108,28 @@ router.post('/logout', authenticate, async (req: AuthRequest, res: Response, nex
 
 // GET /api/auth/me
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
-  // Check if a newer login happened (another device took over)
+  // Check tokenVersion — if another device logged in, tokenVersion in DB will be higher
   try {
-    const freshUser = await prisma.user.findUnique({
-      where: { id: req.user!.id },
-      select: { lastLoginAt: true, refreshToken: true },
-    });
+    const token = req.cookies?.access_token || (req.headers.authorization?.split(' ')[1]) || '';
+    if (token) {
+      const jwtLib = await import('jsonwebtoken');
+      const decoded: any = jwtLib.default.decode(token);
+      const tokenTv = decoded?.tv;
 
-    // If refreshToken is null → explicitly logged out
-    if (freshUser && !freshUser.refreshToken) {
-      res.status(401).json({ success: false, message: 'FORCE_LOGOUT:Another device login detected. You have been logged out.' });
-      return;
-    }
+      if (tokenTv !== undefined) {
+        const freshUser: any = await prisma.user.findUnique({
+          where: { id: req.user!.id },
+          select: { id: true, tokenVersion: true } as any,
+        });
 
-    // Compare token issue time with last login — if login is newer, force logout this session
-    if (freshUser?.lastLoginAt) {
-      const token = req.cookies?.access_token || (req.headers.authorization?.split(' ')[1]) || '';
-      if (token) {
-        try {
-          const jwtLib = await import('jsonwebtoken');
-          const decoded: any = jwtLib.default.decode(token);
-          if (decoded?.iat) {
-            const tokenIssuedAt = decoded.iat * 1000;
-            const lastLogin = new Date(freshUser.lastLoginAt).getTime();
-            if (lastLogin - tokenIssuedAt > 5000) {
-              res.status(401).json({ success: false, message: 'FORCE_LOGOUT:Another device login detected. You have been logged out.' });
-              return;
-            }
-          }
-        } catch {}
+        if (freshUser && (freshUser.tokenVersion || 0) > tokenTv) {
+          res.status(401).json({
+            success: false,
+            message: 'Your account has been logged in on another device. For security reasons, you have been signed out.',
+            forceLogout: true,
+          });
+          return;
+        }
       }
     }
   } catch {}

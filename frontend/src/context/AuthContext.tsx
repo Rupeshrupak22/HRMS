@@ -45,8 +45,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 // Idle timeout: 15 minutes
 const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
-// Token refresh interval: 50 minutes (token expires at 8 hours but refresh early)
-const TOKEN_REFRESH_INTERVAL_MS = 50 * 60 * 1000;
+// Token refresh interval: 2 minutes (also acts as session validity check for single-device enforcement)
+const TOKEN_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
 
 export const HR_SPECIALIST_ACCOUNTS: Record<string, UserProfile> = {
   'nandini@adyapan.com': {
@@ -277,10 +277,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const checkSessionHeartbeat = async () => {
       try {
-        await apiRequest('/auth/me', { method: 'GET' });
-      } catch {
-        // Handled by apiRequest dispatching auth:force-logout
-      }
+        const token = localStorage.getItem('adyapan_access_token');
+        if (!token) return;
+
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000/api/v1'}/auth/me`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          credentials: 'include',
+        });
+
+        if (res.status === 401) {
+          const data = await res.json().catch(() => ({}));
+          if (data.forceLogout || (data.message && data.message.includes('another device'))) {
+            performLogout('force_logout', 'Your account has been logged in on another device. For security reasons, you have been signed out.');
+          }
+        }
+      } catch {}
     };
 
     const interval = setInterval(checkSessionHeartbeat, 20 * 1000);
