@@ -373,23 +373,33 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE')
     }
 
     let imported = 0;
-    if (insertPayload.length > 0 && minDateObj) {
-      // Wipe the full month for touched employees so no ghost records remain
-      const y = minDateObj.getUTCFullYear();
-      const m = minDateObj.getUTCMonth();
-      const monthStart = new Date(Date.UTC(y, m, 1, 0, 0, 0, 0));
-      const monthEnd = new Date(Date.UTC(y, m + 1, 0, 23, 59, 59, 999));
-      const delStart = new Date(monthStart.getTime() - (24 * 60 * 60 * 1000));
-      const delEnd = new Date(monthEnd.getTime() + (24 * 60 * 60 * 1000));
+    if (insertPayload.length > 0) {
+      // Group dates by distinct year-month (e.g. "2026-08", "2026-07") so uploading August NEVER touches July
+      const monthRanges = new Map<string, { start: Date; end: Date }>();
+      for (const item of insertPayload) {
+        const d = item.date as Date;
+        const y = d.getUTCFullYear();
+        const m = d.getUTCMonth();
+        const key = `${y}-${m}`;
+        if (!monthRanges.has(key)) {
+          monthRanges.set(key, {
+            start: new Date(Date.UTC(y, m, 1, 0, 0, 0, 0)),
+            end: new Date(Date.UTC(y, m + 1, 0, 23, 59, 59, 999)),
+          });
+        }
+      }
 
-      await prisma.attendanceRecord.deleteMany({
-        where: {
-          employeeId: { in: Array.from(touchedEmployees) },
-          date: { gte: delStart, lte: delEnd },
-        },
-      }).catch(() => {});
+      // Delete only the touched employees for the exact months being imported
+      for (const range of monthRanges.values()) {
+        await prisma.attendanceRecord.deleteMany({
+          where: {
+            employeeId: { in: Array.from(touchedEmployees) },
+            date: { gte: range.start, lte: range.end },
+          },
+        }).catch(() => {});
+      }
 
-      // Direct fast bulk insert
+      // Fast bulk insert
       const result = await prisma.attendanceRecord.createMany({
         data: insertPayload,
         skipDuplicates: true,

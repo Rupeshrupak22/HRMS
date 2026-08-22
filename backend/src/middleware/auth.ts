@@ -120,6 +120,12 @@ export async function authenticate(req: AuthRequest, _res: Response, next: NextF
       }
     }
 
+    // Strict Single-Device Session enforcement — if another device/browser logs in, invalidate this session
+    const tokenDeviceId = (payload as any).deviceId;
+    if (tokenDeviceId && user.activeDeviceId && tokenDeviceId !== user.activeDeviceId) {
+      throw new UnauthorizedError('FORCE_LOGOUT');
+    }
+
     // Record last login activity (non-blocking)
     prisma.user.update({
       where: { id: user.id },

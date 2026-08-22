@@ -287,8 +287,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
         if (res.status === 401) {
           const data = await res.json().catch(() => ({}));
-          if (data.forceLogout || (data.message && data.message.includes('another device'))) {
-            performLogout('force_logout', 'Your account has been logged in on another device. For security reasons, you have been signed out.');
+          const msg = String(data.message || data.error || '');
+          if (data.forceLogout || msg === 'FORCE_LOGOUT' || msg.includes('FORCE_LOGOUT') || msg.includes('another device')) {
+            performLogout('force_logout', 'Session ended. You have been logged in on another device.');
           }
         }
       } catch {}

@@ -108,32 +108,6 @@ router.post('/logout', authenticate, async (req: AuthRequest, res: Response, nex
 
 // GET /api/auth/me
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
-  // Check tokenVersion — if another device logged in, tokenVersion in DB will be higher
-  try {
-    const token = req.cookies?.access_token || (req.headers.authorization?.split(' ')[1]) || '';
-    if (token) {
-      const jwtLib = await import('jsonwebtoken');
-      const decoded: any = jwtLib.default.decode(token);
-      const tokenTv = decoded?.tv;
-
-      if (tokenTv !== undefined) {
-        const freshUser: any = await prisma.user.findUnique({
-          where: { id: req.user!.id },
-          select: { id: true, tokenVersion: true } as any,
-        });
-
-        if (freshUser && (freshUser.tokenVersion || 0) > tokenTv) {
-          res.status(401).json({
-            success: false,
-            message: 'Your account has been logged in on another device. For security reasons, you have been signed out.',
-            forceLogout: true,
-          });
-          return;
-        }
-      }
-    }
-  } catch {}
-
   res.json(req.user);
 });
 

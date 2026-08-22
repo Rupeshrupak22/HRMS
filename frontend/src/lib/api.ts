@@ -42,19 +42,16 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
       const err = await res.json().catch(() => ({ message: res.statusText }));
       const errorMessage = err.message || 'API request failed';
 
-      // Detect any 401 Unauthorized (another device logged in or session expired)
-      if (res.status === 401) {
+      // Detect force-logout only when another device logs in (explicit FORCE_LOGOUT)
+      if (res.status === 401 && (errorMessage === 'FORCE_LOGOUT' || errorMessage.includes('FORCE_LOGOUT'))) {
         if (typeof window !== 'undefined') {
-          const isAnotherDevice = errorMessage === 'FORCE_LOGOUT' || errorMessage.includes('FORCE_LOGOUT');
           window.dispatchEvent(new CustomEvent('auth:force-logout', {
             detail: {
-              message: isAnotherDevice
-                ? 'Session ended. You have been logged in on another device.'
-                : (errorMessage || 'Session expired. Please log in again.')
+              message: 'Session ended. You have been logged in on another device.'
             },
           }));
         }
-        throw new Error(errorMessage);
+        throw new Error('FORCE_LOGOUT');
       }
 
       throw new Error(errorMessage);

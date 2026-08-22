@@ -68,8 +68,12 @@ export default function PavitraReportPage() {
         map.set(key, item);
       }
       for (const item of localAtt) {
-        const key = item.id || `${item.empId || item.employeeId || item.employeeCode}_${item.date}`;
-        if (!map.has(key)) map.set(key, item);
+        // Only include local items that belong to the currently selected month
+        const itemDateStr = String(item.date || item.createdAt || '').split('T')[0];
+        if (itemDateStr.startsWith(selectedMonth)) {
+          const key = item.id || `${item.empId || item.employeeId || item.employeeCode}_${item.date}`;
+          if (!map.has(key)) map.set(key, item);
+        }
       }
       setAttendance(Array.from(map.values()));
     } catch (error) {

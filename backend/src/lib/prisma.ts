@@ -5,15 +5,17 @@ const globalForPrisma = globalThis as unknown as { prisma: PrismaClient };
 function getDatabaseUrl(): string | undefined {
   let url = process.env.DATABASE_URL;
   if (!url) return undefined;
-  // If using Supabase pooler, auto route to port 6543 (Transaction Pooler) with pgbouncer and safe connection limits
-  if (url.includes('pooler.supabase.com')) {
+
+  // In production (Render), route to port 6543 with pgbouncer
+  if (process.env.NODE_ENV === 'production' && url.includes('pooler.supabase.com') && url.includes(':5432/')) {
     url = url.replace(':5432/', ':6543/');
     if (!url.includes('pgbouncer=true')) {
       url += (url.includes('?') ? '&' : '?') + 'pgbouncer=true';
     }
-    if (!url.includes('connection_limit=')) {
-      url += '&connection_limit=5&pool_timeout=20';
-    }
+  }
+
+  if (!url.includes('connection_limit=')) {
+    url += (url.includes('?') ? '&' : '?') + 'connection_limit=5&pool_timeout=20';
   }
   return url;
 }
