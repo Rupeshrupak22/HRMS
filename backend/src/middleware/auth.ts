@@ -110,24 +110,14 @@ export async function authenticate(req: AuthRequest, _res: Response, next: NextF
     }
 
     if (user.isLocked) {
-      throw new UnauthorizedError('User account is locked. Contact HR admin.');
-    }
-
-    // Check if account is deactivated
-    if (!user.isActive) {
-      throw new UnauthorizedError('Your account has been deactivated.');
-    }
-
-    // Check tokenVersion — invalidates all JWTs issued before password change
-    const tokenVersion = (payload as any).tokenVersion;
-    if (tokenVersion !== undefined && user.tokenVersion !== undefined && tokenVersion !== user.tokenVersion) {
-      throw new UnauthorizedError('Session expired due to security update. Please log in again.');
-    }
-
-    // Strict Single-Device Session enforcement — if another device/browser logs in, invalidate this session
-    const tokenDeviceId = (payload as any).deviceId;
-    if (tokenDeviceId && user.activeDeviceId && tokenDeviceId !== user.activeDeviceId) {
-      throw new UnauthorizedError('FORCE_LOGOUT');
+      // Auto-unlock check
+      const lockDuration = 15 * 60 * 1000;
+      const lastTime = user.lastLoginAt ? new Date(user.lastLoginAt).getTime() : 0;
+      if (Date.now() - lastTime > lockDuration) {
+        // Will be unlocked on next login attempt
+      } else {
+        throw new UnauthorizedError('User account is locked. Try again later.');
+      }
     }
 
     // Record last login activity (non-blocking)

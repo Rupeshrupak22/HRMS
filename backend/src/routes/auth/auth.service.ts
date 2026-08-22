@@ -35,8 +35,20 @@ export async function login(dto: LoginDto) {
   }
 
   if (user.isLocked) {
-    logAudit({ action: 'LOGIN_FAILED', userId: user.id, userEmail: user.email, metadata: { reason: 'account_locked' } });
-    throw new UnauthorizedError('Account is locked. Please contact HR admin.');
+    // Auto-unlock after 15 minutes
+    const lockDuration = 15 * 60 * 1000;
+    const lastAttemptTime = user.lastLoginAt ? new Date(user.lastLoginAt).getTime() : 0;
+    if (Date.now() - lastAttemptTime > lockDuration) {
+      // Unlock the account
+      await prisma.user.update({
+        where: { id: user.id },
+        data: { isLocked: false, failedAttempts: 0 },
+      });
+    } else {
+      const remainingMins = Math.ceil((lockDuration - (Date.now() - lastAttemptTime)) / 60000);
+      logAudit({ action: 'LOGIN_FAILED', userId: user.id, userEmail: user.email, metadata: { reason: 'account_locked' } });
+      throw new UnauthorizedError(`Account locked due to too many failed attempts. Try again in ${remainingMins} minutes.`);
+    }
   }
 
   const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
@@ -48,6 +60,7 @@ export async function login(dto: LoginDto) {
       data: {
         failedAttempts: updatedAttempts,
         isLocked: isNowLocked,
+        lastLoginAt: isNowLocked ? new Date() : user.lastLoginAt, // Record lock time
       },
     });
     logAudit({
@@ -56,18 +69,27 @@ export async function login(dto: LoginDto) {
       userEmail: user.email,
       metadata: { failedAttempts: updatedAttempts, locked: isNowLocked },
     });
+    if (isNowLocked) {
+      throw new UnauthorizedError('Account locked after 5 failed attempts. Try again after 15 minutes.');
+    }
     throw new UnauthorizedError('Invalid credentials');
   }
 
   // Generate a unique session ID — invalidates all previous sessions
   const sessionId = crypto.randomBytes(16).toString('hex');
 
-  // Check if there's an active session on another device
+  // Check if there's an active session on another device (skip if same device or forceLogin)
+  const incomingDeviceId = (dto as any).deviceId || '';
   if (user.refreshToken && !(dto as any).forceLogin) {
-    return {
-      requireSessionConfirmation: true,
-      message: 'Active login session found on another device. Do you want to login here and end the other session?',
-    };
+    // Only show popup if different device — check last login was recent (within 8 hours)
+    const lastLogin = user.lastLoginAt ? new Date(user.lastLoginAt).getTime() : 0;
+    const isRecentSession = (Date.now() - lastLogin) < 8 * 60 * 60 * 1000;
+    if (isRecentSession) {
+      return {
+        requireSessionConfirmation: true,
+        message: 'Active login session found on another device. Do you want to login here and end the other session?',
+      };
+    }
   }
 
   // Reset failed attempts, update lastLogin

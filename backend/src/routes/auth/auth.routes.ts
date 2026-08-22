@@ -6,6 +6,7 @@ import { loginSchema, refreshTokenSchema, changePasswordSchema } from './auth.sc
 import * as authService from './auth.service';
 import { AuthRequest } from '../../types';
 import { env } from '../../lib/env';
+import prisma from '../../lib/prisma';
 import { recordFailedLogin, recordSuccessfulLogin } from '../../middleware/securityMonitor';
 
 const router = Router();
@@ -107,6 +108,39 @@ router.post('/logout', authenticate, async (req: AuthRequest, res: Response, nex
 
 // GET /api/auth/me
 router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
+  // Check if a newer login happened (another device took over)
+  try {
+    const freshUser = await prisma.user.findUnique({
+      where: { id: req.user!.id },
+      select: { lastLoginAt: true, refreshToken: true },
+    });
+
+    // If refreshToken is null → explicitly logged out
+    if (freshUser && !freshUser.refreshToken) {
+      res.status(401).json({ success: false, message: 'FORCE_LOGOUT:Another device login detected. You have been logged out.' });
+      return;
+    }
+
+    // Compare token issue time with last login — if login is newer, force logout this session
+    if (freshUser?.lastLoginAt) {
+      const token = req.cookies?.access_token || (req.headers.authorization?.split(' ')[1]) || '';
+      if (token) {
+        try {
+          const jwtLib = await import('jsonwebtoken');
+          const decoded: any = jwtLib.default.decode(token);
+          if (decoded?.iat) {
+            const tokenIssuedAt = decoded.iat * 1000;
+            const lastLogin = new Date(freshUser.lastLoginAt).getTime();
+            if (lastLogin - tokenIssuedAt > 5000) {
+              res.status(401).json({ success: false, message: 'FORCE_LOGOUT:Another device login detected. You have been logged out.' });
+              return;
+            }
+          }
+        } catch {}
+      }
+    }
+  } catch {}
+
   res.json(req.user);
 });
 
