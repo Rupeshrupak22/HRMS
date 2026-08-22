@@ -250,7 +250,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           const msg = String(data.message || data.error || '');
           if (data.forceLogout || msg === 'FORCE_LOGOUT' || msg.includes('FORCE_LOGOUT') || msg.includes('another device')) {
             performLogout('force_logout', 'Session ended. You have been logged in on another device.');
+            return;
           }
+
+          // Token expired or invalid — attempt silent refresh
+          const refreshToken = localStorage.getItem('adyapan_refresh_token');
+          if (refreshToken) {
+            try {
+              const refRes = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000/api/v1'}/auth/refresh`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ refreshToken }),
+              });
+              if (refRes.ok) {
+                const refData = await refRes.json();
+                if (refData.accessToken) {
+                  localStorage.setItem('adyapan_access_token', refData.accessToken);
+                  if (refData.refreshToken) localStorage.setItem('adyapan_refresh_token', refData.refreshToken);
+                  return;
+                }
+              }
+            } catch {}
+          }
+          // If refresh fails, cleanly terminate session so it stops looping
+          performLogout('expired', 'Session expired. Please log in again.');
         }
       } catch {}
     };
