@@ -244,6 +244,7 @@ export default function DashboardPage() {
         let todayPresent = base?.todayPresent || 0;
         let todayAbsent = base?.todayAbsent || 0;
         let todayLate = base?.todayLate || 0;
+        let attendanceMarkedToday = Boolean(base?.attendanceMarkedToday);
 
         const pavitraReports = dailyList.filter((r: any) =>
           r.userEmail === 'pavitra@adyapan.com' ||
@@ -253,13 +254,24 @@ export default function DashboardPage() {
         const latestPav = pavitraReports.length > 0 ? pavitraReports[0] : null;
         if (latestPav) {
           const text = `${latestPav.keyUpdates || ''} ${latestPav.comment || ''} ${latestPav.issue || ''} ${latestPav.tasksCompleted || ''}`;
-          const presMatch = text.match(/Present:\s*(\d+)/i);
-          const absMatch = text.match(/Absent:\s*(\d+)/i);
-          const lateMatch = text.match(/Late:\s*(\d+)/i);
+          const presMatch = text.match(/Present[:\s-]+(\d+)/i) || text.match(/(\d+)\s*Present/i);
+          const absMatch = text.match(/Absent[:\s-]+(\d+)/i) || text.match(/(\d+)\s*Absent/i) || text.match(/LOP[:\s-]+(\d+)/i);
+          const lateMatch = text.match(/Late[:\s-]+(\d+)/i) || text.match(/(\d+)\s*Late/i);
 
-          if (presMatch) todayPresent = parseInt(presMatch[1], 10);
+          if (presMatch) {
+            todayPresent = parseInt(presMatch[1], 10);
+            attendanceMarkedToday = true;
+          }
           if (absMatch) todayAbsent = parseInt(absMatch[1], 10);
           if (lateMatch) todayLate = parseInt(lateMatch[1], 10);
+        }
+
+        if (todayPresent > 0 && todayAbsent === 0 && activeEmp > todayPresent) {
+          todayAbsent = Math.max(0, activeEmp - todayPresent);
+        }
+
+        if (todayPresent > 0 || todayAbsent > 0 || base?.attendanceMarkedToday) {
+          attendanceMarkedToday = true;
         }
 
         // 4. Payroll calculations from real DB records (manualPayrollRecord)
@@ -295,6 +307,7 @@ export default function DashboardPage() {
           todayLate,
           todayAbsent,
           todayHalfDay: base?.todayHalfDay || 0,
+          attendanceMarkedToday,
           pendingLeaves: base?.pendingLeaves || 0,
           approvedLeavesToday: base?.approvedLeavesToday || 0,
           attendanceRate,
@@ -319,6 +332,7 @@ export default function DashboardPage() {
               present: todayPresent,
               absent: todayAbsent,
               late: todayLate,
+              attendanceMarkedToday,
             },
             charitha: {
               totalRecords: payrollRecordsCount,

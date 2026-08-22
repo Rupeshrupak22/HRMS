@@ -585,23 +585,25 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
     if (latestPav && todayAttendance.length === 0) {
       const pavDate = latestPav.date || (latestPav.createdAt ? latestPav.createdAt.toISOString().split('T')[0] : '');
       const isToday = pavDate === todayStr || pavDate === localTodayStr || (latestPav.createdAt && new Date(latestPav.createdAt).toDateString() === new Date().toDateString());
-      if (isToday) {
-        const text = `${latestPav.keyUpdates || ''} ${latestPav.comment || ''} ${latestPav.issue || ''} ${(latestPav as any).tasksCompleted || ''}`;
-        const presMatch = text.match(/Present:\s*(\d+)/i);
-        const absMatch = text.match(/Absent:\s*(\d+)/i);
-        const lateMatch = text.match(/Late:\s*(\d+)/i);
+      
+      const text = `${latestPav.keyUpdates || ''} ${latestPav.comment || ''} ${latestPav.issue || ''} ${(latestPav as any).tasksCompleted || ''}`;
+      const presMatch = text.match(/Present[:\s-]+(\d+)/i) || text.match(/(\d+)\s*Present/i);
+      const absMatch = text.match(/Absent[:\s-]+(\d+)/i) || text.match(/(\d+)\s*Absent/i) || text.match(/LOP[:\s-]+(\d+)/i);
+      const lateMatch = text.match(/Late[:\s-]+(\d+)/i) || text.match(/(\d+)\s*Late/i);
 
-        if (presMatch) {
-          todayPresent = parseInt(presMatch[1], 10);
-          attendanceMarkedToday = true;
-        }
-        if (absMatch) todayAbsent = parseInt(absMatch[1], 10);
-        if (lateMatch) todayLate = parseInt(lateMatch[1], 10);
-      } else {
-        todayPresent = 0;
-        todayAbsent = 0;
-        todayLate = 0;
-        attendanceMarkedToday = false;
+      if (presMatch) {
+        todayPresent = parseInt(presMatch[1], 10);
+        attendanceMarkedToday = true;
+      }
+      if (absMatch) todayAbsent = parseInt(absMatch[1], 10);
+      if (lateMatch) todayLate = parseInt(lateMatch[1], 10);
+
+      if (todayPresent > 0 && todayAbsent === 0 && activeEmployees > todayPresent) {
+        todayAbsent = Math.max(0, activeEmployees - todayPresent);
+      }
+
+      if (todayPresent > 0 || todayAbsent > 0) {
+        attendanceMarkedToday = true;
       }
     } else if (todayAttendance.length === 0) {
       todayPresent = 0;
