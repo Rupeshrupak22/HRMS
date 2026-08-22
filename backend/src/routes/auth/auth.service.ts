@@ -7,6 +7,8 @@ import { logAudit } from '../../lib/audit';
 import { LoginDto, RefreshTokenDto } from './auth.schema';
 import { JwtPayload } from '../../types';
 
+import crypto from 'crypto';
+
 export async function login(dto: LoginDto) {
   const identifier = dto.identifier.trim().toLowerCase();
 
@@ -57,7 +59,10 @@ export async function login(dto: LoginDto) {
     throw new UnauthorizedError('Invalid credentials');
   }
 
-  // Reset failed attempts on success
+  // Generate a unique session ID — invalidates all previous sessions
+  const sessionId = crypto.randomBytes(16).toString('hex');
+
+  // Reset failed attempts, update lastLogin and store sessionId in refreshToken field prefix
   await prisma.user.update({
     where: { id: user.id },
     data: { failedAttempts: 0, lastLoginAt: new Date() },
@@ -65,7 +70,7 @@ export async function login(dto: LoginDto) {
 
   logAudit({ action: 'LOGIN_SUCCESS', userId: user.id, userEmail: user.email });
 
-  const tokens = generateTokens(user.id, user.email, user.role);
+  const tokens = generateTokens(user.id, user.email, user.role, sessionId);
   await updateRefreshToken(user.id, tokens.refreshToken);
 
   return {
@@ -95,21 +100,22 @@ export async function refreshToken(dto: RefreshTokenDto) {
 
     const user = await prisma.user.findUnique({ where: { id: payload.sub } });
     if (!user || !user.refreshToken) {
-      throw new UnauthorizedError('Invalid refresh token');
+      throw new UnauthorizedError('Session expired. Please login again.');
     }
 
     const isTokenMatching = await bcrypt.compare(dto.refreshToken, user.refreshToken);
     if (!isTokenMatching) {
-      throw new UnauthorizedError('Invalid refresh token');
+      throw new UnauthorizedError('Session expired. You have been logged in on another device.');
     }
 
-    const tokens = generateTokens(user.id, user.email, user.role);
+    const sessionId = (payload as any).sessionId || crypto.randomBytes(16).toString('hex');
+    const tokens = generateTokens(user.id, user.email, user.role, sessionId);
     await updateRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;
   } catch (err) {
     if (err instanceof UnauthorizedError) throw err;
-    throw new UnauthorizedError('Invalid or expired refresh token');
+    throw new UnauthorizedError('Session expired. Please login again.');
   }
 }
 
@@ -122,8 +128,8 @@ export async function logout(userId: string) {
   return { success: true, message: 'Logged out successfully' };
 }
 
-function generateTokens(userId: string, email: string, role: string) {
-  const payload: JwtPayload = { sub: userId, email, role };
+function generateTokens(userId: string, email: string, role: string, sessionId?: string) {
+  const payload: any = { sub: userId, email, role, sessionId: sessionId || crypto.randomBytes(16).toString('hex') };
   const accessToken = jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as any });
   const refreshToken = jwt.sign(payload, env.JWT_REFRESH_SECRET, { expiresIn: env.JWT_REFRESH_EXPIRES_IN as any });
   return { accessToken, refreshToken };
