@@ -38,9 +38,13 @@ router.get('/resignations', authorize('HR_ADMIN', 'HR_MANAGER', 'MANAGER'), asyn
 // POST /api/exit/resign
 router.post('/resign', validate(resignationSchema), async (req: AuthRequest, res: Response, next) => {
   try {
+    if (!req.user!.employeeId) {
+      res.status(400).json({ success: false, message: 'No employee profile linked to this account' });
+      return;
+    }
     const resignation = await prisma.resignation.create({
       data: {
-        employeeId: req.user!.employeeId!,
+        employeeId: req.user!.employeeId,
         lastWorkingDay: new Date(req.body.lastWorkingDay),
         reason: req.body.reason,
       },
@@ -94,8 +98,13 @@ router.post('/fnf', authorize('HR_ADMIN'), validate(fnfSchema), async (req: Auth
 });
 
 // GET /api/exit/fnf/:employeeId
-router.get('/fnf/:employeeId', async (req: AuthRequest, res: Response, next) => {
+router.get('/fnf/:employeeId', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_MANAGER'), async (req: AuthRequest, res: Response, next) => {
   try {
+    // BOLA: employees can only view their own F&F
+    if (req.user!.role === 'EMPLOYEE' && req.user!.employeeId !== String(req.params.employeeId)) {
+      res.status(403).json({ success: false, message: 'Forbidden' });
+      return;
+    }
     const fnf = await prisma.fnFSettlement.findUnique({ where: { employeeId: String(req.params.employeeId) } });
     res.json({ success: true, data: fnf });
   } catch (err) {

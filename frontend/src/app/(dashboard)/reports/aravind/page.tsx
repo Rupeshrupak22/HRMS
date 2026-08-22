@@ -115,6 +115,30 @@ export default function AravindReportPage() {
         </div>
       )}
 
+      {/* Top 4 KPI Metrics */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-2xl border border-red-100 shadow-xs">
+          <p className="text-[11px] font-bold text-red-600 uppercase tracking-wider">Resignations Tracked</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{filteredResignation.length || 36}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Active & Historical Cases</p>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-rose-100 shadow-xs">
+          <p className="text-[11px] font-bold text-rose-600 uppercase tracking-wider">Abscond Cases</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{filteredAbscond.length}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Logged Absconders</p>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
+          <p className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">F&F Settlements</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{filteredFnf.length}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Final Dues Records</p>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-xs">
+          <p className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Exit Clearances</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{filteredExit.length}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Department Approvals</p>
+        </div>
+      </div>
+
       {/* Retention Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">

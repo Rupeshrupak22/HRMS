@@ -41,7 +41,6 @@ router.get('/', async (req: AuthRequest, res: Response, next) => {
 
     const records = await prisma.attendanceRecord.findMany({
       where,
-      include: { employee: { select: { firstName: true, lastName: true, employeeCode: true } } },
       orderBy: { date: 'desc' },
       take: 100,
     });
@@ -55,6 +54,10 @@ router.get('/', async (req: AuthRequest, res: Response, next) => {
 router.post('/check-in', validate(checkInSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const employeeId = req.body.employeeId || req.user!.employeeId;
+    if (!employeeId) {
+      res.status(400).json({ success: false, message: 'No employee profile linked to this account' });
+      return;
+    }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
@@ -87,11 +90,15 @@ router.post('/check-in', validate(checkInSchema), async (req: AuthRequest, res: 
 router.post('/check-out', async (req: AuthRequest, res: Response, next) => {
   try {
     const employeeId = req.user!.employeeId;
+    if (!employeeId) {
+      res.status(400).json({ success: false, message: 'No employee profile linked to this account' });
+      return;
+    }
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const existing = await prisma.attendanceRecord.findUnique({
-      where: { employeeId_date: { employeeId: employeeId!, date: today } },
+      where: { employeeId_date: { employeeId, date: today } },
     });
 
     if (!existing) {
@@ -146,7 +153,7 @@ router.post('/mark', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_MANAGER', 'HR_EXEC
 });
 
 // GET /api/attendance/today-stats — attendance stats for today
-router.get('/today-stats', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
+router.get('/today-stats', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -154,15 +161,23 @@ router.get('/today-stats', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 
     const totalEmployees = await prisma.employee.count({ where: { status: { in: ['ACTIVE', 'PROBATION'] } } });
     const todayRecords = await prisma.attendanceRecord.findMany({ where: { date: today } });
 
-    const present = todayRecords.filter((r) => r.status === 'PRESENT').length;
-    const late = todayRecords.filter((r) => r.status === 'LATE').length;
-    const halfDay = todayRecords.filter((r) => r.status === 'HALF_DAY').length;
-    const onLeave = todayRecords.filter((r) => r.status === 'ON_LEAVE').length;
-    const absent = Math.max(0, totalEmployees - present - late - halfDay - onLeave);
+    const isPresent = (s: string) => s === 'PRESENT' || s === 'P' || s === 'PR' || s === 'PRES' || s === '1' || s === 'WORK_FROM_HOME' || s === 'WFH';
+    const isLate = (s: string) => s === 'LATE' || s === 'LATE_LOGIN' || s === 'LL';
+    const isHalfDay = (s: string) => s === 'HALF_DAY' || s === 'HD' || s === '0.5';
+    const isLOP = (s: string) => s === 'LOP' || s === 'LOSS OF PAY' || s === 'LOSS_OF_PAY';
+    const isOnLeave = (s: string) => s === 'ON_LEAVE' || s === 'SICK_LEAVE' || s === 'SL' || s === 'CASUAL_LEAVE' || s === 'CL' || s === 'PAID_LEAVE' || s === 'PL' || s === 'EMERGENCY_LEAVE' || s === 'E_L' || s === 'LONG_LEAVE' || s === 'LLV' || s === 'PERSONAL_LEAVE' || s === 'PEL';
+
+    const present = todayRecords.filter((r) => isPresent(r.status)).length;
+    const late = todayRecords.filter((r) => isLate(r.status)).length;
+    const halfDay = todayRecords.filter((r) => isHalfDay(r.status)).length;
+    const lop = todayRecords.filter((r) => isLOP(r.status)).length;
+    const onLeave = todayRecords.filter((r) => isOnLeave(r.status)).length;
+    const explicitAbsent = todayRecords.filter((r) => r.status === 'ABSENT' || r.status === 'A').length;
+    const absent = Math.max(explicitAbsent, totalEmployees - present - late - halfDay - onLeave - lop);
 
     res.json({
       success: true,
-      data: { totalEmployees, present: present + late, absent, late, onLeave, halfDay },
+      data: { totalEmployees, present: present + late, absent, late, onLeave, halfDay, lop },
     });
   } catch (err) {
     next(err);
@@ -211,29 +226,35 @@ router.get('/my-logs', async (req: AuthRequest, res: Response, next) => {
 });
 
 // GET /api/attendance/all-logs — admin view all employee attendance
-router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
+router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const { startDate, endDate, status } = req.query as any;
+    const { month, startDate, endDate, status } = req.query as any;
     const where: any = {};
 
-    if (startDate) where.date = { ...where.date, gte: new Date(startDate) };
-    if (endDate) where.date = { ...where.date, lte: new Date(endDate) };
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      const [yStr, mStr] = month.split('-');
+      const y = parseInt(yStr, 10);
+      const m = parseInt(mStr, 10);
+      const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
+      const end = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+      where.date = {
+        gte: new Date(start.getTime() - (12 * 60 * 60 * 1000)),
+        lte: new Date(end.getTime() + (12 * 60 * 60 * 1000)),
+      };
+    } else {
+      if (startDate) {
+        const s = new Date(startDate);
+        where.date = { ...where.date, gte: new Date(s.getTime() - (24 * 60 * 60 * 1000)) };
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        where.date = { ...where.date, lte: new Date(e.getTime() + (24 * 60 * 60 * 1000)) };
+      }
+    }
     if (status) where.status = status;
 
     const records = await prisma.attendanceRecord.findMany({
       where,
-      include: {
-        employee: {
-          select: {
-            firstName: true,
-            lastName: true,
-            employeeCode: true,
-            department: { select: { name: true } },
-            designation: { select: { title: true } },
-            user: { select: { role: true } },
-          },
-        },
-      },
       orderBy: { date: 'desc' },
     });
 
@@ -247,14 +268,23 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EM
         } catch {}
       }
 
+      // Convert UTC timestamp to IST calendar date (Asia/Kolkata +5:30)
+      const istMs = r.date.getTime() + (5.5 * 60 * 60 * 1000);
+      const istDate = new Date(istMs);
+      const year = istDate.getUTCFullYear();
+      const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(istDate.getUTCDate()).padStart(2, '0');
+      const dateStr = `${year}-${month}-${day}`;
+
       return {
         id: r.id,
-        empId: r.employee?.employeeCode || r.employeeId || 'EMP-000',
-        empName: r.employee ? `${r.employee.firstName || ''} ${r.employee.lastName || ''}`.trim() : 'Employee',
-        role: metadata.role || r.employee?.user?.role || 'EMPLOYEE',
-        department: metadata.department || r.employee?.department?.name || '-',
-        designation: metadata.designation || r.employee?.designation?.title || '-',
-        date: `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}-${String(r.date.getDate()).padStart(2, '0')}`,
+        employeeId: r.employeeId,
+        empId: metadata.empId || metadata.employeeCode || r.employeeId || 'EMP-000',
+        empName: metadata.empName || metadata.employeeName || 'Employee',
+        role: metadata.role || 'EMPLOYEE',
+        department: metadata.department || '-',
+        designation: metadata.designation || '-',
+        date: dateStr,
         checkInTime: r.checkInTime ? r.checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
         checkOutTime: r.checkOutTime ? r.checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
         workHours: r.workHours,
@@ -272,8 +302,8 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EM
   }
 });
 
-// POST /api/attendance/bulk-import — import attendance from XLSX/CSV
-router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
+// POST /api/attendance/bulk-import — batch import attendance from XLSX/CSV
+router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { records } = req.body;
     if (!records || !Array.isArray(records) || records.length === 0) {
@@ -281,192 +311,105 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE',
       return;
     }
 
-    let imported = 0;
-    let skipped = 0;
+    const insertPayload: any[] = [];
+    const touchedEmployees = new Set<string>();
+    let minDateObj: Date | null = null;
+    let maxDateObj: Date | null = null;
 
     for (const record of records) {
-      try {
-        const empCode = String(record.employeeCode || '').trim();
-        const empName = String(record.employeeName || '').trim();
-        const department = record.department ? String(record.department).trim() : '';
-        const designation = record.designation ? String(record.designation).trim() : '';
-        const role = record.role ? String(record.role).trim() : '';
+      const empCode = String(record.employeeCode || record.empId || record.employeeId || 'EMP-000').trim();
+      if (!empCode) continue;
 
-        // 1. Find employee by code (exact, trimmed, or uppercase)
-        let employee = await prisma.employee.findFirst({
-          where: {
-            OR: [
-              { employeeCode: empCode },
-              { employeeCode: empCode.toUpperCase() },
-              { employeeCode: empCode.toLowerCase() },
-            ],
-          },
-        });
-
-        // 2. Fallback: match by name if code match fails
-        if (!employee && empName) {
-          const firstWord = empName.split(' ')[0];
-          employee = await prisma.employee.findFirst({
-            where: {
-              OR: [
-                { firstName: { contains: firstWord, mode: 'insensitive' } },
-                { lastName: { contains: firstWord, mode: 'insensitive' } },
-              ],
-            },
-          });
-        }
-
-        // 3. Auto provision employee with exact employeeCode if missing
-        if (!employee && empCode) {
-          const email = `${empCode.toLowerCase().replace(/[^a-z0-9]/g, '') || 'emp'}@adyapan.com`;
-          let user = await prisma.user.findUnique({ where: { email } });
-          if (!user) {
-            user = await prisma.user.create({
-              data: {
-                email,
-                passwordHash: '$2b$10$dummyhashplaceholderforattendancerecordcreation',
-                role: role || 'EMPLOYEE',
-              },
-            });
-          }
-          const names = (empName || 'Employee').trim().split(' ');
-          employee = await prisma.employee.create({
-            data: {
-              employeeCode: empCode,
-              userId: user.id,
-              firstName: names[0] || 'Employee',
-              lastName: names.slice(1).join(' ') || '',
-            },
-          });
-        }
-
-        if (!employee) {
-          skipped++;
-          continue;
-        }
-
-        // 4. Update employee department / designation if passed in Excel
-        const updateData: any = {};
-        if (department && department !== '-') {
-          let dept = await prisma.department.findFirst({ where: { name: { equals: department, mode: 'insensitive' } } });
-          if (!dept) {
-            dept = await prisma.department.create({
-              data: {
-                name: department,
-                code: (department.slice(0, 4).toUpperCase() || 'DEPT') + Math.floor(Math.random() * 100),
-              },
-            });
-          }
-          updateData.departmentId = dept.id;
-        }
-
-        if (designation && designation !== '-') {
-          let desig = await prisma.designation.findFirst({ where: { title: { equals: designation, mode: 'insensitive' } } });
-          if (!desig) {
-            desig = await prisma.designation.create({
-              data: {
-                title: designation,
-                code: (designation.slice(0, 4).toUpperCase() || 'DESIG') + Math.floor(Math.random() * 100),
-              },
-            });
-          }
-          updateData.designationId = desig.id;
-        }
-
-        if (empName && (!employee.firstName || employee.firstName === 'Employee')) {
-          const names = empName.split(' ');
-          updateData.firstName = names[0] || employee.firstName;
-          updateData.lastName = names.slice(1).join(' ') || employee.lastName;
-        }
-
-        if (Object.keys(updateData).length > 0) {
-          await prisma.employee.update({
-            where: { id: employee.id },
-            data: updateData,
-          });
-        }
-
-        let dateObj: Date;
-        if (record.date) {
-          const parts = String(record.date).split('T')[0].split('-');
-          if (parts.length === 3) {
-            dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-          } else {
-            dateObj = new Date(record.date);
-          }
+      let dateObj: Date;
+      if (record.date) {
+        const parts = String(record.date).split('T')[0].split('-');
+        if (parts.length === 3) {
+          const y = parseInt(parts[0], 10);
+          const m = parseInt(parts[1], 10);
+          const d = parseInt(parts[2], 10);
+          // Store at UTC 12:00:00 to prevent timezone shifts
+          dateObj = new Date(Date.UTC(y, m - 1, d, 12, 0, 0, 0));
         } else {
-          dateObj = new Date();
+          dateObj = new Date(record.date);
         }
-        dateObj.setHours(0, 0, 0, 0);
-
-        // Parse check-in/out times
-        let checkInTime: Date | null = null;
-        let checkOutTime: Date | null = null;
-
-        if (record.checkInTime) {
-          checkInTime = parseTimeString(record.checkInTime, dateObj);
-        }
-        if (record.checkOutTime) {
-          checkOutTime = parseTimeString(record.checkOutTime, dateObj);
-        }
-
-        const workHours = checkInTime && checkOutTime
-          ? Math.round(((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)) * 100) / 100
-          : 0;
-
-        // Build metadata notes
-        let notesToStore: string | null = record.remarks || null;
-        if (record.summary || department || designation || role) {
-          notesToStore = JSON.stringify({
-            ...(record.summary || {}),
-            department: department || undefined,
-            designation: designation || undefined,
-            role: role || undefined,
-            remarks: record.remarks || undefined,
-          });
-        }
-
-        await prisma.attendanceRecord.upsert({
-          where: { employeeId_date: { employeeId: employee.id, date: dateObj } },
-          update: {
-            status: record.status || 'PRESENT',
-            checkInTime,
-            checkOutTime,
-            workHours,
-            notes: notesToStore,
-            source: 'IMPORT',
-          },
-          create: {
-            employeeId: employee.id,
-            date: dateObj,
-            status: record.status || 'PRESENT',
-            checkInTime,
-            checkOutTime,
-            workHours,
-            notes: notesToStore,
-            source: 'IMPORT',
-          },
-        });
-        imported++;
-      } catch {
-        skipped++;
+      } else {
+        dateObj = new Date();
       }
+
+      if (!minDateObj || dateObj < minDateObj) minDateObj = dateObj;
+      if (!maxDateObj || dateObj > maxDateObj) maxDateObj = dateObj;
+
+      let checkInTime: Date | null = null;
+      let checkOutTime: Date | null = null;
+      if (record.checkInTime) checkInTime = parseTimeString(record.checkInTime, dateObj);
+      if (record.checkOutTime) checkOutTime = parseTimeString(record.checkOutTime, dateObj);
+
+      const workHours = checkInTime && checkOutTime
+        ? Math.round(((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)) * 100) / 100
+        : 0;
+
+      let notesToStore: string | null = record.remarks || null;
+      notesToStore = JSON.stringify({
+        ...(record.summary || {}),
+        empId: empCode,
+        empName: record.employeeName || record.empName || undefined,
+        department: record.department || undefined,
+        designation: record.designation || undefined,
+        role: record.role || undefined,
+        remarks: record.remarks || undefined,
+      });
+
+      touchedEmployees.add(empCode);
+      insertPayload.push({
+        employeeId: empCode,
+        date: dateObj,
+        status: record.status || 'PRESENT',
+        checkInTime,
+        checkOutTime,
+        workHours,
+        notes: notesToStore,
+        source: 'EXCEL',
+      });
     }
 
-    res.json({ success: true, data: { imported, skipped, total: records.length } });
+    let imported = 0;
+    if (insertPayload.length > 0 && minDateObj) {
+      // Wipe the full month for touched employees so no ghost records remain
+      const y = minDateObj.getUTCFullYear();
+      const m = minDateObj.getUTCMonth();
+      const monthStart = new Date(Date.UTC(y, m, 1, 0, 0, 0, 0));
+      const monthEnd = new Date(Date.UTC(y, m + 1, 0, 23, 59, 59, 999));
+      const delStart = new Date(monthStart.getTime() - (24 * 60 * 60 * 1000));
+      const delEnd = new Date(monthEnd.getTime() + (24 * 60 * 60 * 1000));
+
+      await prisma.attendanceRecord.deleteMany({
+        where: {
+          employeeId: { in: Array.from(touchedEmployees) },
+          date: { gte: delStart, lte: delEnd },
+        },
+      }).catch(() => {});
+
+      // Direct fast bulk insert
+      const result = await prisma.attendanceRecord.createMany({
+        data: insertPayload,
+        skipDuplicates: true,
+      });
+      imported = result.count;
+    }
+
+    res.json({ success: true, data: { imported, total: records.length } });
   } catch (err) {
     next(err);
   }
 });
 
-// Helper: parse time strings like "09:30 AM", "09:30:00 AM", "09:30", or "18:30:00" into a Date on a given day
+// Helper: parse time strings into a Date on a given day
 function parseTimeString(timeStr: string, baseDate: Date): Date | null {
   if (!timeStr || timeStr === '-' || timeStr === '') return null;
 
   const date = new Date(baseDate);
   const cleaned = timeStr.trim().toUpperCase();
 
-  // Try "HH:MM AM/PM" or "HH:MM:SS AM/PM" format
   const ampmMatch = cleaned.match(/^(\d{1,2}):(\d{2})(?::\d{2})?\s*(AM|PM)$/);
   if (ampmMatch) {
     let hours = parseInt(ampmMatch[1], 10);
@@ -478,7 +421,6 @@ function parseTimeString(timeStr: string, baseDate: Date): Date | null {
     return date;
   }
 
-  // Try "HH:MM" or "HH:MM:SS" 24-hour format
   const h24Match = cleaned.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
   if (h24Match) {
     date.setHours(parseInt(h24Match[1], 10), parseInt(h24Match[2], 10), 0, 0);
@@ -489,195 +431,109 @@ function parseTimeString(timeStr: string, baseDate: Date): Date | null {
 }
 
 // PUT /api/attendance/monthly-update — update monthly attendance records from month view edit
-router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
+router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const { employeeCode, employeeName, role, department, designation, month, records } = req.body;
-    // month format: "2026-08"
-    if (!employeeCode || !month || !records || !Array.isArray(records)) {
-      res.status(400).json({ success: false, message: 'employeeCode, month, and records are required' });
+    const { employeeId, employeeCode, originalEmployeeCode, month, records } = req.body;
+    if ((!employeeCode && !employeeId) || !month || !records || !Array.isArray(records)) {
+      res.status(400).json({ success: false, message: 'employeeCode/employeeId, month, and records are required' });
       return;
     }
 
-    // Find employee by code
-    const empCode = String(employeeCode).trim();
-    let employee = await prisma.employee.findFirst({
-      where: {
-        OR: [
-          { employeeCode: empCode },
-          { employeeCode: empCode.toUpperCase() },
-          { employeeCode: empCode.toLowerCase() },
-        ],
-      },
-    });
+    const currentEmpId = String(employeeCode || employeeId || '').trim();
+    const origEmpId = String(originalEmployeeCode || employeeId || '').trim();
 
-    // Fallback: match by name
-    if (!employee && employeeName) {
-      const firstWord = String(employeeName).split(' ')[0];
-      employee = await prisma.employee.findFirst({
-        where: {
-          OR: [
-            { firstName: { contains: firstWord, mode: 'insensitive' } },
-            { lastName: { contains: firstWord, mode: 'insensitive' } },
-          ],
-        },
-      });
-    }
+    const targetEmpIds = Array.from(new Set([currentEmpId, origEmpId, employeeId].filter(Boolean) as string[]));
 
-    // Auto provision if new
-    if (!employee) {
-      const email = `${empCode.toLowerCase().replace(/[^a-z0-9]/g, '') || 'emp'}@adyapan.com`;
-      let user = await prisma.user.findUnique({ where: { email } });
-      if (!user) {
-        user = await prisma.user.create({
-          data: {
-            email,
-            passwordHash: '$2b$10$dummyhashplaceholderforattendancerecordcreation',
-            role: role || 'EMPLOYEE',
-          },
-        });
-      }
-      const names = (employeeName || 'Employee').trim().split(' ');
-      employee = await prisma.employee.create({
-        data: {
-          employeeCode: empCode,
-          userId: user.id,
-          firstName: names[0] || 'Employee',
-          lastName: names.slice(1).join(' ') || '',
-        },
-      });
-    }
-
-    // Update Employee details if provided
-    if (employee) {
-      const updateData: any = {};
-      if (employeeName) {
-        const names = String(employeeName).trim().split(' ');
-        updateData.firstName = names[0] || employee.firstName;
-        updateData.lastName = names.slice(1).join(' ');
-      }
-      if (department && department !== '-') {
-        let dept = await prisma.department.findFirst({ where: { name: { equals: department, mode: 'insensitive' } } });
-        if (!dept) {
-          dept = await prisma.department.create({ data: { name: department, code: department.slice(0, 4).toUpperCase() + Math.floor(Math.random()*100) } });
-        }
-        updateData.departmentId = dept.id;
-      }
-      if (designation && designation !== '-') {
-        let desig = await prisma.designation.findFirst({ where: { title: { equals: designation, mode: 'insensitive' } } });
-        if (!desig) {
-          desig = await prisma.designation.create({ data: { title: designation, code: designation.slice(0, 4).toUpperCase() + Math.floor(Math.random()*100) } });
-        }
-        updateData.designationId = desig.id;
-      }
-      if (Object.keys(updateData).length > 0) {
-        await prisma.employee.update({ where: { id: employee.id }, data: updateData }).catch(() => {});
-      }
-      if (role && role !== '-' && employee.userId) {
-        await prisma.user.update({ where: { id: employee.userId }, data: { role } }).catch(() => {});
-      }
-    }
-
-    let updated = 0;
-    let created = 0;
-
-    // Delete all existing records for this employee in the target month first
-    // This ensures status changes and cleared days are always properly reflected
+    // Delete all existing records for this employee in the target month
     const [yearPart, monthPart] = month.split('-');
-    const monthStart = new Date(parseInt(yearPart, 10), parseInt(monthPart, 10) - 1, 1);
-    monthStart.setHours(0, 0, 0, 0);
-    const monthEnd = new Date(parseInt(yearPart, 10), parseInt(monthPart, 10), 0, 23, 59, 59, 999);
+    const y = parseInt(yearPart, 10);
+    const m = parseInt(monthPart, 10);
+    const startDate = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
+    const endDate = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+    const searchStart = new Date(startDate.getTime() - (2 * 24 * 60 * 60 * 1000));
+    const searchEnd = new Date(endDate.getTime() + (2 * 24 * 60 * 60 * 1000));
 
     const deleted = await prisma.attendanceRecord.deleteMany({
       where: {
-        employeeId: employee.id,
-        date: { gte: monthStart, lte: monthEnd },
+        employeeId: { in: targetEmpIds },
+        date: { gte: searchStart, lte: searchEnd },
       },
     });
-    if (deleted.count > 0) updated = deleted.count;
 
-    // Create fresh records for all days that have a status
+    // Prepare fresh records for insertion
+    const insertData: any[] = [];
     for (const record of records) {
-      try {
-        const dateStr = record.date; // "2026-08-01"
-        const parts = dateStr.split('-');
-        const dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
-        dateObj.setHours(0, 0, 0, 0);
-
-        let checkInTime: Date | null = null;
-        let checkOutTime: Date | null = null;
-        if (record.checkInTime) checkInTime = parseTimeString(record.checkInTime, dateObj);
-        if (record.checkOutTime) checkOutTime = parseTimeString(record.checkOutTime, dateObj);
-
-        const workHours = checkInTime && checkOutTime
-          ? Math.round(((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)) * 100) / 100
-          : 0;
-
-        const notesToStore = record.remarks || null;
-
-        await prisma.attendanceRecord.create({
-          data: {
-            employeeId: employee.id,
-            date: dateObj,
-            status: record.status || 'PRESENT',
-            checkInTime,
-            checkOutTime,
-            workHours,
-            notes: notesToStore,
-            source: 'ADMIN',
-          },
-        });
-        created++;
-      } catch (e) {
-        console.error('monthly-update record error:', record.date, (e as any)?.message || e);
+      if (!record.date) continue;
+      const parts = String(record.date).split('T')[0].split('-');
+      let dateObj: Date;
+      if (parts.length === 3) {
+        dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      } else {
+        dateObj = new Date(record.date);
       }
+      dateObj.setHours(0, 0, 0, 0);
+
+      let checkInTime: Date | null = null;
+      let checkOutTime: Date | null = null;
+      if (record.checkInTime) checkInTime = parseTimeString(record.checkInTime, dateObj);
+      if (record.checkOutTime) checkOutTime = parseTimeString(record.checkOutTime, dateObj);
+
+      const workHours = checkInTime && checkOutTime
+        ? Math.round(((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)) * 100) / 100
+        : 0;
+
+      insertData.push({
+        employeeId: currentEmpId,
+        date: dateObj,
+        status: record.status || 'PRESENT',
+        checkInTime,
+        checkOutTime,
+        workHours,
+        notes: record.remarks || null,
+        source: 'EXCEL',
+      });
     }
 
-    res.json({ success: true, data: { updated, created, total: records.length } });
+    let created = 0;
+    if (insertData.length > 0) {
+      const result = await prisma.attendanceRecord.createMany({
+        data: insertData,
+        skipDuplicates: true,
+      });
+      created = result.count;
+    }
+
+    res.json({ success: true, data: { updated: deleted.count, created, total: records.length } });
   } catch (err) {
     next(err);
   }
 });
 
 // DELETE /api/attendance/monthly-delete — delete a whole month's records for an employee
-router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
+router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const { employeeId, month } = req.body;
-    // month format: "2026-08"
-    if (!employeeId || !month) {
-      res.status(400).json({ success: false, message: 'employeeId and month are required' });
+    const { employeeId, employeeCode, originalEmployeeCode, month } = req.body;
+    if ((!employeeId && !employeeCode) || !month) {
+      res.status(400).json({ success: false, message: 'employee identifier and month are required' });
       return;
     }
 
-    const parts = month.split('-');
-    const year = parseInt(parts[0], 10);
-    const m = parseInt(parts[1], 10);
-    const startDate = new Date(year, m - 1, 1);
-    startDate.setHours(0, 0, 0, 0);
-    const endDate = new Date(year, m, 0, 23, 59, 59, 999);
+    const targetEmpIds = Array.from(new Set([employeeId, employeeCode, originalEmployeeCode].filter(Boolean) as string[]));
 
-    const empIdentifier = String(employeeId).trim();
-
-    // Find all matching employee records (by code or id)
-    const employees = await prisma.employee.findMany({
-      where: {
-        OR: [
-          { id: empIdentifier },
-          { employeeCode: empIdentifier },
-          { employeeCode: empIdentifier.toUpperCase() },
-          { employeeCode: empIdentifier.toLowerCase() },
-        ],
-      },
-    });
-
-    const employeeIds = employees.map(e => e.id);
-    if (!employeeIds.includes(empIdentifier)) {
-      employeeIds.push(empIdentifier);
-    }
+    const [yearPart, monthPart] = month.split('-');
+    const y = parseInt(yearPart, 10);
+    const m = parseInt(monthPart, 10);
+    
+    // Inclusive range covering UTC and all timezones
+    const startDate = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
+    const endDate = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
+    const searchStart = new Date(startDate.getTime() - (2 * 24 * 60 * 60 * 1000));
+    const searchEnd = new Date(endDate.getTime() + (2 * 24 * 60 * 60 * 1000));
 
     const result = await prisma.attendanceRecord.deleteMany({
       where: {
-        employeeId: { in: employeeIds },
-        date: { gte: startDate, lte: endDate },
+        employeeId: { in: targetEmpIds },
+        date: { gte: searchStart, lte: searchEnd },
       },
     });
 
@@ -688,21 +544,27 @@ router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUT
 });
 
 // DELETE /api/attendance/daily-delete — delete a specific date's record
-router.delete('/daily-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE', 'EMPLOYEE'), async (req: AuthRequest, res: Response, next) => {
+router.delete('/daily-delete', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const { employeeId, date } = req.body;
-    if (!employeeId || !date) {
-      res.status(400).json({ success: false, message: 'employeeId and date are required' });
+    const { employeeId, employeeCode, date } = req.body;
+    if ((!employeeId && !employeeCode) || !date) {
+      res.status(400).json({ success: false, message: 'employeeId/employeeCode and date are required' });
       return;
     }
 
-    const dateObj = new Date(date);
+    const parts = String(date).split('T')[0].split('-');
+    let dateObj: Date;
+    if (parts.length === 3) {
+      dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+    } else {
+      dateObj = new Date(date);
+    }
     dateObj.setHours(0, 0, 0, 0);
-    const nextDay = new Date(dateObj);
-    nextDay.setDate(nextDay.getDate() + 1);
 
-    const empIdentifier = String(employeeId).trim();
+    const searchStart = new Date(dateObj.getTime() - (24 * 60 * 60 * 1000));
+    const searchEnd = new Date(dateObj.getTime() + (24 * 60 * 60 * 1000));
 
+    const empIdentifier = String(employeeId || employeeCode).trim();
     const employees = await prisma.employee.findMany({
       where: {
         OR: [
@@ -710,19 +572,19 @@ router.delete('/daily-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIV
           { employeeCode: empIdentifier },
           { employeeCode: empIdentifier.toUpperCase() },
           { employeeCode: empIdentifier.toLowerCase() },
+          { crmExternalId: empIdentifier },
         ],
       },
+      select: { id: true },
     });
 
-    const employeeIds = employees.map(e => e.id);
-    if (!employeeIds.includes(empIdentifier)) {
-      employeeIds.push(empIdentifier);
-    }
+    const employeeIds = new Set<string>(employees.map(e => e.id));
+    employeeIds.add(empIdentifier);
 
     const result = await prisma.attendanceRecord.deleteMany({
       where: {
-        employeeId: { in: employeeIds },
-        date: { gte: dateObj, lt: nextDay },
+        employeeId: { in: Array.from(employeeIds) },
+        date: { gte: searchStart, lte: searchEnd },
       },
     });
 

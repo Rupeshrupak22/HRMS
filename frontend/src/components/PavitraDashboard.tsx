@@ -39,25 +39,7 @@ export function PavitraDashboard() {
           r.specialization === 'ATTENDANCE_LEAVE' ||
           (r.employeeName || '').toLowerCase().includes('pavitra')
         );
-
-        const yesterdayReport = {
-          id: 'rep-pav-12',
-          employeeName: 'Pavitra (Attendance & Leave)',
-          userEmail: 'pavitra@adyapan.com',
-          specialization: 'ATTENDANCE_LEAVE',
-          date: '2026-08-12',
-          keyUpdates: 'Attendance Summary — Present: 94, Absent: 0, Late: 3, On Leave: 0, LOP: 0. Leaves Approved: 0, Rejected: 0.',
-          issue: 'No issues logged',
-          comment: 'Daily attendance logs verified and synchronized for yesterday.',
-          status: 'APPROVED',
-          createdAt: '2026-08-12T17:00:00.000Z',
-        };
-
-        // Filter out Today (2026-08-13) reports so Today is clean until submitted
-        const nonTodayReports = pavitraReports.filter((r: any) => (r.date || r.createdAt?.split('T')[0]) !== '2026-08-13');
-        const hasYesterday = nonTodayReports.some((r: any) => (r.date || r.createdAt?.split('T')[0]) === '2026-08-12');
-        const finalReports = hasYesterday ? nonTodayReports : [yesterdayReport, ...nonTodayReports];
-        setReports(finalReports);
+        setReports(pavitraReports);
       } catch (err) {
         console.error('Failed to load Pavitra daily reports:', err);
         setReports([]);
@@ -80,11 +62,12 @@ export function PavitraDashboard() {
   };
 
   const parseReportMetrics = (report: any) => {
-    if (!report) return { present: 0, absent: 0, late: 0, leavesApproved: 0, issues: '', lopUpdates: '', comment: '' };
+    if (!report) return { present: 0, absent: 0, late: 0, lop: 0, leavesApproved: 0, issues: '', lopUpdates: '', comment: '' };
     const text = `${report.keyUpdates || ''} ${report.comment || ''} ${report.issue || ''}`;
     const presMatch = text.match(/Present:\s*(\d+)/i);
     const absMatch = text.match(/Absent:\s*(\d+)/i);
     const lateMatch = text.match(/Late:\s*(\d+)/i);
+    const lopMatch = text.match(/LOP:\s*(\d+)/i);
     const apprMatch = text.match(/Leaves Approved:\s*(\d+)/i) || text.match(/Approved:\s*(\d+)/i);
 
     const issuesMatch = text.match(/Issues Resolved:\s*([^.]+)/i);
@@ -94,6 +77,7 @@ export function PavitraDashboard() {
       present: presMatch ? parseInt(presMatch[1], 10) : (report.presentCount || 0),
       absent: absMatch ? parseInt(absMatch[1], 10) : (report.absentCount || 0),
       late: lateMatch ? parseInt(lateMatch[1], 10) : (report.lateCount || 0),
+      lop: lopMatch ? parseInt(lopMatch[1], 10) : (report.lopCount || 0),
       leavesApproved: apprMatch ? parseInt(apprMatch[1], 10) : (report.leavesApproved || 0),
       issues: issuesMatch ? issuesMatch[1].trim() : (report.issue || report.attendanceIssuesResolved || ''),
       lopUpdates: lopUpMatch ? lopUpMatch[1].trim() : (report.lopUpdates || ''),
@@ -269,22 +253,26 @@ export function PavitraDashboard() {
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-center">
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="text-xs text-slate-500 font-semibold">Present Count</div>
-              <div className="text-lg font-black text-emerald-600 mt-1">{activeMetrics.present}</div>
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center">
+            <div className="p-3 rounded-xl bg-emerald-50/50 border border-emerald-100">
+              <div className="text-xs text-emerald-800 font-semibold">Present</div>
+              <div className="text-lg font-black text-emerald-700 mt-1">{activeMetrics.present}</div>
             </div>
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="text-xs text-slate-500 font-semibold">Absent Count</div>
-              <div className="text-lg font-black text-red-600 mt-1">{activeMetrics.absent}</div>
+            <div className="p-3 rounded-xl bg-red-50/50 border border-red-100">
+              <div className="text-xs text-red-800 font-semibold">Absent</div>
+              <div className="text-lg font-black text-red-700 mt-1">{activeMetrics.absent}</div>
             </div>
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="text-xs text-slate-500 font-semibold">Late Count</div>
-              <div className="text-lg font-black text-amber-600 mt-1">{activeMetrics.late}</div>
+            <div className="p-3 rounded-xl bg-gray-50 border border-gray-200">
+              <div className="text-xs text-gray-800 font-semibold">LOP</div>
+              <div className="text-lg font-black text-gray-800 mt-1">{activeMetrics.lop}</div>
             </div>
-            <div className="p-3 rounded-xl bg-slate-50 border border-slate-100">
-              <div className="text-xs text-slate-500 font-semibold">Leaves Approved</div>
-              <div className="text-lg font-black text-blue-600 mt-1">{activeMetrics.leavesApproved}</div>
+            <div className="p-3 rounded-xl bg-amber-50/50 border border-amber-100">
+              <div className="text-xs text-amber-800 font-semibold">Late Login</div>
+              <div className="text-lg font-black text-amber-700 mt-1">{activeMetrics.late}</div>
+            </div>
+            <div className="p-3 rounded-xl bg-blue-50/50 border border-blue-100">
+              <div className="text-xs text-blue-800 font-semibold">Leaves Approved</div>
+              <div className="text-lg font-black text-blue-700 mt-1">{activeMetrics.leavesApproved}</div>
             </div>
           </div>
 

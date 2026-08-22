@@ -528,12 +528,18 @@ export function VeenaDashboard() {
     setImporting(true);
     try {
       let count = 0;
-      for (const item of importData) {
-        try {
-          await veenaApi.createRecruitment(item);
-          count++;
-        } catch (err) {
-          console.error('Failed to create candidate in DB:', item, err);
+      try {
+        const res = await veenaApi.createRecruitmentBulk(importData);
+        count = res?.count || importData.length;
+      } catch (bulkErr) {
+        console.warn('Bulk endpoint fallback to individual creation:', bulkErr);
+        for (const item of importData) {
+          try {
+            await veenaApi.createRecruitment(item);
+            count++;
+          } catch (err) {
+            console.error('Failed to create candidate in DB:', item, err);
+          }
         }
       }
       await loadAllData();

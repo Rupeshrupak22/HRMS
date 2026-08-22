@@ -1,15 +1,16 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import prisma from '../../lib/prisma';
-import { authenticate } from '../../middleware/auth';
+import { authenticate, authorize } from '../../middleware/auth';
 import { AuthRequest } from '../../types';
 
 const router = Router();
 router.use(authenticate);
+router.use(authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'));
 
-// Helper for 100% pure Database CRUD with ownership handling
+// Helper for Database CRUD with ownership handling and proper error forwarding
 function crud(model: any) {
   return {
-    getAll: async (req: AuthRequest, res: Response) => {
+    getAll: async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const where: any = {};
         const isNitishaLead =
@@ -22,11 +23,10 @@ function crud(model: any) {
         const list = await model.findMany({ where, orderBy: { createdAt: 'desc' } });
         return res.json(list);
       } catch (e: any) {
-        console.error('Database getAll error:', e?.message);
-        return res.status(500).json({ error: 'Database query failed' });
+        next(e);
       }
     },
-    create: async (req: AuthRequest, res: Response) => {
+    create: async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const { id, _id, _isPlaceholder, createdAt, updatedAt, ...rest } = req.body;
         if (rest.dailyData && typeof rest.dailyData === 'object') {
@@ -43,11 +43,10 @@ function crud(model: any) {
         });
         return res.status(201).json(dbCreated);
       } catch (e: any) {
-        console.error('Database create error:', e?.message);
-        return res.status(500).json({ error: e?.message || 'Database create failed' });
+        next(e);
       }
     },
-    update: async (req: AuthRequest, res: Response) => {
+    update: async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const id = String(req.params.id);
         const { id: bodyId, _id, _isPlaceholder, createdAt, updatedAt, ...rest } = req.body;
@@ -75,29 +74,35 @@ function crud(model: any) {
           return res.status(201).json(created);
         }
       } catch (e: any) {
-        console.error('Database update error:', e?.message);
-        try {
-          const { id: bodyId, _id, _isPlaceholder, createdAt, updatedAt, ...rest } = req.body;
-          const created = await model.create({
-            data: {
-              ...rest,
-              createdByEmail: req.user?.email || null,
-            },
-          });
-          return res.status(201).json(created);
-        } catch (err: any) {
-          return res.status(500).json({ error: err?.message || 'Database update failed' });
+        if (e?.code === 'P2025') {
+          // Record not found — attempt to create instead (upsert behavior)
+          try {
+            const { id: bodyId, _id, _isPlaceholder, createdAt, updatedAt, ...rest } = req.body;
+            const created = await model.create({
+              data: {
+                ...rest,
+                createdByEmail: req.user?.email || null,
+              },
+            });
+            return res.status(201).json(created);
+          } catch (err: any) {
+            next(err);
+          }
+          return;
         }
+        next(e);
       }
     },
-    remove: async (req: AuthRequest, res: Response) => {
+    remove: async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const id = String(req.params.id);
         await model.delete({ where: { id } });
         return res.json({ success: true });
       } catch (e: any) {
-        console.error('Database delete error:', e?.message);
-        return res.status(500).json({ error: e?.message || 'Database delete failed' });
+        if (e?.code === 'P2025') {
+          return res.status(404).json({ success: false, message: 'Record not found' });
+        }
+        next(e);
       }
     },
   };
@@ -157,18 +162,17 @@ function mapPerformanceOutput(item: any) {
 }
 
 // Performance Dedicated Handlers
-router.get('/performance', async (req: AuthRequest, res: Response) => {
+router.get('/performance', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const list = await prisma.employeePerformance.findMany({ orderBy: { createdAt: 'desc' } });
     const mapped = list.map(mapPerformanceOutput);
     return res.json(mapped);
   } catch (e: any) {
-    console.error('Database getAll performance error:', e?.message);
-    return res.status(500).json({ error: 'Database query failed' });
+    next(e);
   }
 });
 
-router.post('/performance', async (req: AuthRequest, res: Response) => {
+router.post('/performance', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const sanitized = sanitizePerformanceData(req.body);
 
@@ -197,12 +201,11 @@ router.post('/performance', async (req: AuthRequest, res: Response) => {
     });
     return res.status(201).json(mapPerformanceOutput(created));
   } catch (e: any) {
-    console.error('Performance create error:', e);
-    return res.status(500).json({ error: e?.message || 'Create failed' });
+    next(e);
   }
 });
 
-router.put('/performance/:id', async (req: AuthRequest, res: Response) => {
+router.put('/performance/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = String(req.params.id);
     const sanitized = sanitizePerformanceData(req.body);
@@ -241,22 +244,21 @@ router.put('/performance/:id', async (req: AuthRequest, res: Response) => {
       return res.status(201).json(mapPerformanceOutput(created));
     }
   } catch (e: any) {
-    console.error('Performance update error:', e);
-    return res.status(500).json({ error: e?.message || 'Update failed' });
+    next(e);
   }
 });
 
-router.delete('/performance/:id', async (req: AuthRequest, res: Response) => {
+router.delete('/performance/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = String(req.params.id);
     await prisma.employeePerformance.delete({ where: { id } }).catch(() => {});
     return res.json({ success: true });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || 'Delete failed' });
+    next(e);
   }
 });
 
-router.post('/performance/bulk', async (req: AuthRequest, res: Response) => {
+router.post('/performance/bulk', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const rawItems: any[] = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.items) ? req.body.items : []);
     if (rawItems.length === 0) {
@@ -280,7 +282,7 @@ router.post('/performance/bulk', async (req: AuthRequest, res: Response) => {
     }
     return res.status(201).json({ success: true, count, message: `Successfully saved ${count} records` });
   } catch (e: any) {
-    return res.status(500).json({ error: e?.message || 'Bulk import failed' });
+    next(e);
   }
 });
 

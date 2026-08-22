@@ -33,14 +33,31 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
   try {
     const res = await fetch(`${API_BASE}${endpoint}`, {
       cache: 'no-store',
-      credentials: 'include', // Send httpOnly cookies with requests
+      credentials: 'include',
       ...options,
       headers,
     });
 
     if (!res.ok) {
       const err = await res.json().catch(() => ({ message: res.statusText }));
-      throw new Error(err.message || 'API request failed');
+      const errorMessage = err.message || 'API request failed';
+
+      // Detect any 401 Unauthorized (another device logged in or session expired)
+      if (res.status === 401) {
+        if (typeof window !== 'undefined') {
+          const isAnotherDevice = errorMessage === 'FORCE_LOGOUT' || errorMessage.includes('FORCE_LOGOUT');
+          window.dispatchEvent(new CustomEvent('auth:force-logout', {
+            detail: {
+              message: isAnotherDevice
+                ? 'Session ended. You have been logged in on another device.'
+                : (errorMessage || 'Session expired. Please log in again.')
+            },
+          }));
+        }
+        throw new Error(errorMessage);
+      }
+
+      throw new Error(errorMessage);
     }
 
     const result = await res.json();
@@ -49,7 +66,9 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
     }
     return result;
   } catch (error: any) {
-    console.warn(`API call ${endpoint} error:`, error.message);
+    if (error.message !== 'FORCE_LOGOUT') {
+      console.warn(`API call ${endpoint} error:`, error.message);
+    }
     throw error;
   }
 }

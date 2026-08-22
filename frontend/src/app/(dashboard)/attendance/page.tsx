@@ -44,10 +44,7 @@ export default function AttendancePage() {
   const fetchAttendanceData = async () => {
     setLoading(true);
     try {
-      const [year, month] = selectedMonth.split('-');
-      const startDate = new Date(parseInt(year, 10), parseInt(month, 10) - 1, 1).toISOString();
-      const endDate = new Date(parseInt(year, 10), parseInt(month, 10), 0, 23, 59, 59).toISOString();
-      const res = await apiRequest(`/attendance/all-logs?startDate=${startDate}&endDate=${endDate}`);
+      const res = await apiRequest(`/attendance/all-logs?month=${selectedMonth}`);
       let logs: any[] = [];
       if (Array.isArray(res)) {
         logs = res;
@@ -79,6 +76,8 @@ export default function AttendancePage() {
       if (!empMap.has(key)) {
         empMap.set(key, {
           empId: key,
+          employeeId: log.employeeId || log.id,
+          id: log.employeeId || log.id,
           empName: log.empName,
           role: log.role && log.role !== '-' ? log.role : '-',
           department: log.department && log.department !== '-' ? log.department : '-',
@@ -133,28 +132,32 @@ export default function AttendancePage() {
       }
 
       if (log.date) {
-        const day = parseInt(log.date.split('-')[2], 10);
-        if (!isNaN(day)) {
-          emp.days[day] = log.status;
-          if (log.status === 'PRESENT') emp.presentCount++;
-          else if (log.status === 'ABSENT') emp.absentCount++;
-          else if (log.status === 'EARLY_LOGOUT') emp.earlyLogoutCount++;
-          else if (log.status === 'LATE_LOGIN') emp.lateLoginCount++;
-          else if (log.status === 'SICK_LEAVE') emp.sickLeaveCount++;
-          else if (log.status === 'EMERGENCY_LEAVE') emp.emergencyLeaveCount++;
-          else if (log.status === 'PAID_LEAVE') emp.paidLeaveCount++;
-          else if (log.status === 'LONG_LEAVE') emp.longLeaveCount++;
-          else if (log.status === 'CASUAL_LEAVE') emp.casualLeaveCount++;
-          else if (log.status === 'NATIONAL_HOLIDAY') emp.nationalHolidayCount++;
-          else if (log.status === 'FESTIVE_HOLIDAY') emp.festiveHolidayCount++;
-          else if (log.status === 'HOLIDAY') emp.holidayCount++;
-          else if (log.status === 'TRAINING') emp.trainingCount++;
-          else if (log.status === 'WEEKLY_OFF') emp.wo++;
-          else if (log.status === 'OVERTIME') emp.ot++;
-          else if (log.status === 'WORK_FROM_HOME') emp.wfh++;
-          else if (log.status === 'HALF_DAY') emp.hd++;
-          else if (log.status === 'LOP') emp.lopCount++;
-          else if (log.status === 'PERSONAL_LEAVE') emp.personalLeaveCount++;
+        const [logYear, logMonth, logDay] = String(log.date).split('T')[0].split('-');
+        // Strictly match ONLY records belonging to the selected month!
+        if (logYear === yearStr && logMonth === monthStr) {
+          const day = parseInt(logDay, 10);
+          if (!isNaN(day)) {
+            emp.days[day] = log.status;
+            if (log.status === 'PRESENT') emp.presentCount++;
+            else if (log.status === 'ABSENT') emp.absentCount++;
+            else if (log.status === 'EARLY_LOGOUT') emp.earlyLogoutCount++;
+            else if (log.status === 'LATE_LOGIN') emp.lateLoginCount++;
+            else if (log.status === 'SICK_LEAVE') emp.sickLeaveCount++;
+            else if (log.status === 'EMERGENCY_LEAVE') emp.emergencyLeaveCount++;
+            else if (log.status === 'PAID_LEAVE') emp.paidLeaveCount++;
+            else if (log.status === 'LONG_LEAVE') emp.longLeaveCount++;
+            else if (log.status === 'CASUAL_LEAVE') emp.casualLeaveCount++;
+            else if (log.status === 'NATIONAL_HOLIDAY') emp.nationalHolidayCount++;
+            else if (log.status === 'FESTIVE_HOLIDAY') emp.festiveHolidayCount++;
+            else if (log.status === 'HOLIDAY') emp.holidayCount++;
+            else if (log.status === 'TRAINING') emp.trainingCount++;
+            else if (log.status === 'WEEKLY_OFF') emp.wo++;
+            else if (log.status === 'OVERTIME') emp.ot++;
+            else if (log.status === 'WORK_FROM_HOME') emp.wfh++;
+            else if (log.status === 'HALF_DAY') emp.hd++;
+            else if (log.status === 'LOP') emp.lopCount++;
+            else if (log.status === 'PERSONAL_LEAVE') emp.personalLeaveCount++;
+          }
         }
       }
     }
@@ -319,7 +322,7 @@ export default function AttendancePage() {
           'CL': 'CASUAL_LEAVE', 'C.L': 'CASUAL_LEAVE', 'CASUAL': 'CASUAL_LEAVE', 'CASUAL LEAVE': 'CASUAL_LEAVE', 'CASUAL_LEAVE': 'CASUAL_LEAVE',
           'SL': 'SICK_LEAVE', 'S.L': 'SICK_LEAVE', 'SICK': 'SICK_LEAVE', 'SICK LEAVE': 'SICK_LEAVE', 'SICK_LEAVE': 'SICK_LEAVE',
           'H': 'HOLIDAY', 'HOL': 'HOLIDAY', 'HOLIDAY': 'HOLIDAY',
-          'WO': 'WEEKLY_OFF', 'W.O': 'WEEKLY_OFF', 'W/O': 'WEEKLY_OFF', 'OFF': 'WEEKLY_OFF', 'WEEKLY OFF': 'WEEKLY_OFF', 'WEEKLY_OFF': 'WEEKLY_OFF', 'WEEK OFF': 'WEEKLY_OFF',
+          'WO': 'WEEKLY_OFF', 'W.O': 'WEEKLY_OFF', 'W/O': 'WEEKLY_OFF', 'OFF': 'WEEKLY_OFF', 'WEEKLY OFF': 'WEEKLY_OFF', 'WEEKLY_OFF': 'WEEKLY_OFF', 'WEEK OFF': 'WEEKLY_OFF', 'WEEKOFF': 'WEEKLY_OFF', 'WEEK-OFF': 'WEEKLY_OFF',
           'OT': 'OVERTIME', 'O.T': 'OVERTIME', 'OVERTIME': 'OVERTIME',
           'WFH': 'WORK_FROM_HOME', 'W.F.H': 'WORK_FROM_HOME', 'WORK FROM HOME': 'WORK_FROM_HOME', 'WORK_FROM_HOME': 'WORK_FROM_HOME',
           'HD': 'HALF_DAY', 'H.D': 'HALF_DAY', 'HALF DAY': 'HALF_DAY', 'HALF_DAY': 'HALF_DAY', 'HALF-DAY': 'HALF_DAY', '0.5': 'HALF_DAY', '0.5P': 'HALF_DAY',
@@ -332,7 +335,9 @@ export default function AttendancePage() {
           'FH': 'FESTIVE_HOLIDAY', 'F.H': 'FESTIVE_HOLIDAY', 'FESTIVE HOLIDAY': 'FESTIVE_HOLIDAY', 'FESTIVE_HOLIDAY': 'FESTIVE_HOLIDAY',
           'T': 'TRAINING', 'TR': 'TRAINING', 'TRAINING': 'TRAINING',
           'LOP': 'LOP', 'L.O.P': 'LOP', 'LOSS OF PAY': 'LOP', 'LOSS_OF_PAY': 'LOP',
-          'PEL': 'PERSONAL_LEAVE', 'PERSONAL LEAVE': 'PERSONAL_LEAVE', 'PERSONAL_LEAVE': 'PERSONAL_LEAVE'
+          'PEL': 'PERSONAL_LEAVE', 'PeL': 'PERSONAL_LEAVE', 'PERSONAL LEAVE': 'PERSONAL_LEAVE', 'PERSONAL_LEAVE': 'PERSONAL_LEAVE',
+          'ONBO': 'ONBOARDING', 'ONBOARDING': 'ONBOARDING', 'JOINING': 'ONBOARDING',
+          'RESIG': 'RESIGNED', 'RESIGNED': 'RESIGNED', 'RESIGNATION': 'RESIGNED',
         };
 
         const formattedRecords: any[] = [];
@@ -400,9 +405,26 @@ export default function AttendancePage() {
               
               const dayKey = keys.find(k => {
                 const cleanK = k.trim().replace(/[\u00a0\r\n\t]/g, ' ');
+                // Exact match: "1", "01", "21", "31"
                 if (cleanK === dayStr || cleanK === paddedDay) return true;
-                const m = cleanK.match(/^(?:day\s*)?0?([1-9]|[12]\d|3[01])(?:\b|[^\d])/i);
-                if (m && parseInt(m[1], 10) === i) return true;
+
+                // Exclude any summary, totals, or remarks column headers
+                if (/total|sum|count|leave|remark|status|reason|approved|mail|payable|salary/i.test(cleanK)) {
+                  return false;
+                }
+
+                // Match "Day 1", "Day 01", "D1", "D01"
+                const dayMatch = cleanK.match(/^(?:day|d)\s*0?([1-9]|[12]\d|3[01])$/i);
+                if (dayMatch && parseInt(dayMatch[1], 10) === i) return true;
+
+                // Match date patterns like "21-Aug", "21/08", "21-08-2026", "21 Aug"
+                const dateMatch = cleanK.match(/^0?([1-9]|[12]\d|3[01])(?:[-/\s](?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|[0-9]{1,4}))+/i);
+                if (dateMatch && parseInt(dateMatch[1], 10) === i) return true;
+
+                // Match ISO date "2026-08-21"
+                const isoMatch = cleanK.match(/^\d{4}-\d{2}-0?([1-9]|[12]\d|3[01])$/);
+                if (isoMatch && parseInt(isoMatch[1], 10) === i) return true;
+
                 return false;
               });
 
@@ -464,15 +486,14 @@ export default function AttendancePage() {
     setUploadStatus('uploading');
     
     try {
-      // Simulate progress while the single API call runs
+      let currentProg = 10;
+      setUploadProgress(currentProg);
       const progressInterval = setInterval(() => {
-        setUploadProgress(prev => {
-          if (prev >= 90) return prev;
-          return prev + Math.random() * 15;
-        });
-      }, 300);
+        currentProg = Math.min(currentProg + 15, 88);
+        setUploadProgress(currentProg);
+      }, 150);
 
-      await apiRequest('/attendance/bulk-import', {
+      const res = await apiRequest('/attendance/bulk-import', {
         method: 'POST',
         body: JSON.stringify({ records: importData }),
       });
@@ -480,13 +501,190 @@ export default function AttendancePage() {
       clearInterval(progressInterval);
       setUploadProgress(100);
       setUploadStatus('success');
-      setShowImportModal(false);
-      await fetchAttendanceData();
+      setTimeout(async () => {
+        setShowImportModal(false);
+        setImportData([]);
+        await fetchAttendanceData();
+      }, 400);
     } catch (err: any) {
       setUploadStatus('error');
+      setImportError(err?.message || 'Import failed. Please verify format.');
     } finally {
       setImporting(false);
     }
+  };
+
+  const normalizeStatusToCode = (status: string): string => {
+    const s = String(status || '').toUpperCase().trim();
+    if (!s) return '-';
+    if (s === 'PRESENT' || s === 'P' || s === 'PR' || s === 'PRES' || s === '1') return 'P';
+    if (s === 'ABSENT' || s === 'A' || s === 'AB' || s === 'ABS' || s === '0') return 'A';
+    if (s === 'CASUAL_LEAVE' || s === 'CL' || s === 'C.L' || s === 'CASUAL' || s === 'CASUAL LEAVE') return 'CL';
+    if (s === 'SICK_LEAVE' || s === 'SL' || s === 'S.L' || s === 'SICK' || s === 'SICK LEAVE') return 'SL';
+    if (s === 'HOLIDAY' || s === 'H' || s === 'HOL') return 'H';
+    if (s === 'WEEKLY_OFF' || s === 'WO' || s === 'W.O' || s === 'W/O' || s === 'OFF' || s === 'WEEKLY OFF' || s === 'WEEK OFF' || s === 'WEEKOFF' || s === 'WEEK-OFF') return 'WO';
+    if (s === 'OVERTIME' || s === 'OT' || s === 'O.T' || s === 'OVERTIME') return 'OT';
+    if (s === 'WORK_FROM_HOME' || s === 'WFH' || s === 'W.F.H' || s === 'WORK FROM HOME') return 'WFH';
+    if (s === 'HALF_DAY' || s === 'HD' || s === 'H.D' || s === 'HALF DAY' || s === 'HALF-DAY' || s === '0.5' || s === '0.5P') return 'HD';
+    if (s === 'EARLY_LOGOUT' || s === 'EL' || s === 'E.L' || s === 'EARLY LOGOUT' || s === 'EARLY OUT') return 'EL';
+    if (s === 'LATE_LOGIN' || s === 'LATE' || s === 'LL' || s === 'L.L' || s === 'LATE LOGIN' || s === 'LATE IN') return 'LL';
+    if (s === 'EMERGENCY_LEAVE' || s === 'E_L' || s === 'E.L.' || s === 'EMERGENCY' || s === 'EMERGENCY LEAVE') return 'E_L';
+    if (s === 'PAID_LEAVE' || s === 'PL' || s === 'P.L' || s === 'PAID LEAVE') return 'PL';
+    if (s === 'LONG_LEAVE' || s === 'LLV' || s === 'L.L.V' || s === 'LONG LEAVE' || s === 'LONG LEAVES') return 'LLV';
+    if (s === 'NATIONAL_HOLIDAY' || s === 'NH' || s === 'N.H' || s === 'NATIONAL HOLIDAY') return 'NH';
+    if (s === 'FESTIVE_HOLIDAY' || s === 'FH' || s === 'F.H' || s === 'FESTIVE HOLIDAY') return 'FH';
+    if (s === 'TRAINING' || s === 'T' || s === 'TR' || s === 'TRAINING') return 'T';
+    if (s === 'LOP' || s === 'L.O.P' || s === 'LOSS OF PAY' || s === 'LOSS_OF_PAY') return 'LOP';
+    if (s === 'PERSONAL_LEAVE' || s === 'PEL' || s === 'PERSONAL LEAVE') return 'PeL';
+    if (s === 'ONBOARDING' || s === 'ONBO' || s === 'JOINING') return 'ONBO';
+    if (s === 'RESIGNED' || s === 'RESIG' || s === 'RESIGNATION') return 'RESIG';
+    return s;
+  };
+
+  const getStatusBadgeStyle = (code: string) => {
+    switch (code) {
+      case 'P': return 'bg-emerald-100 text-emerald-800 font-bold';
+      case 'A': return 'bg-red-100 text-red-800 font-bold';
+      case 'CL': return 'bg-amber-100 text-amber-800 font-bold';
+      case 'SL': return 'bg-orange-100 text-orange-800 font-bold';
+      case 'H': return 'bg-slate-200 text-slate-800 font-bold';
+      case 'WO': return 'bg-slate-200 text-slate-800 font-bold text-[8px]';
+      case 'OT': return 'bg-blue-100 text-blue-800 font-bold';
+      case 'WFH': return 'bg-teal-100 text-teal-800 font-bold text-[8px]';
+      case 'HD': return 'bg-pink-100 text-pink-800 font-bold';
+      case 'EL': return 'bg-yellow-100 text-yellow-800 font-bold';
+      case 'LL': return 'bg-amber-100 text-amber-800 font-bold';
+      case 'E_L': return 'bg-rose-100 text-rose-800 font-bold';
+      case 'PL': return 'bg-indigo-100 text-indigo-800 font-bold';
+      case 'LLV': return 'bg-purple-100 text-purple-800 font-bold text-[8px]';
+      case 'NH': return 'bg-cyan-100 text-cyan-800 font-bold';
+      case 'FH': return 'bg-lime-100 text-lime-800 font-bold';
+      case 'T': return 'bg-violet-100 text-violet-800 font-bold';
+      case 'LOP': return 'bg-gray-200 text-gray-800 font-bold text-[8px]';
+      case 'PeL': return 'bg-fuchsia-100 text-fuchsia-800 font-bold';
+      case 'ONBO': return 'bg-sky-100 text-sky-800 font-bold text-[7px]';
+      case 'RESIG': return 'bg-rose-100 text-rose-800 font-bold text-[7px]';
+      default: return 'text-slate-300';
+    }
+  };
+
+  const openEditModal = (emp: any) => {
+    const cs = emp.customSummary || {};
+    const formData: any = {
+      empId: emp.empId || emp.employeeCode || emp.id || '',
+      empName: emp.empName || emp.name || '',
+      role: emp.role || '',
+      department: emp.department || '',
+      designation: emp.designation || '',
+      present: emp.present ?? emp.presentCount ?? 0,
+      absent: emp.absent ?? emp.absentCount ?? 0,
+      earlyLogout: emp.earlyLogout ?? emp.earlyLogoutCount ?? 0,
+      lateLogin: emp.lateLogin ?? emp.lateLoginCount ?? 0,
+      sickLeave: emp.sickLeave ?? emp.sickLeaveCount ?? 0,
+      emergencyLeave: emp.emergencyLeave ?? emp.emergencyLeaveCount ?? 0,
+      paidLeave: emp.paidLeave ?? emp.paidLeaveCount ?? 0,
+      longLeave: emp.longLeave ?? emp.longLeaveCount ?? 0,
+      mailReceived: emp.mailReceived ?? emp.mailReceivedCount ?? 0,
+      mailNotReceived: emp.mailNotReceived ?? emp.mailNotReceivedCount ?? 0,
+      casualLeave: emp.casualLeave ?? emp.casualLeaveCount ?? 0,
+      approvedBy: emp.approvedBy ?? emp.approvedByVal ?? '',
+      notApproved: emp.notApproved ?? emp.notApprovedCount ?? 0,
+      nationalHoliday: emp.nationalHoliday ?? emp.nationalHolidayCount ?? 0,
+      festiveHoliday: emp.festiveHoliday ?? emp.festiveHolidayCount ?? 0,
+      holiday: emp.holiday ?? emp.holidayCount ?? 0,
+      training: emp.training ?? emp.trainingCount ?? 0,
+      lop: emp.lop ?? emp.lopCount ?? 0,
+      personalLeave: emp.personalLeave ?? emp.personalLeaveCount ?? 0,
+      wfh: emp.wfh ?? 0,
+      hd: emp.hd ?? 0,
+      wo: emp.wo ?? 0,
+      ot: emp.ot ?? 0,
+    };
+
+    for (let i = 1; i <= daysInMonth; i++) {
+      const raw = emp.days[i] || '';
+      const code = normalizeStatusToCode(raw);
+      let optVal = '';
+      if (code === 'P') optVal = 'PRESENT';
+      else if (code === 'A') optVal = 'ABSENT';
+      else if (code === 'HD') optVal = 'HALF_DAY';
+      else if (code === 'CL') optVal = 'CASUAL_LEAVE';
+      else if (code === 'SL') optVal = 'SICK_LEAVE';
+      else if (code === 'H') optVal = 'HOLIDAY';
+      else if (code === 'WO') optVal = 'WEEKLY_OFF';
+      else if (code === 'WFH') optVal = 'WORK_FROM_HOME';
+      else if (code === 'OT') optVal = 'OVERTIME';
+      else if (code === 'EL') optVal = 'EARLY_LOGOUT';
+      else if (code === 'LL') optVal = 'LATE_LOGIN';
+      else if (code === 'E_L') optVal = 'EMERGENCY_LEAVE';
+      else if (code === 'PL') optVal = 'PAID_LEAVE';
+      else if (code === 'LLV') optVal = 'LONG_LEAVE';
+      else if (code === 'NH') optVal = 'NATIONAL_HOLIDAY';
+      else if (code === 'FH') optVal = 'FESTIVE_HOLIDAY';
+      else if (code === 'T') optVal = 'TRAINING';
+      else if (code === 'LOP') optVal = 'LOP';
+      else if (code === 'PeL') optVal = 'PERSONAL_LEAVE';
+      else if (code === 'ONBO') optVal = 'ONBOARDING';
+      else if (code === 'RESIG') optVal = 'RESIGNED';
+      else if (raw) optVal = raw;
+
+      formData[i] = optVal;
+      if (cs[`approvedBy_day_${i}`]) {
+        formData[`approvedBy_${i}`] = cs[`approvedBy_day_${i}`];
+      }
+    }
+
+    setEditForm(formData);
+    setEditEmployee(emp);
+  };
+
+  const calculateCountersFromDays = () => {
+    let p = 0, a = 0, el = 0, ll = 0, sl = 0, ecl = 0, pl = 0, llv = 0, cl = 0, nh = 0, fh = 0, h = 0, t = 0, lop = 0, personalLeave = 0, wo = 0, wfh = 0, hd = 0, ot = 0;
+    for (let i = 1; i <= daysInMonth; i++) {
+      const s = editForm[i];
+      const code = normalizeStatusToCode(s);
+      if (code === 'P') p++;
+      else if (code === 'A') a++;
+      else if (code === 'EL') el++;
+      else if (code === 'LL') ll++;
+      else if (code === 'SL') sl++;
+      else if (code === 'E_L') ecl++;
+      else if (code === 'PL') pl++;
+      else if (code === 'LLV') llv++;
+      else if (code === 'CL') cl++;
+      else if (code === 'NH') nh++;
+      else if (code === 'FH') fh++;
+      else if (code === 'H') h++;
+      else if (code === 'T') t++;
+      else if (code === 'LOP') lop++;
+      else if (code === 'PeL') personalLeave++;
+      else if (code === 'WO') wo++;
+      else if (code === 'WFH') wfh++;
+      else if (code === 'HD') hd++;
+      else if (code === 'OT') ot++;
+    }
+    setEditForm((prev: any) => ({
+      ...prev,
+      present: p,
+      absent: a,
+      earlyLogout: el,
+      lateLogin: ll,
+      sickLeave: sl,
+      emergencyLeave: ecl,
+      paidLeave: pl,
+      longLeave: llv,
+      casualLeave: cl,
+      nationalHoliday: nh,
+      festiveHoliday: fh,
+      holiday: h,
+      training: t,
+      lop,
+      personalLeave,
+      wo,
+      wfh,
+      hd,
+      ot,
+    }));
   };
 
   const handleSaveEdit = async () => {
@@ -536,6 +734,8 @@ export default function AttendancePage() {
         department: editForm.department,
         designation: editForm.designation,
         role: editForm.role,
+        empId: editForm.empId || editEmployee.empId,
+        empName: editForm.empName || editEmployee.empName,
       };
 
       const records = [];
@@ -555,7 +755,7 @@ export default function AttendancePage() {
           });
         }
       }
-      const targetEmpId = editEmployee.isNew ? editForm.empId : (editForm.empId || editEmployee.empId);
+      const targetEmpId = editEmployee.isNew ? editForm.empId : (editEmployee.employeeId || editEmployee.id || editEmployee.empId || editForm.empId);
       if (!targetEmpId) {
         alert("Employee ID is required");
         setSaving(false);
@@ -565,8 +765,10 @@ export default function AttendancePage() {
       await apiRequest('/attendance/monthly-update', {
         method: 'PUT',
         body: JSON.stringify({
-          employeeCode: targetEmpId,
-          employeeName: editForm.empName,
+          employeeId: targetEmpId,
+          originalEmployeeCode: editEmployee.empId,
+          employeeCode: (editForm.empId || editEmployee.empId || '').trim(),
+          employeeName: (editForm.empName || editEmployee.empName || '').trim(),
           role: editForm.role,
           department: editForm.department,
           designation: editForm.designation,
@@ -584,112 +786,33 @@ export default function AttendancePage() {
     }
   };
 
+  const [deleting, setDeleting] = useState(false);
+
   const handleConfirmDelete = async () => {
     if (!deleteEmployee) return;
-    const targetEmpId = deleteEmployee.empId || deleteEmployee.id;
+    const targetEmpId = deleteEmployee.employeeId || deleteEmployee.id || deleteEmployee.empId;
+    setDeleting(true);
     try {
       await apiRequest('/attendance/monthly-delete', {
         method: 'DELETE',
-        body: JSON.stringify({ employeeId: targetEmpId, month: selectedMonth })
+        body: JSON.stringify({
+          employeeId: targetEmpId,
+          employeeCode: deleteEmployee.empId,
+          employeeName: deleteEmployee.empName,
+          month: selectedMonth
+        })
       });
-      setAllLogs(prev => prev.filter(l => l.empId !== targetEmpId && l.employeeId !== targetEmpId));
+      setAllLogs(prev => prev.filter(l => l.empId !== deleteEmployee.empId && l.employeeId !== targetEmpId));
       setDeleteEmployee(null);
       await fetchAttendanceData();
     } catch (err: any) {
       alert(err?.message || 'Delete failed');
+    } finally {
+      setDeleting(false);
     }
   };
 
-  const openEditModal = (emp: any) => {
-    const form: any = {
-      empId: emp.empId || '',
-      empName: emp.empName && emp.empName !== 'Employee' ? emp.empName : '',
-      role: emp.role && emp.role !== '-' ? emp.role : '',
-      department: emp.department && emp.department !== '-' ? emp.department : '',
-      designation: emp.designation && emp.designation !== '-' ? emp.designation : '',
-      approvedBy: emp.approvedBy && emp.approvedBy !== '-' ? emp.approvedBy : '',
-      present: emp.present ?? 0,
-      absent: emp.absent ?? 0,
-      earlyLogout: emp.earlyLogout ?? 0,
-      lateLogin: emp.lateLogin ?? 0,
-      sickLeave: emp.sickLeave ?? 0,
-      emergencyLeave: emp.emergencyLeave ?? 0,
-      paidLeave: emp.paidLeave ?? 0,
-      longLeave: emp.longLeave ?? 0,
-      mailReceived: emp.mailReceived ?? 0,
-      mailNotReceived: emp.mailNotReceived ?? 0,
-      casualLeave: emp.casualLeave ?? 0,
-      notApproved: emp.notApproved ?? 0,
-      nationalHoliday: emp.nationalHoliday ?? 0,
-      festiveHoliday: emp.festiveHoliday ?? 0,
-      holiday: emp.holiday ?? 0,
-      training: emp.training ?? 0,
-    };
-    if (!emp.isNew && emp.days) {
-      for (let i = 1; i <= daysInMonth; i++) {
-        form[i] = emp.days[i] || '';
-      }
-    }
-    // Restore per-day approvedBy values from customSummary
-    if (emp.customSummary) {
-      for (let i = 1; i <= daysInMonth; i++) {
-        const dayApproved = emp.customSummary[`approvedBy_day_${i}`];
-        if (dayApproved && String(dayApproved).trim() !== '') {
-          form[`approvedBy_${i}`] = dayApproved;
-        }
-      }
-    }
-    setEditForm(form);
-    setEditEmployee(emp);
-  };
 
-  const calculateCountersFromDays = () => {
-    let p = 0, a = 0, el = 0, ll = 0, sl = 0, ecl = 0, pl = 0, llv = 0, cl = 0, nh = 0, fh = 0, h = 0, t = 0, hd = 0, wfh = 0, wo = 0, ot = 0, lop = 0, personalLeave = 0;
-    for (let i = 1; i <= daysInMonth; i++) {
-      const s = editForm[i];
-      if (s === 'PRESENT' || s === 'P') p++;
-      else if (s === 'ABSENT' || s === 'A') a++;
-      else if (s === 'EARLY_LOGOUT' || s === 'EL') el++;
-      else if (s === 'LATE_LOGIN' || s === 'LL') ll++;
-      else if (s === 'SICK_LEAVE' || s === 'SL') sl++;
-      else if (s === 'EMERGENCY_LEAVE' || s === 'E_L') ecl++;
-      else if (s === 'PAID_LEAVE') pl++;
-      else if (s === 'LONG_LEAVE' || s === 'LLV') llv++;
-      else if (s === 'CASUAL_LEAVE' || s === 'CL') cl++;
-      else if (s === 'NATIONAL_HOLIDAY' || s === 'NH') nh++;
-      else if (s === 'FESTIVE_HOLIDAY' || s === 'FH') fh++;
-      else if (s === 'HOLIDAY' || s === 'H') h++;
-      else if (s === 'TRAINING' || s === 'T') t++;
-      else if (s === 'HALF_DAY' || s === 'HD') hd++;
-      else if (s === 'WORK_FROM_HOME' || s === 'WFH') wfh++;
-      else if (s === 'WEEKLY_OFF' || s === 'WO') wo++;
-      else if (s === 'OVERTIME' || s === 'OT') ot++;
-      else if (s === 'LOP') lop++;
-      else if (s === 'PERSONAL_LEAVE') personalLeave++;
-    }
-    setEditForm({
-      ...editForm,
-      present: p,
-      absent: a,
-      earlyLogout: el,
-      lateLogin: ll,
-      sickLeave: sl,
-      emergencyLeave: ecl,
-      paidLeave: pl,
-      longLeave: llv,
-      casualLeave: cl,
-      nationalHoliday: nh,
-      festiveHoliday: fh,
-      holiday: h,
-      training: t,
-      hd,
-      wfh,
-      wo,
-      ot,
-      lop,
-      personalLeave,
-    });
-  };
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 font-sans">
@@ -906,33 +1029,15 @@ export default function AttendancePage() {
                       <td className="p-2 text-slate-600 bg-white">{emp.department}</td>
                       <td className="p-2 text-slate-600 bg-white">{emp.designation}</td>
                       {Array.from({ length: daysInMonth }, (_, i) => {
-                        const s = emp.days[i + 1];
-                        let color = 'text-slate-300';
-                        let label = '-';
-                        if (s === 'PRESENT' || s === 'P') { color = 'bg-emerald-100 text-emerald-800 font-bold'; label = 'P'; }
-                        else if (s === 'ABSENT' || s === 'A') { color = 'bg-red-100 text-red-800 font-bold'; label = 'A'; }
-                        else if (s === 'CASUAL_LEAVE' || s === 'CL') { color = 'bg-amber-100 text-amber-800 font-bold'; label = 'CL'; }
-                        else if (s === 'SICK_LEAVE' || s === 'SL') { color = 'bg-orange-100 text-orange-800 font-bold'; label = 'SL'; }
-                        else if (s === 'HOLIDAY' || s === 'H') { color = 'bg-slate-200 text-slate-800 font-bold'; label = 'H'; }
-                        else if (s === 'WEEKLY_OFF' || s === 'WO') { color = 'bg-slate-200 text-slate-800 font-bold'; label = 'WO'; }
-                        else if (s === 'OVERTIME' || s === 'OT') { color = 'bg-blue-100 text-blue-800 font-bold'; label = 'OT'; }
-                        else if (s === 'WORK_FROM_HOME' || s === 'WFH') { color = 'bg-teal-100 text-teal-800 font-bold'; label = 'WFH'; }
-                        else if (s === 'HALF_DAY' || s === 'HD') { color = 'bg-pink-100 text-pink-800 font-bold'; label = 'HD'; }
-                        else if (s === 'EARLY_LOGOUT' || s === 'EL') { color = 'bg-yellow-100 text-yellow-800 font-bold'; label = 'EL'; }
-                        else if (s === 'LATE_LOGIN' || s === 'LL') { color = 'bg-yellow-100 text-yellow-800 font-bold'; label = 'LL'; }
-                        else if (s === 'EMERGENCY_LEAVE' || s === 'E_L') { color = 'bg-rose-100 text-rose-800 font-bold'; label = 'E_L'; }
-                        else if (s === 'PAID_LEAVE' || s === 'PL') { color = 'bg-indigo-100 text-indigo-800 font-bold'; label = 'PL'; }
-                        else if (s === 'LONG_LEAVE' || s === 'LLV') { color = 'bg-purple-100 text-purple-800 font-bold'; label = 'LLV'; }
-                        else if (s === 'NATIONAL_HOLIDAY' || s === 'NH') { color = 'bg-cyan-100 text-cyan-800 font-bold'; label = 'NH'; }
-                        else if (s === 'FESTIVE_HOLIDAY' || s === 'FH') { color = 'bg-lime-100 text-lime-800 font-bold'; label = 'FH'; }
-                        else if (s === 'TRAINING' || s === 'T') { color = 'bg-violet-100 text-violet-800 font-bold'; label = 'T'; }
-                        else if (s === 'LOP') { color = 'bg-gray-200 text-gray-800 font-bold'; label = 'LOP'; }
-                        else if (s === 'PERSONAL_LEAVE') { color = 'bg-fuchsia-100 text-fuchsia-800 font-bold'; label = 'PeL'; }
+                        const rawStatus = emp.days[i + 1];
+                        const code = normalizeStatusToCode(rawStatus);
+                        const color = getStatusBadgeStyle(code);
+                        const isFilled = code !== '-';
 
                         return (
                           <td key={i} className="p-1 border-l border-slate-50">
-                            <div className={`w-6 h-6 mx-auto rounded flex items-center justify-center text-[9px] ${color}`}>
-                              {label}
+                            <div className={`w-6 h-6 mx-auto rounded flex items-center justify-center text-[9px] ${isFilled ? color : 'text-slate-300'}`}>
+                              {code}
                             </div>
                           </td>
                         );
@@ -1183,7 +1288,7 @@ export default function AttendancePage() {
                           <label className="text-[10px] font-black uppercase">Day {i + 1}</label>
                           {currentVal && (
                             <span className="text-[9px] font-black opacity-70">
-                              {currentVal === 'PRESENT' ? 'P' : currentVal === 'ABSENT' ? 'A' : currentVal === 'HALF_DAY' ? 'HD' : currentVal === 'CASUAL_LEAVE' ? 'CL' : currentVal === 'SICK_LEAVE' ? 'SL' : currentVal === 'EMERGENCY_LEAVE' ? 'E_L' : currentVal === 'LONG_LEAVE' ? 'LLV' : currentVal === 'PAID_LEAVE' ? 'PL' : currentVal === 'EARLY_LOGOUT' ? 'EL' : currentVal === 'LATE_LOGIN' ? 'LL' : currentVal === 'HOLIDAY' ? 'H' : currentVal === 'NATIONAL_HOLIDAY' ? 'NH' : currentVal === 'FESTIVE_HOLIDAY' ? 'FH' : currentVal === 'WEEKLY_OFF' ? 'WO' : currentVal === 'TRAINING' ? 'T' : currentVal === 'OVERTIME' ? 'OT' : currentVal === 'WORK_FROM_HOME' ? 'WFH' : currentVal.slice(0, 3)}
+                              {normalizeStatusToCode(currentVal)}
                             </span>
                           )}
                         </div>
@@ -1211,7 +1316,9 @@ export default function AttendancePage() {
                           <option value="FESTIVE_HOLIDAY">FH (Festive Holiday)</option>
                           <option value="TRAINING">T (Training)</option>
                           <option value="LOP">LOP (Loss of pay)</option>
-                          <option value="PERSONAL_LEAVE">PL (Personal Leave)</option>
+                          <option value="PERSONAL_LEAVE">PeL (Personal Leave)</option>
+                          <option value="ONBOARDING">ONBO (Onboarding)</option>
+                          <option value="RESIGNED">RESIG (Resigned)</option>
                         </select>
                         {isLeaveStatus && (
                           <input
@@ -1663,6 +1770,42 @@ export default function AttendancePage() {
                  <button className="px-6 py-2.5 rounded-xl bg-white border border-slate-200 text-slate-700 font-bold shadow-sm hover:bg-slate-50 transition-colors flex items-center gap-2" onClick={() => window.print()}>
                    <Download className="w-4 h-4" /> Print PDF Report
                  </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {deleteEmployee && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 animate-in fade-in duration-200">
+            <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden p-6 border border-slate-100 space-y-4">
+              <div className="w-12 h-12 rounded-2xl bg-red-100 flex items-center justify-center text-red-600 mx-auto">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <div className="text-center space-y-1">
+                <h3 className="text-lg font-bold text-slate-900">Delete Monthly Records?</h3>
+                <p className="text-xs text-slate-500">
+                  Are you sure you want to delete the attendance records for <span className="font-bold text-slate-800">{deleteEmployee.empName}</span> ({deleteEmployee.empId}) for <span className="font-bold text-indigo-600">{selectedMonth}</span>?
+                </p>
+                <p className="text-[11px] text-amber-600 font-semibold mt-1">This action cannot be undone.</p>
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setDeleteEmployee(null)}
+                  disabled={deleting}
+                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleConfirmDelete}
+                  disabled={deleting}
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm shadow-red-200"
+                >
+                  {deleting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Delete Records'}
+                </button>
               </div>
             </div>
           </div>

@@ -39,7 +39,13 @@ const createReviewSchema = z.object({
 // GET /api/performance/goals
 router.get('/goals', async (req: AuthRequest, res: Response, next) => {
   try {
-    const employeeId = (req.query.employeeId as string) || req.user!.employeeId;
+    // BOLA: employees can only view their own goals; admins can pass employeeId
+    let employeeId: string | null = null;
+    if (req.user!.role === 'EMPLOYEE') {
+      employeeId = req.user!.employeeId;
+    } else {
+      employeeId = (req.query.employeeId as string) || req.user!.employeeId;
+    }
     if (!employeeId) {
       res.json({ success: true, data: [] });
       return;

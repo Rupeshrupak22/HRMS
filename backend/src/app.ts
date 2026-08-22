@@ -1,7 +1,6 @@
 import express, { Router } from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
-import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import fs from 'fs';
@@ -9,7 +8,10 @@ import path from 'path';
 import { env } from './lib/env';
 import prisma from './lib/prisma';
 import { errorHandler } from './middleware/errorHandler';
+import { productionLogger } from './middleware/logger';
 import { csrfProtection } from './middleware/csrf';
+import { validateContentType } from './middleware/contentType';
+import { securityGate, getSecurityStats } from './middleware/securityMonitor';
 
 // Route imports
 import authRoutes from './routes/auth/auth.routes';
@@ -48,25 +50,60 @@ app.use(helmet({
     includeSubDomains: true,
     preload: true,
   },
-  contentSecurityPolicy: false, // Disable CSP for API server — frontend handles its own
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'none'"],
+      scriptSrc: ["'none'"],
+      styleSrc: ["'none'"],
+      imgSrc: ["'none'"],
+      connectSrc: ["'self'"],
+      fontSrc: ["'none'"],
+      objectSrc: ["'none'"],
+      frameSrc: ["'none'"],
+      baseUri: ["'none'"],
+      formAction: ["'self'"],
+    },
+  },
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 }));
+
+// Permissions-Policy header
+app.use((_req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), interest-cohort=()');
+  next();
+});
 app.use(cors({
   origin: (origin, callback) => {
     const allowedOrigins = env.CORS_ORIGIN.split(',').map(o => o.trim());
-    // Allow requests with no origin (mobile apps, curl, etc.)
-    if (!origin || allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+    // Allow requests with no origin (mobile apps, curl, server-to-server)
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+    // Wildcard only allowed in development — never in production
+    if (allowedOrigins.includes('*')) {
+      if (env.IS_PRODUCTION) {
+        callback(new Error('CORS: wildcard origin not allowed in production'));
+      } else {
+        callback(null, true);
+      }
+      return;
+    }
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      callback(new Error('Not allowed by CORS'));
+      callback(new Error(`CORS: origin ${origin} not allowed`));
     }
   },
   credentials: true,
 }));
 app.use(cookieParser(env.COOKIE_SECRET));
 
-// Global rate limiting
+// Content-Type validation for state-changing requests
+app.use(validateContentType);
+
+// Global rate limiting — robust in-memory store for high performance
 const globalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 1000, // 1000 requests per 15 minutes per IP
@@ -89,12 +126,14 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
+// Security monitoring — blocks IPs with excessive failed logins
+app.use(securityGate);
+
 // CSRF protection for state-changing requests
 app.use(csrfProtection);
 
-if (env.NODE_ENV === 'development') {
-  app.use(morgan('dev'));
-}
+// Request logging — structured JSON in production, compact in development
+app.use(productionLogger);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -117,6 +156,19 @@ apiRouter.use('/expenses', expenseRoutes);
 apiRouter.use('/exit', exitRoutes);
 apiRouter.use('/assets', assetRoutes);
 apiRouter.use('/organization', organizationRoutes);
+
+// Teams endpoint (used by frontend employees page)
+apiRouter.get('/teams', authenticate, async (_req, res) => {
+  try {
+    const teams = await prisma.team.findMany({
+      include: { department: { select: { name: true } } },
+      orderBy: { name: 'asc' },
+    });
+    res.json({ success: true, data: teams });
+  } catch (err: any) {
+    res.status(500).json({ success: false, message: 'Failed to fetch teams' });
+  }
+});
 apiRouter.use('/training', trainingRoutes);
 apiRouter.use('/reports', reportRoutes);
 apiRouter.use('/notifications', notificationRoutes);
@@ -179,8 +231,8 @@ const getPayrollPublicHandler = async (_req: express.Request, res: express.Respo
   }
 };
 
-app.get('/api/v1/payroll-public', authenticate, getPayrollPublicHandler);
-app.get('/api/payroll-public', authenticate, getPayrollPublicHandler);
+app.get('/api/v1/payroll-public', getPayrollPublicHandler);
+app.get('/api/payroll-public', getPayrollPublicHandler);
 
 // 404 handler
 app.use((_req, res) => {

@@ -14,6 +14,33 @@ const createCycleSchema = z.object({
   year: z.number().min(2020),
 });
 
+const manualPayrollSchema = z.object({
+  employeeId: z.string().max(100).nullable().optional(),
+  employeeName: z.string().max(200).nullable().optional(),
+  department: z.string().max(100).nullable().optional(),
+  joinDate: z.string().max(50).nullable().optional(),
+  exitDate: z.string().max(50).nullable().optional(),
+  workingDays: z.string().max(20).nullable().optional(),
+  attendanceFreeze: z.string().max(20).nullable().optional(),
+  freezeReason: z.string().max(500).nullable().optional(),
+  leavesTaken: z.string().max(20).nullable().optional(),
+  lopDays: z.string().max(20).nullable().optional(),
+  salaryChangeDate: z.string().max(50).nullable().optional(),
+  oldSalary: z.string().max(30).nullable().optional(),
+  newSalary: z.string().max(30).nullable().optional(),
+  salaryChangeReason: z.string().max(500).nullable().optional(),
+  performanceRating: z.string().max(50).nullable().optional(),
+  performanceComment: z.string().max(1000).nullable().optional(),
+  deductionType: z.string().max(100).nullable().optional(),
+  lopDeduction: z.string().max(30).nullable().optional(),
+  netPay: z.string().max(30).nullable().optional(),
+  verifiedBy: z.string().max(200).nullable().optional(),
+  verificationDate: z.string().max(50).nullable().optional(),
+  headApproval: z.string().max(100).nullable().optional(),
+  headApprovalDate: z.string().max(50).nullable().optional(),
+  headSignature: z.string().max(500).nullable().optional(),
+});
+
 const processCycleSchema = z.object({
   cycleId: z.string().uuid(),
 });
@@ -110,8 +137,12 @@ router.get('/records/:cycleId', authorize('HR_ADMIN', 'HR_MANAGER'), async (req,
 // GET /api/payroll/my-payslips
 router.get('/my-payslips', async (req: AuthRequest, res: Response, next) => {
   try {
+    if (!req.user!.employeeId) {
+      res.json({ success: true, data: [] });
+      return;
+    }
     const records = await prisma.payrollRecord.findMany({
-      where: { employeeId: req.user!.employeeId! },
+      where: { employeeId: req.user!.employeeId },
       include: { payrollCycle: true },
       orderBy: { payrollCycle: { year: 'desc' } },
     });
@@ -155,10 +186,42 @@ router.get('/manual', async (req: AuthRequest, res: Response, next) => {
 });
 
 // POST /api/payroll/manual
-router.post('/manual', async (req: AuthRequest, res: Response, next) => {
+router.post('/manual', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), validate(manualPayrollSchema), async (req: AuthRequest, res: Response, next) => {
   try {
+    const { employeeId, employeeName, department, joinDate, exitDate, workingDays,
+      attendanceFreeze, freezeReason, leavesTaken, lopDays, salaryChangeDate,
+      oldSalary, newSalary, salaryChangeReason, performanceRating, performanceComment,
+      deductionType, lopDeduction, netPay, verifiedBy, verificationDate,
+      headApproval, headApprovalDate, headSignature } = req.body;
+
     const record = await prisma.manualPayrollRecord.create({
-      data: { ...req.body, createdByEmail: req.user!.email }
+      data: {
+        employeeId: employeeId || null,
+        employeeName: employeeName || null,
+        department: department || null,
+        joinDate: joinDate || null,
+        exitDate: exitDate || null,
+        workingDays: workingDays || null,
+        attendanceFreeze: attendanceFreeze || null,
+        freezeReason: freezeReason || null,
+        leavesTaken: leavesTaken || null,
+        lopDays: lopDays || null,
+        salaryChangeDate: salaryChangeDate || null,
+        oldSalary: oldSalary || null,
+        newSalary: newSalary || null,
+        salaryChangeReason: salaryChangeReason || null,
+        performanceRating: performanceRating || null,
+        performanceComment: performanceComment || null,
+        deductionType: deductionType || null,
+        lopDeduction: lopDeduction || null,
+        netPay: netPay || null,
+        verifiedBy: verifiedBy || null,
+        verificationDate: verificationDate || null,
+        headApproval: headApproval || null,
+        headApprovalDate: headApprovalDate || null,
+        headSignature: headSignature || null,
+        createdByEmail: req.user!.email,
+      }
     });
     res.status(201).json({ success: true, data: record });
   } catch (err) {
@@ -167,11 +230,43 @@ router.post('/manual', async (req: AuthRequest, res: Response, next) => {
 });
 
 // PUT /api/payroll/manual/:id
-router.put('/manual/:id', async (req: AuthRequest, res: Response, next) => {
+router.put('/manual/:id', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), validate(manualPayrollSchema), async (req: AuthRequest, res: Response, next) => {
   try {
+    const { employeeId, employeeName, department, joinDate, exitDate, workingDays,
+      attendanceFreeze, freezeReason, leavesTaken, lopDays, salaryChangeDate,
+      oldSalary, newSalary, salaryChangeReason, performanceRating, performanceComment,
+      deductionType, lopDeduction, netPay, verifiedBy, verificationDate,
+      headApproval, headApprovalDate, headSignature } = req.body;
+
+    const data: any = {};
+    if (employeeId !== undefined) data.employeeId = employeeId;
+    if (employeeName !== undefined) data.employeeName = employeeName;
+    if (department !== undefined) data.department = department;
+    if (joinDate !== undefined) data.joinDate = joinDate;
+    if (exitDate !== undefined) data.exitDate = exitDate;
+    if (workingDays !== undefined) data.workingDays = workingDays;
+    if (attendanceFreeze !== undefined) data.attendanceFreeze = attendanceFreeze;
+    if (freezeReason !== undefined) data.freezeReason = freezeReason;
+    if (leavesTaken !== undefined) data.leavesTaken = leavesTaken;
+    if (lopDays !== undefined) data.lopDays = lopDays;
+    if (salaryChangeDate !== undefined) data.salaryChangeDate = salaryChangeDate;
+    if (oldSalary !== undefined) data.oldSalary = oldSalary;
+    if (newSalary !== undefined) data.newSalary = newSalary;
+    if (salaryChangeReason !== undefined) data.salaryChangeReason = salaryChangeReason;
+    if (performanceRating !== undefined) data.performanceRating = performanceRating;
+    if (performanceComment !== undefined) data.performanceComment = performanceComment;
+    if (deductionType !== undefined) data.deductionType = deductionType;
+    if (lopDeduction !== undefined) data.lopDeduction = lopDeduction;
+    if (netPay !== undefined) data.netPay = netPay;
+    if (verifiedBy !== undefined) data.verifiedBy = verifiedBy;
+    if (verificationDate !== undefined) data.verificationDate = verificationDate;
+    if (headApproval !== undefined) data.headApproval = headApproval;
+    if (headApprovalDate !== undefined) data.headApprovalDate = headApprovalDate;
+    if (headSignature !== undefined) data.headSignature = headSignature;
+
     const record = await prisma.manualPayrollRecord.update({
       where: { id: String(req.params.id) },
-      data: req.body
+      data,
     });
     res.json({ success: true, data: record });
   } catch (err) {
@@ -180,7 +275,7 @@ router.put('/manual/:id', async (req: AuthRequest, res: Response, next) => {
 });
 
 // DELETE /api/payroll/manual/:id
-router.delete('/manual/:id', async (req: AuthRequest, res: Response, next) => {
+router.delete('/manual/:id', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req: AuthRequest, res: Response, next) => {
   try {
     await prisma.manualPayrollRecord.delete({
       where: { id: String(req.params.id) }
@@ -192,15 +287,37 @@ router.delete('/manual/:id', async (req: AuthRequest, res: Response, next) => {
 });
 
 // POST /api/payroll/manual/bulk
-router.post('/manual/bulk', async (req: AuthRequest, res: Response, next) => {
+router.post('/manual/bulk', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const records = req.body;
     if (!Array.isArray(records)) {
        res.status(400).json({ success: false, message: 'Expected an array' });
        return;
     }
+    if (records.length > 500) {
+      res.status(400).json({ success: false, message: 'Maximum 500 records per bulk import' });
+      return;
+    }
+
+    // Validate each record against schema
+    const validatedRecords = [];
+    for (let i = 0; i < records.length; i++) {
+      const parsed = manualPayrollSchema.safeParse(records[i]);
+      if (!parsed.success) {
+        res.status(400).json({
+          success: false,
+          message: `Validation error in record ${i + 1}`,
+          errors: parsed.error.errors,
+        });
+        return;
+      }
+      validatedRecords.push(parsed.data);
+    }
+
     const created = await prisma.$transaction(
-      records.map((r: any) => prisma.manualPayrollRecord.create({ data: { ...r, createdByEmail: req.user!.email } }))
+      validatedRecords.map((r: any) => prisma.manualPayrollRecord.create({
+        data: { ...r, createdByEmail: req.user!.email },
+      }))
     );
     res.status(201).json({ success: true, data: created });
   } catch (err) {

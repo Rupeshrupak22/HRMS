@@ -1,10 +1,11 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import prisma from '../../lib/prisma';
-import { authenticate } from '../../middleware/auth';
+import { authenticate, authorize } from '../../middleware/auth';
 import { AuthRequest } from '../../types';
 
 const router = Router();
 router.use(authenticate);
+router.use(authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'));
 
 function sanitizeRecruitment(item: any, userEmail: string) {
   return {
@@ -69,38 +70,28 @@ function qualifiesForOnboarding(statusRaw: string = ''): boolean {
 // Helper for pure Database CRUD
 function crud(model: any) {
   return {
-    getAll: async (req: AuthRequest, res: Response) => {
+    getAll: async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
-        const where: any = {};
-        const isVeenaLead =
-          req.user!.email === 'veena@adyapan.com' ||
-          req.user!.specialization === 'ONBOARDING_HIRING' ||
-          ['SUPER_ADMIN', 'HR_ADMIN'].includes(req.user!.role);
-        if (!isVeenaLead && req.user!.role === 'HR_EXECUTIVE') {
-          where.createdByEmail = req.user!.email;
-        }
-        const list = await model.findMany({ where, orderBy: { createdAt: 'desc' } });
+        const list = await model.findMany({ orderBy: { createdAt: 'desc' } });
         return res.json(list);
       } catch (e: any) {
-        console.error('Database getAll error:', e?.message);
-        return res.status(500).json({ error: 'Database query failed' });
+        next(e);
       }
     },
-    create: async (req: AuthRequest, res: Response) => {
+    create: async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const dbCreated = await model.create({
           data: {
             ...req.body,
-            createdByEmail: req.user!.email,
+            createdByEmail: req.user?.email || 'veena@adyapan.com',
           },
         });
         return res.status(201).json(dbCreated);
       } catch (e: any) {
-        console.error('Database create error:', e?.message);
-        return res.status(500).json({ error: e?.message || 'Database create failed' });
+        next(e);
       }
     },
-    update: async (req: AuthRequest, res: Response) => {
+    update: async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const id = String(req.params.id);
         const updated = await model.update({
@@ -109,18 +100,22 @@ function crud(model: any) {
         });
         return res.json(updated);
       } catch (e: any) {
-        console.error('Database update error:', e?.message);
-        return res.status(500).json({ error: e?.message || 'Database update failed' });
+        if (e?.code === 'P2025') {
+          return res.status(404).json({ success: false, message: 'Record not found' });
+        }
+        next(e);
       }
     },
-    remove: async (req: AuthRequest, res: Response) => {
+    remove: async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const id = String(req.params.id);
         await model.delete({ where: { id } });
         return res.json({ success: true });
       } catch (e: any) {
-        console.error('Database delete error:', e?.message);
-        return res.status(500).json({ error: e?.message || 'Database delete failed' });
+        if (e?.code === 'P2025') {
+          return res.status(404).json({ success: false, message: 'Record not found' });
+        }
+        next(e);
       }
     },
   };
@@ -131,100 +126,20 @@ function crud(model: any) {
 // ----------------------------------------------------
 const onboardingCrud = crud(prisma.onboardingTracker);
 
-// GET /onboarding with auto-sync of recruitment candidates having status in Active, Selected, Joining, Joined, Onboarding without duplicates
-router.get('/onboarding', async (req: AuthRequest, res: Response) => {
+// GET /onboarding
+router.get('/onboarding', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const where: any = {};
-    const isVeenaLead =
-      req.user!.email === 'veena@adyapan.com' ||
-      req.user!.specialization === 'ONBOARDING_HIRING' ||
-      ['SUPER_ADMIN', 'HR_ADMIN'].includes(req.user!.role);
-    if (!isVeenaLead && req.user!.role === 'HR_EXECUTIVE') {
-      where.createdByEmail = req.user!.email;
-    }
-
-    // 1. Fetch current onboarding tracker records
-    const rawOnboarding = await prisma.onboardingTracker.findMany({
-      where,
+    const list = await prisma.onboardingTracker.findMany({
       orderBy: { createdAt: 'desc' },
     });
-
-    // 2. Fetch all recruitment candidates
-    const recCandidates = await prisma.recruitmentTracker.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
-
-    // Deduplicate existing onboarding records by candidate name
-    const seenNames = new Set<string>();
-    const deduplicatedOnboarding: any[] = [];
-    const duplicateIdsToDelete: string[] = [];
-
-    for (const item of rawOnboarding) {
-      const normName = (item.candidateName || '').toLowerCase().replace(/\s+/g, ' ').trim();
-      if (!normName) continue;
-      if (seenNames.has(normName)) {
-        duplicateIdsToDelete.push(item.id);
-      } else {
-        seenNames.add(normName);
-        deduplicatedOnboarding.push(item);
-      }
-    }
-
-    if (duplicateIdsToDelete.length > 0) {
-      prisma.onboardingTracker
-        .deleteMany({ where: { id: { in: duplicateIdsToDelete } } })
-        .catch((e) => console.error('Error cleaning duplicate onboarding rows:', e));
-    }
-
-    // 3. Auto-sync any qualifying recruitment candidate that is not yet in onboarding
-    const qualifyingRec = recCandidates.filter((r) => qualifiesForOnboarding(r.status || ''));
-
-    for (const rec of qualifyingRec) {
-      const normName = (rec.candidateName || '').toLowerCase().replace(/\s+/g, ' ').trim();
-      if (!normName) continue;
-
-      if (!seenNames.has(normName)) {
-        try {
-          const created = await prisma.onboardingTracker.create({
-            data: {
-              employeeId: '',
-              candidateName: rec.candidateName,
-              phoneNumber: rec.phoneNumber || '',
-              email: rec.email || '',
-              college: rec.college || '',
-              location: rec.location || '',
-              source: rec.source || 'Recruitment',
-              roleApplied: rec.roleApplied || 'Sales',
-              recruiter: rec.recruiter || 'Abbu Veena',
-              applicationDate: rec.applicationDate || '',
-              currentStage: rec.currentStage || 'Joining',
-              status: rec.status || 'Active',
-              interviews: rec.interviews || '',
-              selection: rec.selection || 'Selected',
-              offers: rec.offers || '',
-              joining: rec.joining || 'Yes',
-              onboarding: rec.onboarding || 'Pending',
-              offerRemarks: rec.offerRemarks || '',
-              createdByEmail: rec.createdByEmail || req.user!.email,
-            },
-          });
-          seenNames.add(normName);
-          deduplicatedOnboarding.push(created);
-        } catch (err) {
-          console.error('Failed to auto-sync recruitment candidate to onboarding:', err);
-        }
-      }
-    }
-
-    return res.json(deduplicatedOnboarding);
+    return res.json(list || []);
   } catch (e: any) {
-    console.error('Database onboarding query error:', e?.message);
-    return res.status(500).json({ error: 'Database query failed' });
+    next(e);
   }
 });
 
 // POST /onboarding (single)
-router.post('/onboarding', async (req: AuthRequest, res: Response) => {
+router.post('/onboarding', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const data = sanitizeOnboarding(req.body, req.user!.email);
     if (!data.candidateName) {
@@ -233,13 +148,12 @@ router.post('/onboarding', async (req: AuthRequest, res: Response) => {
     const dbCreated = await prisma.onboardingTracker.create({ data });
     return res.status(201).json(dbCreated);
   } catch (e: any) {
-    console.error('Database onboarding create error:', e?.message);
-    return res.status(500).json({ error: e?.message || 'Database create failed' });
+    next(e);
   }
 });
 
 // POST /onboarding/bulk (fast batch import)
-router.post('/onboarding/bulk', async (req: AuthRequest, res: Response) => {
+router.post('/onboarding/bulk', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const rawItems: any[] = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.items) ? req.body.items : []);
     if (rawItems.length === 0) {
@@ -266,12 +180,11 @@ router.post('/onboarding/bulk', async (req: AuthRequest, res: Response) => {
 
     return res.status(201).json({ success: true, count, message: `Successfully saved ${count} record(s) to Database` });
   } catch (e: any) {
-    console.error('Database onboarding bulk error:', e?.message);
-    return res.status(500).json({ error: e?.message || 'Database bulk import failed' });
+    next(e);
   }
 });
 
-router.put('/onboarding/:id', async (req: AuthRequest, res: Response) => {
+router.put('/onboarding/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = String(req.params.id);
     const data = sanitizeOnboarding(req.body, req.user!.email);
@@ -281,8 +194,7 @@ router.put('/onboarding/:id', async (req: AuthRequest, res: Response) => {
     });
     return res.json(updated);
   } catch (e: any) {
-    console.error('Database onboarding update error:', e?.message);
-    return res.status(500).json({ error: e?.message || 'Database update failed' });
+    next(e);
   }
 });
 
@@ -296,7 +208,7 @@ const recruitmentCrud = crud(prisma.recruitmentTracker);
 router.get('/recruitment', recruitmentCrud.getAll);
 
 // POST recruitment with auto-sync to onboarding if status in Active, Selected, Joining, Joined, Onboarding
-router.post('/recruitment', async (req: AuthRequest, res: Response) => {
+router.post('/recruitment', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const data = sanitizeRecruitment(req.body, req.user!.email);
     if (!data.candidateName) {
@@ -343,13 +255,12 @@ router.post('/recruitment', async (req: AuthRequest, res: Response) => {
 
     return res.status(201).json(dbCreated);
   } catch (e: any) {
-    console.error('Database recruitment create error:', e?.message);
-    return res.status(500).json({ error: e?.message || 'Database create failed' });
+    next(e);
   }
 });
 
 // POST /recruitment/bulk (fast batch import)
-router.post('/recruitment/bulk', async (req: AuthRequest, res: Response) => {
+router.post('/recruitment/bulk', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const rawItems: any[] = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.items) ? req.body.items : []);
     if (rawItems.length === 0) {
@@ -410,13 +321,12 @@ router.post('/recruitment/bulk', async (req: AuthRequest, res: Response) => {
 
     return res.status(201).json({ success: true, count, message: `Successfully saved ${count} candidate(s) to Database` });
   } catch (e: any) {
-    console.error('Database recruitment bulk error:', e?.message);
-    return res.status(500).json({ error: e?.message || 'Database bulk import failed' });
+    next(e);
   }
 });
 
 // PUT recruitment with auto-sync to onboarding if updated to status in Active, Selected, Joining, Joined, Onboarding
-router.put('/recruitment/:id', async (req: AuthRequest, res: Response) => {
+router.put('/recruitment/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = String(req.params.id);
     const data = sanitizeRecruitment(req.body, req.user!.email);
@@ -463,8 +373,7 @@ router.put('/recruitment/:id', async (req: AuthRequest, res: Response) => {
 
     return res.json(updated);
   } catch (e: any) {
-    console.error('Database recruitment update error:', e?.message);
-    return res.status(500).json({ error: e?.message || 'Database update failed' });
+    next(e);
   }
 });
 
@@ -473,11 +382,67 @@ router.delete('/recruitment/:id', recruitmentCrud.remove);
 // ----------------------------------------------------
 // DROPOUTS & DAILY REPORTS
 // ----------------------------------------------------
-const dropouts = crud(prisma.dropoutRecord);
-router.get('/dropouts', dropouts.getAll);
-router.post('/dropouts', dropouts.create);
-router.put('/dropouts/:id', dropouts.update);
-router.delete('/dropouts/:id', dropouts.remove);
+router.get('/dropouts', async (_req: AuthRequest, res: Response) => {
+  try {
+    const list = await prisma.dropoutRecord.findMany({
+      orderBy: { createdAt: 'desc' },
+    });
+    return res.json(list || []);
+  } catch (err: any) {
+    console.error('Failed to fetch dropouts:', err?.message);
+    return res.json([]);
+  }
+});
+
+router.post('/dropouts', async (req: AuthRequest, res: Response) => {
+  try {
+    const created = await prisma.dropoutRecord.create({
+      data: {
+        candidateName: String(req.body.candidateName || req.body.name || '').trim(),
+        employeeId: req.body.employeeId ? String(req.body.employeeId).trim() : '',
+        role: req.body.role ? String(req.body.role).trim() : (req.body.roleApplied ? String(req.body.roleApplied).trim() : 'Sales'),
+        source: req.body.source ? String(req.body.source).trim() : 'Direct',
+        dropoutDate: req.body.dropoutDate ? String(req.body.dropoutDate).trim() : (req.body.date ? String(req.body.date).trim() : ''),
+        dropoutStage: req.body.dropoutStage ? String(req.body.dropoutStage).trim() : (req.body.stage ? String(req.body.stage).trim() : 'Recruitment'),
+        dropoutReason: req.body.dropoutReason ? String(req.body.dropoutReason).trim() : (req.body.reason ? String(req.body.reason).trim() : 'Dropped'),
+        recruiter: req.body.recruiter ? String(req.body.recruiter).trim() : 'Abbu Veena',
+        remarks: req.body.remarks ? String(req.body.remarks).trim() : '',
+        createdByEmail: req.user?.email || 'veena@adyapan.com',
+      },
+    });
+    return res.status(201).json(created);
+  } catch (e: any) {
+    console.error('Create dropout error:', e?.message);
+    return res.status(500).json({ error: e?.message || 'Failed to create dropout record' });
+  }
+});
+
+router.put('/dropouts/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const updated = await prisma.dropoutRecord.update({
+      where: { id },
+      data: req.body,
+    });
+    return res.json(updated);
+  } catch (e: any) {
+    console.error('Update dropout error:', e?.message);
+    return res.status(500).json({ error: e?.message || 'Failed to update dropout record' });
+  }
+});
+
+router.delete('/dropouts/:id', async (req: AuthRequest, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    await prisma.dropoutRecord.delete({ where: { id } }).catch(async () => {
+      // If not in DropoutRecord, update status in RecruitmentTracker
+      await prisma.recruitmentTracker.update({ where: { id }, data: { status: 'Active' } }).catch(() => {});
+    });
+    return res.json({ success: true });
+  } catch (e: any) {
+    return res.status(500).json({ error: e?.message || 'Failed to delete dropout record' });
+  }
+});
 
 const dailyReports = crud(prisma.veenaDailyReport);
 router.get('/daily-reports', dailyReports.getAll);

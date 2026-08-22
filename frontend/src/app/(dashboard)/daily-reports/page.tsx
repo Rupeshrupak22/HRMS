@@ -22,26 +22,7 @@ import { PavitraDailyReport } from '@/components/PavitraDailyReport';
 export default function DailyReportsPage() {
   const { user } = useAuth();
 
-  // Show Aravind-specific daily report
-  if (user?.specialization === 'RESIGNATION_EXIT') {
-    return <AravindDailyReport />;
-  }
-
-  // Show Nitisha-specific daily report
-  if (user?.specialization === 'DISCIPLINE_POSH') {
-    return <NitishaDailyReport />;
-  }
-
-  // Show Veena-specific daily report
-  if (user?.specialization === 'ONBOARDING_HIRING') {
-    return <VeenaDailyReport />;
-  }
-
-  // Show Pavitra-specific daily report
-  if (user?.specialization === 'ATTENDANCE_LEAVE' || user?.email === 'pavitra@adyapan.com') {
-    return <PavitraDailyReport />;
-  }
-
+  const [activeTab, setActiveTab] = useState<'AUTO' | 'GENERAL' | 'PAVITRA' | 'ARAVIND' | 'NITISHA' | 'VEENA'>('AUTO');
   const [reports, setReports] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [formData, setFormData] = useState({
@@ -58,69 +39,22 @@ export default function DailyReportsPage() {
     user?.email === 'nandini@adyapan.com' ||
     user?.specialization === 'HR_MANAGER_ALL';
 
+  const isPavitra = user?.email === 'pavitra@adyapan.com' || user?.specialization === 'ATTENDANCE_LEAVE';
+  const isAravind = user?.email === 'aravind@adyapan.com' || user?.specialization === 'RESIGNATION_EXIT';
+  const isNitisha = user?.email === 'nitisha@adyapan.com' || user?.specialization === 'DISCIPLINE_POSH';
+  const isVeena = user?.email === 'veena@adyapan.com' || user?.specialization === 'ONBOARDING_HIRING';
+
+  const currentView = activeTab === 'AUTO'
+    ? (isPavitra ? 'PAVITRA' : isAravind ? 'ARAVIND' : isNitisha ? 'NITISHA' : isVeena ? 'VEENA' : 'GENERAL')
+    : activeTab;
+
   const loadReports = async () => {
     setLoading(true);
     try {
       const data = await apiRequest('/reports/daily');
       setReports(Array.isArray(data) ? data : Array.isArray(data?.data) ? data.data : []);
     } catch (err) {
-      setReports([
-        {
-          id: 'rep-001',
-          employeeName: 'Pavitra (HR Attendance & Leave)',
-          userEmail: 'pavitra@adyapan.com',
-          date: new Date().toISOString().split('T')[0],
-          hoursWorked: 8.5,
-          tasksCompleted: 'Processed 14 leave applications and updated Loss of Pay (LOP) log for Technology department.',
-          blockers: 'None',
-          status: 'APPROVED',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'rep-002',
-          employeeName: 'Charitha (HR Salary & Payroll)',
-          userEmail: 'charitha@adyapan.com',
-          date: new Date().toISOString().split('T')[0],
-          hoursWorked: 9.0,
-          tasksCompleted: 'Verified CTC breakdown and prepared August monthly salary disbursement bank register.',
-          blockers: 'Awaiting 2 bank account verification details from operations team.',
-          status: 'SUBMITTED',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'rep-003',
-          employeeName: 'Abbu Veena (HR Onboarding & Hiring)',
-          userEmail: 'veena@adyapan.com',
-          date: new Date().toISOString().split('T')[0],
-          hoursWorked: 8.0,
-          tasksCompleted: 'Screened 18 candidate resumes via AI ATS, issued 2 offer letters, and completed document checks.',
-          blockers: 'None',
-          status: 'SUBMITTED',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'rep-004',
-          employeeName: 'Nitisha (HR Discipline & POSH)',
-          userEmail: 'nitisha@adyapan.com',
-          date: new Date().toISOString().split('T')[0],
-          hoursWorked: 8.5,
-          tasksCompleted: 'Conducted annual POSH compliance awareness session and reviewed 1 conduct warning case.',
-          blockers: 'None',
-          status: 'APPROVED',
-          createdAt: new Date().toISOString(),
-        },
-        {
-          id: 'rep-005',
-          employeeName: 'Aravind Madhesh Kumar (HR Resignation & Exit)',
-          userEmail: 'aravind@adyapan.com',
-          date: new Date().toISOString().split('T')[0],
-          hoursWorked: 8.0,
-          tasksCompleted: 'Processed 1 exit clearance form, calculated Full & Final (F&F) balance, and issued No-Dues certificate.',
-          blockers: 'Pending IT hardware asset return sign-off.',
-          status: 'SUBMITTED',
-          createdAt: new Date().toISOString(),
-        },
-      ]);
+      setReports([]);
     } finally {
       setLoading(false);
     }
@@ -129,6 +63,78 @@ export default function DailyReportsPage() {
   useEffect(() => {
     loadReports();
   }, []);
+
+  if (currentView === 'PAVITRA') {
+    return (
+      <div className="space-y-4">
+        {isAdminOrHRManager && (
+          <div className="flex items-center gap-2 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs overflow-x-auto text-xs">
+            <span className="font-bold text-slate-700 px-2">Select Specialist:</span>
+            <button onClick={() => setActiveTab('PAVITRA')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'PAVITRA' || currentView === 'PAVITRA' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Pavitra (Attendance & Leave)</button>
+            <button onClick={() => setActiveTab('ARAVIND')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'ARAVIND' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Aravind (Exit)</button>
+            <button onClick={() => setActiveTab('NITISHA')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'NITISHA' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Nitisha (POSH)</button>
+            <button onClick={() => setActiveTab('VEENA')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'VEENA' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Veena (Onboarding)</button>
+            <button onClick={() => setActiveTab('GENERAL')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'GENERAL' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>General Form</button>
+          </div>
+        )}
+        <PavitraDailyReport />
+      </div>
+    );
+  }
+
+  if (currentView === 'ARAVIND') {
+    return (
+      <div className="space-y-4">
+        {isAdminOrHRManager && (
+          <div className="flex items-center gap-2 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs overflow-x-auto text-xs">
+            <span className="font-bold text-slate-700 px-2">Select Specialist:</span>
+            <button onClick={() => setActiveTab('PAVITRA')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'PAVITRA' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Pavitra (Attendance)</button>
+            <button onClick={() => setActiveTab('ARAVIND')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'ARAVIND' || currentView === 'ARAVIND' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Aravind (Exit & Resignation)</button>
+            <button onClick={() => setActiveTab('NITISHA')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'NITISHA' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Nitisha (POSH)</button>
+            <button onClick={() => setActiveTab('VEENA')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'VEENA' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Veena (Onboarding)</button>
+            <button onClick={() => setActiveTab('GENERAL')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'GENERAL' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>General Form</button>
+          </div>
+        )}
+        <AravindDailyReport />
+      </div>
+    );
+  }
+
+  if (currentView === 'NITISHA') {
+    return (
+      <div className="space-y-4">
+        {isAdminOrHRManager && (
+          <div className="flex items-center gap-2 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs overflow-x-auto text-xs">
+            <span className="font-bold text-slate-700 px-2">Select Specialist:</span>
+            <button onClick={() => setActiveTab('PAVITRA')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'PAVITRA' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Pavitra (Attendance)</button>
+            <button onClick={() => setActiveTab('ARAVIND')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'ARAVIND' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Aravind (Exit)</button>
+            <button onClick={() => setActiveTab('NITISHA')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'NITISHA' || currentView === 'NITISHA' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Nitisha (Discipline & POSH)</button>
+            <button onClick={() => setActiveTab('VEENA')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'VEENA' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Veena (Onboarding)</button>
+            <button onClick={() => setActiveTab('GENERAL')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'GENERAL' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>General Form</button>
+          </div>
+        )}
+        <NitishaDailyReport />
+      </div>
+    );
+  }
+
+  if (currentView === 'VEENA') {
+    return (
+      <div className="space-y-4">
+        {isAdminOrHRManager && (
+          <div className="flex items-center gap-2 bg-white p-2.5 rounded-2xl border border-slate-200 shadow-xs overflow-x-auto text-xs">
+            <span className="font-bold text-slate-700 px-2">Select Specialist:</span>
+            <button onClick={() => setActiveTab('PAVITRA')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'PAVITRA' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Pavitra (Attendance)</button>
+            <button onClick={() => setActiveTab('ARAVIND')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'ARAVIND' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Aravind (Exit)</button>
+            <button onClick={() => setActiveTab('NITISHA')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'NITISHA' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Nitisha (POSH)</button>
+            <button onClick={() => setActiveTab('VEENA')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'VEENA' || currentView === 'VEENA' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>Veena (Onboarding & Hiring)</button>
+            <button onClick={() => setActiveTab('GENERAL')} className={`px-3 py-1.5 rounded-xl font-bold ${activeTab === 'GENERAL' ? 'bg-orange-600 text-white' : 'bg-slate-100 text-slate-700'}`}>General Form</button>
+          </div>
+        )}
+        <VeenaDailyReport />
+      </div>
+    );
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

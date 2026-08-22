@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
 import prisma from '../../lib/prisma';
 import { authenticate } from '../../middleware/auth';
 
@@ -6,7 +6,7 @@ const router = Router();
 router.use(authenticate);
 
 // POST /api/v1/ai/copilot/query — Global HRMS Data Analysis Copilot
-router.post('/copilot/query', async (req: Request, res: Response) => {
+router.post('/copilot/query', async (req: Request, res: Response, next: NextFunction) => {
   try {
     const rawQuery = (req.body.query || '').trim();
     // Sanitize user input — strip HTML/script tags to prevent XSS
@@ -22,9 +22,9 @@ router.post('/copilot/query', async (req: Request, res: Response) => {
       activeEmployees = await prisma.employee.count({ where: { status: 'ACTIVE' } });
       probationEmployees = await prisma.employee.count({ where: { status: 'PROBATION' } });
     } catch {
-      totalEmployees = 115;
-      activeEmployees = 102;
-      probationEmployees = 13;
+      totalEmployees = 0;
+      activeEmployees = 0;
+      probationEmployees = 0;
     }
 
     // 2. Gather Attendance & Leave Metrics
@@ -32,15 +32,16 @@ router.post('/copilot/query', async (req: Request, res: Response) => {
     let todayLate = 0;
     let pendingLeaves = 0;
     try {
-      const today = new Date().toISOString().split('T')[0];
-      const todayAtt = await prisma.attendanceRecord.findMany({ where: { date: today } });
-      todayPresent = todayAtt.filter((a: any) => a.status === 'PRESENT').length || 102;
-      todayLate = todayAtt.filter((a: any) => a.status === 'LATE').length || 4;
-      pendingLeaves = await prisma.leaveRequest.count({ where: { status: 'PENDING' } }) || 3;
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayAtt = await prisma.attendanceRecord.findMany({ where: { date: todayStart } });
+      todayPresent = todayAtt.filter((a: any) => a.status === 'PRESENT').length;
+      todayLate = todayAtt.filter((a: any) => a.status === 'LATE').length;
+      pendingLeaves = await prisma.leaveRequest.count({ where: { status: 'PENDING' } });
     } catch {
-      todayPresent = 102;
-      todayLate = 4;
-      pendingLeaves = 3;
+      todayPresent = 0;
+      todayLate = 0;
+      pendingLeaves = 0;
     }
 
     // 3. Gather Aravind (Exit & Resignation) Metrics
@@ -56,11 +57,11 @@ router.post('/copilot/query', async (req: Request, res: Response) => {
       fnfCount = await prisma.fnFTracker.count();
       complaintsCount = await prisma.employeeComplaint.count();
     } catch {
-      retentionCount = 2;
-      resignationCount = 4;
-      exitClearanceCount = 3;
-      fnfCount = 2;
-      complaintsCount = 1;
+      retentionCount = 0;
+      resignationCount = 0;
+      exitClearanceCount = 0;
+      fnfCount = 0;
+      complaintsCount = 0;
     }
 
     // 4. Gather Nitisha (Discipline & POSH) Metrics
@@ -75,10 +76,10 @@ router.post('/copilot/query', async (req: Request, res: Response) => {
       disciplineCount = await prisma.disciplineCase.count();
       relationsCount = await prisma.employeeRelation.count();
     } catch {
-      perfCount = 5;
-      pipCount = 1;
-      disciplineCount = 2;
-      relationsCount = 3;
+      perfCount = 0;
+      pipCount = 0;
+      disciplineCount = 0;
+      relationsCount = 0;
     }
 
     // 5. Gather Veena (Onboarding & Hiring) Metrics
@@ -93,10 +94,10 @@ router.post('/copilot/query', async (req: Request, res: Response) => {
       joinedCandidates = onbs.filter((o: any) => o.status === 'Joined').length;
       dropoutsCount = await prisma.dropoutRecord.count();
     } catch {
-      onboardingCount = 8;
-      activeCandidates = 5;
-      joinedCandidates = 3;
-      dropoutsCount = 1;
+      onboardingCount = 0;
+      activeCandidates = 0;
+      joinedCandidates = 0;
+      dropoutsCount = 0;
     }
 
     // 6. Gather Charitha (Salary & Payroll) Metrics
@@ -111,9 +112,9 @@ router.post('/copilot/query', async (req: Request, res: Response) => {
       verifiedPayroll = records.filter((r: any) => r.verifiedBy).length;
       pendingPayroll = records.filter((r: any) => !r.headApproval).length;
     } catch {
-      payrollRecordsCount = 2;
-      totalNetPay = 118200;
-      verifiedPayroll = 2;
+      payrollRecordsCount = 0;
+      totalNetPay = 0;
+      verifiedPayroll = 0;
       pendingPayroll = 0;
     }
 
@@ -255,11 +256,9 @@ I'm here to help with any HR-related query!`;
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    return res.status(500).json({
-      success: false,
-      message: 'Failed to process AI Copilot query',
-      error: error.message,
-    });
+    // Never expose internal error details to client
+    console.error('[AI Copilot] Error:', error?.message);
+    next(error);
   }
 });
 

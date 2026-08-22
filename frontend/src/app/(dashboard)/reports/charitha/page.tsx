@@ -11,6 +11,7 @@ export default function CharithaReportPage() {
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [payrollRecords, setPayrollRecords] = useState<any[]>([]);
   const [filterDate, setFilterDate] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
 
   // Pagination states
@@ -19,28 +20,64 @@ export default function CharithaReportPage() {
   const PAGE_SIZE = 20;
 
   useEffect(() => {
-    apiRequest('/payroll-public')
-      .then(res => setPayrollRecords(Array.isArray(res) ? res : []))
-      .catch(() => setPayrollRecords([]));
+    async function loadData() {
+      try {
+        const [payRes, dailyRes] = await Promise.allSettled([
+          apiRequest('/payroll-public').catch(() => apiRequest('/payroll/manual')),
+          apiRequest('/reports/daily').catch(() => []),
+        ]);
 
-    apiRequest('/reports/daily')
-      .then(res => {
-        const arr = Array.isArray(res) ? res : [];
-        setDailyReports(arr.filter((r: any) => r.userEmail === 'charitha@adyapan.com' || r.specialization === 'SALARY_PAYROLL'));
-      })
-      .catch(() => setDailyReports([]));
+        if (payRes.status === 'fulfilled' && payRes.value) {
+          const list = Array.isArray(payRes.value)
+            ? payRes.value
+            : payRes.value.data || payRes.value.records || [];
+          if (list.length > 0) {
+            setPayrollRecords(list);
+          }
+        }
+
+        if (dailyRes.status === 'fulfilled' && dailyRes.value) {
+          const arr = Array.isArray(dailyRes.value) ? dailyRes.value : [];
+          setDailyReports(
+            arr.filter(
+              (r: any) =>
+                r.userEmail === 'charitha@adyapan.com' ||
+                r.specialization === 'SALARY_PAYROLL' ||
+                (r.employeeName || '').toLowerCase().includes('charitha')
+            )
+          );
+        }
+      } catch (e) {
+        console.error('Failed to load Charitha report data:', e);
+      }
+    }
+    loadData();
   }, []);
 
-  const filterByDate = (records: any[]) => {
-    if (!filterDate) return records;
-    return records.filter((r) => {
-      const created = r.date || (r.createdAt ? r.createdAt.split('T')[0] : '');
-      return created === filterDate;
-    });
+  const safeNum = (val: any) => {
+    if (typeof val === 'number') return val;
+    if (!val) return 0;
+    const clean = String(val).replace(/[^0-9.-]+/g, '');
+    const n = parseFloat(clean);
+    return isNaN(n) ? 0 : n;
   };
 
-  const filteredPayrollRecords = filterByDate(payrollRecords);
-  const filteredDailyReports = filterByDate(dailyReports);
+  const filteredDailyReports = filterDate
+    ? dailyReports.filter((r) => {
+        const created = r.reportDate || r.date || (r.createdAt ? r.createdAt.split('T')[0] : '');
+        return created === filterDate;
+      })
+    : dailyReports;
+
+  const filteredPayrollRecords = searchQuery
+    ? payrollRecords.filter(
+        (r) =>
+          (r.employeeName || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (r.employeeId || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (r.department || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (r.designation || '').toLowerCase().includes(searchQuery.toLowerCase())
+      )
+    : payrollRecords;
 
   const paginatedReports = useMemo(() => {
     const start = (repPage - 1) * PAGE_SIZE;
@@ -52,10 +89,11 @@ export default function CharithaReportPage() {
     return filteredPayrollRecords.slice(start, start + PAGE_SIZE);
   }, [filteredPayrollRecords, payPage]);
 
-  const safeNum = (val: any) => {
-    const n = parseFloat(val);
-    return isNaN(n) ? 0 : n;
-  };
+  // Aggregate KPI metrics
+  const totalGross = payrollRecords.reduce((acc, r) => acc + safeNum(r.newSalary || r.grossSalary || r.grossPay || r.netPay), 0);
+  const totalNet = payrollRecords.reduce((acc, r) => acc + safeNum(r.netPay || r.newSalary || r.grossSalary), 0);
+  const totalLop = payrollRecords.reduce((acc, r) => acc + safeNum(r.lopDeduction), 0);
+  const frozenCount = payrollRecords.filter((r) => r.attendanceFreeze === 'YES' || r.isFrozen === true).length;
 
   return (
     <div className="space-y-8 max-w-[1400px] mx-auto font-sans">
@@ -63,8 +101,8 @@ export default function CharithaReportPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-6 rounded-3xl text-white shadow-xl">
         <div>
           <h1 className="text-xl font-black tracking-tight flex items-center gap-2.5">
-            <CreditCard className="w-5 h-5 text-rose-400" />
-            <span>Charitha&apos;s Complete Salary & Payroll Report</span>
+            <CreditCard className="w-5 h-5 text-emerald-400" />
+            <span>Charitha&apos;s Complete Salary &amp; Payroll Report</span>
           </h1>
           <p className="text-xs text-slate-300 mt-1">
             Salary disbursement records, attendance freeze tracking, and daily reports submitted by Charitha
@@ -72,24 +110,22 @@ export default function CharithaReportPage() {
         </div>
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 border border-white/20 shadow-xs">
-            <Calendar className="w-4 h-4 text-rose-400" />
-            <input 
-              type="date" 
-              value={filterDate} 
+            <Calendar className="w-4 h-4 text-emerald-400" />
+            <input
+              type="date"
+              value={filterDate}
               onChange={(e) => {
                 setFilterDate(e.target.value);
                 setRepPage(1);
-                setPayPage(1);
               }}
-              className="text-xs font-bold text-white border-none outline-none bg-transparent cursor-pointer" 
+              className="text-xs font-bold text-white border-none outline-none bg-transparent cursor-pointer"
             />
           </div>
           {filterDate && (
-            <button 
+            <button
               onClick={() => {
                 setFilterDate('');
                 setRepPage(1);
-                setPayPage(1);
               }}
               className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition cursor-pointer"
             >
@@ -99,9 +135,35 @@ export default function CharithaReportPage() {
         </div>
       </div>
 
+      {/* Top 4 KPI Summary Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
+          <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Payroll Records</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{payrollRecords.length}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Logged Employees</p>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-xs">
+          <p className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">Net Disbursed</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">₹{totalNet.toLocaleString('en-IN')}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Total CTC Disbursed</p>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-red-100 shadow-xs">
+          <p className="text-[11px] font-bold text-red-700 uppercase tracking-wider">LOP Deductions</p>
+          <p className="text-2xl font-black text-red-600 mt-1">-₹{totalLop.toLocaleString('en-IN')}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Loss of Pay Logged</p>
+        </div>
+        <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-xs">
+          <p className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">Attendance Status</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">
+            {frozenCount > 0 ? `${frozenCount} Frozen` : 'Active'}
+          </p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Monthly Payroll Lock</p>
+        </div>
+      </div>
+
       {filterDate && (
-        <div className="px-4 py-2.5 rounded-2xl bg-rose-50 border border-rose-200 text-xs font-bold text-rose-800">
-          Showing records for: {filterDate}
+        <div className="px-4 py-2.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs font-bold text-emerald-800">
+          Showing daily reports for: {filterDate}
         </div>
       )}
 
