@@ -19,6 +19,7 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
   if (err instanceof AppError) {
     res.status(err.statusCode).json({
       message: err.message,
+      forceLogout: err.message === 'FORCE_LOGOUT' || err.message.includes('FORCE_LOGOUT'),
     });
     return;
   }

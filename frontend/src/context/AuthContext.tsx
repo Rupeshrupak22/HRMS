@@ -278,8 +278,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch {}
     };
 
-    const interval = setInterval(checkSessionHeartbeat, 20 * 1000);
-    return () => clearInterval(interval);
+    // Immediate check on window focus or tab visibility change
+    const onVisibilityOrFocus = () => {
+      if (document.visibilityState === 'visible') {
+        checkSessionHeartbeat();
+      }
+    };
+
+    window.addEventListener('focus', onVisibilityOrFocus);
+    document.addEventListener('visibilitychange', onVisibilityOrFocus);
+
+    const interval = setInterval(checkSessionHeartbeat, 6 * 1000);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', onVisibilityOrFocus);
+      document.removeEventListener('visibilitychange', onVisibilityOrFocus);
+    };
   }, [user]);
 
   // --- Login ---
