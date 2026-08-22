@@ -301,6 +301,99 @@ async function main() {
   });
   console.log('  ✅ Specialist: aravind@adyapan.com / Aravind@Exit2026! (Resignation & Exit)');
 
+  // 8. Synchronize all employees from Attendance Records into Employee table
+  console.log('\n👥 Synchronizing employees from attendance records...');
+  const attRecords = await prisma.attendanceRecord.findMany({
+    select: { employeeId: true, notes: true },
+  });
+
+  const empMap = new Map<string, any>();
+  for (const r of attRecords) {
+    let meta: any = {};
+    if (r.notes && typeof r.notes === 'string' && r.notes.trim().startsWith('{')) {
+      try {
+        meta = JSON.parse(r.notes);
+      } catch {}
+    }
+    const code = String(meta.empId || meta.employeeCode || r.employeeId || '').trim();
+    if (code && !empMap.has(code)) {
+      const rawName = String(meta.empName || meta.employeeName || code).trim();
+      const parts = rawName.split(' ');
+      const firstName = parts[0] || code;
+      const lastName = parts.slice(1).join(' ') || '';
+
+      empMap.set(code, {
+        code,
+        firstName,
+        lastName,
+        departmentName: meta.department || 'Sales',
+        designationTitle: meta.designation || 'Intern',
+        role: meta.role || 'Community Development Intern role',
+      });
+    }
+  }
+
+  const allDepts = await prisma.department.findMany();
+  const allDesigs = await prisma.designation.findMany();
+  const defaultSalesDept = allDepts.find(d => d.code === 'SAL') || allDepts[0];
+  const defaultInternDesig = allDesigs.find(d => d.code === 'INT') || allDesigs[0];
+
+  let syncedCount = 0;
+  for (const [code, empData] of empMap.entries()) {
+    try {
+      // Find matching department & designation
+      const matchedDept = allDepts.find(d =>
+        d.name.toLowerCase().includes(empData.departmentName.toLowerCase()) ||
+        empData.departmentName.toLowerCase().includes(d.name.toLowerCase())
+      ) || defaultSalesDept;
+
+      const matchedDesig = allDesigs.find(d =>
+        d.title.toLowerCase().includes(empData.designationTitle.toLowerCase()) ||
+        empData.designationTitle.toLowerCase().includes(d.title.toLowerCase())
+      ) || defaultInternDesig;
+
+      // Find or create User for this employee
+      const email = `${code.toLowerCase().replace(/[^a-z0-9]/g, '')}@adyapan.com`;
+      let user = await prisma.user.findUnique({ where: { email } });
+      if (!user) {
+        const empPassword = await bcrypt.hash('Employee@2026!', 10);
+        user = await prisma.user.create({
+          data: {
+            email,
+            passwordHash: empPassword,
+            role: empData.role || 'EMPLOYEE',
+            isEmailVerified: true,
+          },
+        });
+      }
+
+      await prisma.employee.upsert({
+        where: { employeeCode: code },
+        update: {
+          firstName: empData.firstName,
+          lastName: empData.lastName,
+          departmentId: matchedDept?.id,
+          designationId: matchedDesig?.id,
+          status: 'ACTIVE',
+        },
+        create: {
+          userId: user.id,
+          employeeCode: code,
+          firstName: empData.firstName,
+          lastName: empData.lastName,
+          departmentId: matchedDept?.id,
+          designationId: matchedDesig?.id,
+          employmentType: 'FULL_TIME',
+          status: 'ACTIVE',
+        },
+      });
+      syncedCount++;
+    } catch (e: any) {
+      console.warn(`  ⚠️ Could not sync employee ${code}:`, e?.message);
+    }
+  }
+  console.log(`  ✅ Synced ${syncedCount} employees from attendance records into database.`);
+
   console.log('\n✅ Seed completed successfully');
   console.log('\n📋 All Logins:');
   console.log('   Super Admin:  admin@adyapan.com / Admin@Ady2026!');

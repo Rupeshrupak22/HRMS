@@ -184,6 +184,34 @@ router.get('/today-stats', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'),
   }
 });
 
+// Safe formatters to prevent RangeError: Invalid time value / TypeError crashes
+function safeFormatTime(d: any): string {
+  if (!d) return '-';
+  try {
+    const dateObj = d instanceof Date ? d : new Date(d);
+    if (isNaN(dateObj.getTime())) return '-';
+    return dateObj.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  } catch {
+    return '-';
+  }
+}
+
+function safeFormatDate(d: any): string {
+  if (!d) return '';
+  try {
+    const dateObj = d instanceof Date ? d : new Date(d);
+    if (isNaN(dateObj.getTime())) return '';
+    const istMs = dateObj.getTime() + (5.5 * 60 * 60 * 1000);
+    const istDate = new Date(istMs);
+    const year = istDate.getUTCFullYear();
+    const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(istDate.getUTCDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  } catch {
+    return '';
+  }
+}
+
 // GET /api/attendance/policy
 router.get('/policy', async (_req, res: Response, next) => {
   try {
@@ -210,13 +238,13 @@ router.get('/my-logs', async (req: AuthRequest, res: Response, next) => {
 
     const formatted = records.map((r) => ({
       empId: req.user!.employeeCode || '',
-      empName: `${req.user!.firstName} ${req.user!.lastName}`,
-      date: `${r.date.getFullYear()}-${String(r.date.getMonth() + 1).padStart(2, '0')}-${String(r.date.getDate()).padStart(2, '0')}`,
-      checkInTime: r.checkInTime ? r.checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
-      checkOutTime: r.checkOutTime ? r.checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
-      workHours: r.workHours,
-      status: r.status,
-      lateMinutes: r.lateMinutes,
+      empName: `${req.user!.firstName || ''} ${req.user!.lastName || ''}`.trim() || 'Employee',
+      date: safeFormatDate(r.date),
+      checkInTime: safeFormatTime(r.checkInTime),
+      checkOutTime: safeFormatTime(r.checkOutTime),
+      workHours: r.workHours || 0,
+      status: r.status || 'PRESENT',
+      lateMinutes: r.lateMinutes || 0,
     }));
 
     res.json({ success: true, data: formatted });
@@ -225,10 +253,10 @@ router.get('/my-logs', async (req: AuthRequest, res: Response, next) => {
   }
 });
 
-// GET /api/attendance/all-logs — admin view all employee attendance
-router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+// GET /api/attendance/all-logs — admin & employee view attendance
+router.get('/all-logs', async (req: AuthRequest, res: Response, next) => {
   try {
-    const { month, startDate, endDate, status } = req.query as any;
+    const { month, startDate, endDate, status, employeeId } = req.query as any;
     const where: any = {};
 
     if (month && /^\d{4}-\d{2}$/.test(month)) {
@@ -238,43 +266,44 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), as
       const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
       const end = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
       where.date = {
-        gte: new Date(start.getTime() - (12 * 60 * 60 * 1000)),
-        lte: new Date(end.getTime() + (12 * 60 * 60 * 1000)),
+        gte: new Date(start.getTime() - (6 * 60 * 60 * 1000)),
+        lte: new Date(end.getTime() + (6 * 60 * 60 * 1000)),
       };
     } else {
       if (startDate) {
         const s = new Date(startDate);
-        where.date = { ...where.date, gte: new Date(s.getTime() - (24 * 60 * 60 * 1000)) };
+        if (!isNaN(s.getTime())) {
+          where.date = { ...where.date, gte: new Date(s.getTime() - (6 * 60 * 60 * 1000)) };
+        }
       }
       if (endDate) {
         const e = new Date(endDate);
-        where.date = { ...where.date, lte: new Date(e.getTime() + (24 * 60 * 60 * 1000)) };
+        if (!isNaN(e.getTime())) {
+          where.date = { ...where.date, lte: new Date(e.getTime() + (6 * 60 * 60 * 1000)) };
+        }
       }
     }
     if (status) where.status = status;
+    if (employeeId) where.employeeId = employeeId;
 
     const records = await prisma.attendanceRecord.findMany({
       where,
       orderBy: { date: 'desc' },
     });
 
-    const formatted = records.map((r) => {
+    let formatted = records.map((r) => {
       let metadata: any = {};
       if (r.notes) {
         try {
-          if (r.notes.startsWith('{') && r.notes.endsWith('}')) {
+          if (typeof r.notes === 'string' && r.notes.trim().startsWith('{')) {
             metadata = JSON.parse(r.notes);
           }
         } catch {}
       }
 
-      // Convert UTC timestamp to IST calendar date (Asia/Kolkata +5:30)
-      const istMs = r.date.getTime() + (5.5 * 60 * 60 * 1000);
-      const istDate = new Date(istMs);
-      const year = istDate.getUTCFullYear();
-      const month = String(istDate.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(istDate.getUTCDate()).padStart(2, '0');
-      const dateStr = `${year}-${month}-${day}`;
+      const dateStr = safeFormatDate(r.date);
+      const inStr = safeFormatTime(r.checkInTime);
+      const outStr = safeFormatTime(r.checkOutTime);
 
       return {
         id: r.id,
@@ -285,20 +314,25 @@ router.get('/all-logs', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), as
         department: metadata.department || '-',
         designation: metadata.designation || '-',
         date: dateStr,
-        checkInTime: r.checkInTime ? r.checkInTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
-        checkOutTime: r.checkOutTime ? r.checkOutTime.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }) : '-',
-        workHours: r.workHours,
-        status: r.status,
-        lateMinutes: r.lateMinutes,
-        source: r.source,
+        checkInTime: inStr,
+        checkOutTime: outStr,
+        workHours: r.workHours || 0,
+        status: r.status || 'PRESENT',
+        lateMinutes: r.lateMinutes || 0,
+        source: r.source || 'WEB',
         notes: r.notes,
         summary: metadata.summary || (Object.keys(metadata).length > 0 ? metadata : undefined),
       };
     });
 
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      formatted = formatted.filter((r) => r.date.startsWith(month));
+    }
+
     res.json({ success: true, data: formatted });
-  } catch (err) {
-    next(err);
+  } catch (err: any) {
+    console.error('Error in /attendance/all-logs:', err);
+    res.status(500).json({ success: false, message: 'Internal server error', error: err?.message });
   }
 });
 
@@ -443,7 +477,7 @@ function parseTimeString(timeStr: string, baseDate: Date): Date | null {
 // PUT /api/attendance/monthly-update — update monthly attendance records from month view edit
 router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const { employeeId, employeeCode, originalEmployeeCode, month, records } = req.body;
+    const { employeeId, employeeCode, originalEmployeeCode, employeeName, department, designation, role, month, records } = req.body;
     if ((!employeeCode && !employeeId) || !month || !records || !Array.isArray(records)) {
       res.status(400).json({ success: false, message: 'employeeCode/employeeId, month, and records are required' });
       return;
@@ -477,11 +511,13 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
       const parts = String(record.date).split('T')[0].split('-');
       let dateObj: Date;
       if (parts.length === 3) {
-        dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+        const ry = parseInt(parts[0], 10);
+        const rm = parseInt(parts[1], 10);
+        const rd = parseInt(parts[2], 10);
+        dateObj = new Date(Date.UTC(ry, rm - 1, rd, 12, 0, 0, 0));
       } else {
         dateObj = new Date(record.date);
       }
-      dateObj.setHours(0, 0, 0, 0);
 
       let checkInTime: Date | null = null;
       let checkOutTime: Date | null = null;
@@ -492,6 +528,17 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
         ? Math.round(((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)) * 100) / 100
         : 0;
 
+      let notesToStore = record.remarks;
+      if (!notesToStore) {
+        notesToStore = JSON.stringify({
+          empId: currentEmpId,
+          empName: employeeName || undefined,
+          department: department || undefined,
+          designation: designation || undefined,
+          role: role || undefined,
+        });
+      }
+
       insertData.push({
         employeeId: currentEmpId,
         date: dateObj,
@@ -499,7 +546,7 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
         checkInTime,
         checkOutTime,
         workHours,
-        notes: record.remarks || null,
+        notes: notesToStore,
         source: 'EXCEL',
       });
     }
@@ -520,7 +567,7 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
 });
 
 // DELETE /api/attendance/monthly-delete — delete a whole month's records for an employee
-router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req: AuthRequest, res: Response, next) => {
+router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, employeeCode, originalEmployeeCode, month } = req.body;
     if ((!employeeId && !employeeCode) || !month) {
@@ -554,7 +601,7 @@ router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (re
 });
 
 // DELETE /api/attendance/daily-delete — delete a specific date's record
-router.delete('/daily-delete', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req: AuthRequest, res: Response, next) => {
+router.delete('/daily-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, employeeCode, date } = req.body;
     if ((!employeeId && !employeeCode) || !date) {
@@ -565,11 +612,13 @@ router.delete('/daily-delete', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req:
     const parts = String(date).split('T')[0].split('-');
     let dateObj: Date;
     if (parts.length === 3) {
-      dateObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+      const ry = parseInt(parts[0], 10);
+      const rm = parseInt(parts[1], 10);
+      const rd = parseInt(parts[2], 10);
+      dateObj = new Date(Date.UTC(ry, rm - 1, rd, 12, 0, 0, 0));
     } else {
       dateObj = new Date(date);
     }
-    dateObj.setHours(0, 0, 0, 0);
 
     const searchStart = new Date(dateObj.getTime() - (24 * 60 * 60 * 1000));
     const searchEnd = new Date(dateObj.getTime() + (24 * 60 * 60 * 1000));

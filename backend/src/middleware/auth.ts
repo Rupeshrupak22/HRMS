@@ -120,17 +120,16 @@ export async function authenticate(req: AuthRequest, _res: Response, next: NextF
       }
     }
 
-    // Strict Single-Device Session enforcement — if another device/browser logs in, invalidate this session
+    // Strict Single-Device Session enforcement — if another device logs in, invalidate this session
+    const tokenTv = (payload as any).tv;
     const tokenDeviceId = (payload as any).deviceId;
+
+    if (tokenTv !== undefined && (user as any).tokenVersion !== undefined && tokenTv < (user as any).tokenVersion) {
+      throw new UnauthorizedError('FORCE_LOGOUT');
+    }
     if (tokenDeviceId && user.activeDeviceId && tokenDeviceId !== user.activeDeviceId) {
       throw new UnauthorizedError('FORCE_LOGOUT');
     }
-
-    // Record last login activity (non-blocking)
-    prisma.user.update({
-      where: { id: user.id },
-      data: { lastLoginAt: new Date() },
-    }).catch(() => {});
 
 
     const emailKey = (user.email || '').toLowerCase().trim();

@@ -298,6 +298,10 @@ export default function PavitraReportPage() {
 
     // 1. Populate from attendance logs first (exact match with attendance page)
     for (const log of attendance) {
+      if (!log.date) continue;
+      const [logYear, logMonth] = String(log.date).split('T')[0].split('-');
+      if (logYear !== yearStr || logMonth !== monthStr) continue;
+
       const key = log.empId || log.employeeId || log.employeeCode;
       if (!key) continue;
 

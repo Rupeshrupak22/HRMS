@@ -512,6 +512,8 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
       salarySum,
       manualRecords,
       totalCandidates,
+      totalOnboarding,
+      totalDropouts,
       newJoiners,
       resignationTrackers,
       resignationModelCount,

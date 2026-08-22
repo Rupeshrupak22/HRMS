@@ -268,14 +268,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const data = await apiRequest('/auth/login', {
         method: 'POST',
-        body: JSON.stringify({ identifier, password, deviceId }),
+        body: JSON.stringify({ identifier, password, deviceId, forceLogin: true }),
       });
-
-      // Check if session confirmation is required
-      if (data.requireSessionConfirmation) {
-        setSessionConfirmation({ identifier, password, message: data.message });
-        return;
-      }
 
       completeLogin(data, identifier);
     } catch (err) {

@@ -72,6 +72,10 @@ export default function AttendancePage() {
   const getMonthlyStats = () => {
     const empMap = new Map<string, any>();
     for (const log of allLogs) {
+      if (!log.date) continue;
+      const [logYear, logMonth] = String(log.date).split('T')[0].split('-');
+      if (logYear !== yearStr || logMonth !== monthStr) continue;
+
       const key = log.empId;
       if (!empMap.has(key)) {
         empMap.set(key, {

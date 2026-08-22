@@ -75,40 +75,38 @@ export async function login(dto: LoginDto) {
     throw new UnauthorizedError('Invalid credentials');
   }
 
-  // Generate a unique session ID — invalidates all previous sessions
+  // Generate a unique session ID & device ID — invalidates all previous device sessions
   const sessionId = crypto.randomBytes(16).toString('hex');
+  const incomingDeviceId = (dto as any).deviceId || crypto.randomBytes(8).toString('hex');
 
-  // Check if there's an active session on another device (skip if same device or forceLogin)
-  const incomingDeviceId = (dto as any).deviceId || '';
-  if (user.refreshToken && !(dto as any).forceLogin) {
-    // Only show popup if different device — check last login was recent (within 8 hours)
-    const lastLogin = user.lastLoginAt ? new Date(user.lastLoginAt).getTime() : 0;
-    const isRecentSession = (Date.now() - lastLogin) < 8 * 60 * 60 * 1000;
-    if (isRecentSession) {
-      return {
-        requireSessionConfirmation: true,
-        message: 'Active login session found on another device. Do you want to login here and end the other session?',
-      };
-    }
-  }
-
-  // Increment tokenVersion to invalidate ALL previous sessions instantly
+  // Increment tokenVersion to invalidate ALL previous sessions on other devices instantly
   const newTokenVersion = ((user as any).tokenVersion || 0) + 1;
 
-  // Reset failed attempts, update lastLogin, increment tokenVersion
+  // Reset failed attempts, update lastLogin, update activeDeviceId, increment tokenVersion
   await prisma.user.update({
     where: { id: user.id },
-    data: { failedAttempts: 0, lastLoginAt: new Date(), tokenVersion: newTokenVersion } as any,
+    data: {
+      failedAttempts: 0,
+      lastLoginAt: new Date(),
+      activeDeviceId: incomingDeviceId,
+      tokenVersion: newTokenVersion,
+    } as any,
   });
+
+  // Invalidate any in-memory user cache
+  const { invalidateUserCache } = await import('../../middleware/auth');
+  invalidateUserCache(user.id);
+  invalidateUserCache(user.email);
 
   logAudit({ action: 'LOGIN_SUCCESS', userId: user.id, userEmail: user.email });
 
-  const tokens = generateTokens(user.id, user.email, user.role, sessionId, newTokenVersion);
+  const tokens = generateTokens(user.id, user.email, user.role, sessionId, newTokenVersion, incomingDeviceId);
   await updateRefreshToken(user.id, tokens.refreshToken);
 
   return {
     accessToken: tokens.accessToken,
     refreshToken: tokens.refreshToken,
+    deviceId: incomingDeviceId,
     user: {
       id: user.id,
       email: user.email,
@@ -143,7 +141,8 @@ export async function refreshToken(dto: RefreshTokenDto) {
 
     const sessionId = (payload as any).sessionId || crypto.randomBytes(16).toString('hex');
     const tokenVersion = (user as any).tokenVersion || 0;
-    const tokens = generateTokens(user.id, user.email, user.role, sessionId, tokenVersion);
+    const deviceId = (payload as any).deviceId || (user as any).activeDeviceId;
+    const tokens = generateTokens(user.id, user.email, user.role, sessionId, tokenVersion, deviceId);
     await updateRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;
@@ -156,14 +155,23 @@ export async function refreshToken(dto: RefreshTokenDto) {
 export async function logout(userId: string) {
   await prisma.user.update({
     where: { id: userId },
-    data: { refreshToken: null },
+    data: { refreshToken: null, activeDeviceId: null },
   });
+  const { invalidateUserCache } = await import('../../middleware/auth');
+  invalidateUserCache(userId);
   logAudit({ action: 'LOGOUT', userId });
   return { success: true, message: 'Logged out successfully' };
 }
 
-function generateTokens(userId: string, email: string, role: string, sessionId?: string, tokenVersion?: number) {
-  const payload: any = { sub: userId, email, role, sessionId: sessionId || crypto.randomBytes(16).toString('hex'), tv: tokenVersion || 0 };
+function generateTokens(userId: string, email: string, role: string, sessionId?: string, tokenVersion?: number, deviceId?: string) {
+  const payload: any = {
+    sub: userId,
+    email,
+    role,
+    sessionId: sessionId || crypto.randomBytes(16).toString('hex'),
+    tv: tokenVersion || 0,
+    deviceId: deviceId || '',
+  };
   const accessToken = jwt.sign(payload, env.JWT_SECRET, { expiresIn: env.JWT_EXPIRES_IN as any });
   const refreshToken = jwt.sign(payload, env.JWT_REFRESH_SECRET, { expiresIn: env.JWT_REFRESH_EXPIRES_IN as any });
   return { accessToken, refreshToken };

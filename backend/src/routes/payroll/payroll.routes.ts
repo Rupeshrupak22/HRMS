@@ -171,8 +171,17 @@ router.get('/salary-structure/:employeeId', async (req: AuthRequest, res: Respon
 router.get('/manual', async (req: AuthRequest, res: Response, next) => {
   try {
     const where: any = {};
-    // Data isolation: HR_EXECUTIVE sees only their own payroll records
-    if (req.user!.role === 'HR_EXECUTIVE') {
+    const userEmail = (req.user?.email || '').toLowerCase().trim();
+    const isSpecialistOrAdmin =
+      ['SUPER_ADMIN', 'HR_ADMIN', 'ADMIN'].includes(req.user?.role || '') ||
+      req.user?.specialization === 'SALARY_PAYROLL' ||
+      req.user?.specialization === 'HR_MANAGER_ALL' ||
+      userEmail === 'charitha@adyapan.com' ||
+      userEmail === 'nandini@adyapan.com' ||
+      userEmail === 'nandani@adyapan.com';
+
+    // Data isolation: only non-specialist HR_EXECUTIVE sees only their own payroll records
+    if (req.user!.role === 'HR_EXECUTIVE' && !isSpecialistOrAdmin) {
       where.createdByEmail = req.user!.email;
     }
     const records = await prisma.manualPayrollRecord.findMany({
