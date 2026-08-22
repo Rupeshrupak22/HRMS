@@ -180,39 +180,26 @@ export default function DashboardPage() {
           ? crmJson
           : crmJson?.employees || crmJson?.data || [];
 
-        const internalList: any[] = dbEmpRes.status === 'fulfilled'
-          ? (Array.isArray(dbEmpRes.value) ? dbEmpRes.value : (dbEmpRes.value?.data || []))
-          : [];
-
-        if (internalList.length > 0) {
-          const existingEmails = new Set(masterList.map((e: any) => (e.email || '').toLowerCase().trim()).filter(Boolean));
-          const existingCodes = new Set(masterList.map((e: any) => String(e.employeeId || e.employeeCode || e.id || '').toLowerCase().trim()).filter(Boolean));
-
-          const dbMapped = internalList
-            .filter((emp: any) => {
-              const email = (emp.user?.email || emp.email || '').toLowerCase().trim();
-              const code = String(emp.employeeCode || emp.id || '').toLowerCase().trim();
-              return (!email || !existingEmails.has(email)) && (!code || !existingCodes.has(code));
-            })
-            .map((emp: any) => ({
-              id: emp.id,
-              name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || 'Employee',
-              email: emp.user?.email || emp.email || '',
-              department: emp.department?.name || (typeof emp.department === 'string' ? emp.department : 'General'),
-              status: emp.status || 'ACTIVE',
-              isActive: emp.status === 'ACTIVE',
-              employeeId: emp.employeeCode || emp.id,
-            }));
-
-          masterList = [...masterList, ...dbMapped];
+        // Fallback only if CRM is empty
+        if (masterList.length === 0 && dbEmpRes.status === 'fulfilled') {
+          const internalList = Array.isArray(dbEmpRes.value) ? dbEmpRes.value : (dbEmpRes.value?.data || []);
+          masterList = internalList.map((emp: any) => ({
+            id: emp.id,
+            name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || 'Employee',
+            email: emp.user?.email || emp.email || '',
+            department: emp.department?.name || (typeof emp.department === 'string' ? emp.department : 'General'),
+            status: emp.status || 'ACTIVE',
+            isActive: emp.status === 'ACTIVE',
+            employeeId: emp.employeeCode || emp.id,
+          }));
         }
 
         const base = baseMetrics.status === 'fulfilled' ? baseMetrics.value : null;
         const dailyList: any[] = dailyRes.status === 'fulfilled' && Array.isArray(dailyRes.value) ? dailyRes.value : [];
         const payrollList: any[] = payrollRes.status === 'fulfilled' && Array.isArray(payrollRes.value) ? payrollRes.value : [];
 
-        // 1. Employee Master (Merged CRM + Internal DB = 96 Total)
-        const totalEmp = masterList.length > 0 ? masterList.length : (base?.totalEmployees || 96);
+        // 1. Employee Master (CRM Total)
+        const totalEmp = masterList.length > 0 ? masterList.length : (base?.totalEmployees || 74);
         let activeEmp = 0;
         let inactiveEmp = 0;
 

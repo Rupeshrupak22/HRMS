@@ -116,8 +116,6 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   // Admin & Super Admin navigation (Clean Specialist Reports & Governance)
   const adminNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { label: 'Attendance', href: '/attendance', icon: Clock },
-    { label: 'Leaves', href: '/leaves', icon: CalendarDays },
     { label: 'Aravind Report', href: '/reports/aravind', icon: FileText },
     { label: 'Nitisha Report', href: '/reports/nitisha', icon: FileText },
     { label: 'Pavitra Report', href: '/reports/pavitra', icon: FileText },
@@ -131,8 +129,6 @@ export function Sidebar({ isOpenMobile, onCloseMobile }: SidebarProps) {
   // Nandini (HR Manager) - custom sidebar with team reports
   const nandiniNavItems = [
     { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-    { label: 'Attendance', href: '/attendance', icon: Clock },
-    { label: 'Leaves', href: '/leaves', icon: CalendarDays },
     { label: 'Aravind Report', href: '/reports/aravind', icon: FileText },
     { label: 'Nitisha Report', href: '/reports/nitisha', icon: FileText },
     { label: 'Pavitra Report', href: '/reports/pavitra', icon: FileText },

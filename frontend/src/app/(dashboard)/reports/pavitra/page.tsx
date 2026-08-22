@@ -113,19 +113,13 @@ export default function PavitraReportPage() {
           }));
         }
       } catch {}
-      // Secondary: internal DB employees (merge non-duplicates)
-      try {
-        const res = await apiRequest('/employees');
-        const fetched = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
-        const existingEmails = new Set(list.map((e: any) => (e.email || '').toLowerCase().trim()).filter(Boolean));
-        const existingCodes = new Set(list.map((e: any) => String(e.employeeCode || e.employeeId || e.id || '').toLowerCase().trim()).filter(Boolean));
-        const dbOnly = fetched
-          .filter((e: any) => {
-            const email = (e.user?.email || e.email || '').toLowerCase().trim();
-            const code = String(e.employeeCode || e.id || '').toLowerCase().trim();
-            return (!email || !existingEmails.has(email)) && (!code || !existingCodes.has(code));
-          })
-          .map((emp: any) => ({
+
+      // Fallback only if CRM returned 0
+      if (list.length === 0) {
+        try {
+          const res = await apiRequest('/employees');
+          const fetched = Array.isArray(res) ? res : (res?.data && Array.isArray(res.data) ? res.data : []);
+          list = fetched.map((emp: any) => ({
             id: emp.id,
             employeeCode: emp.employeeCode || emp.id,
             employeeId: emp.employeeCode || emp.id,
@@ -140,8 +134,8 @@ export default function PavitraReportPage() {
             employeeStatus: emp.status || '',
             joiningDate: emp.joiningDate || emp.createdAt || '',
           }));
-        list = [...list, ...dbOnly];
-      } catch {}
+        } catch {}
+      }
       setEmployees(list);
     })();
 
@@ -226,6 +220,8 @@ export default function PavitraReportPage() {
     if (s === 'TRAINING' || s === 'T' || s === 'TR' || s === 'TRAINING') return 'T';
     if (s === 'LOP' || s === 'L.O.P' || s === 'LOSS OF PAY' || s === 'LOSS_OF_PAY') return 'LOP';
     if (s === 'PERSONAL_LEAVE' || s === 'PEL' || s === 'PERSONAL LEAVE') return 'PeL';
+    if (s === 'ONBOARDING' || s === 'ONBO' || s === 'JOINING') return 'ONBO';
+    if (s === 'RESIGNED' || s === 'RESIG' || s === 'RESIGNATION') return 'RESIG';
     return s;
   };
 
@@ -236,20 +232,22 @@ export default function PavitraReportPage() {
       case 'CL': return 'bg-amber-100 text-amber-800 font-bold';
       case 'SL': return 'bg-orange-100 text-orange-800 font-bold';
       case 'H': return 'bg-slate-200 text-slate-800 font-bold';
-      case 'WO': return 'bg-slate-200 text-slate-800 font-bold';
+      case 'WO': return 'bg-slate-200 text-slate-800 font-bold text-[8px]';
       case 'OT': return 'bg-blue-100 text-blue-800 font-bold';
-      case 'WFH': return 'bg-teal-100 text-teal-800 font-bold';
+      case 'WFH': return 'bg-teal-100 text-teal-800 font-bold text-[8px]';
       case 'HD': return 'bg-pink-100 text-pink-800 font-bold';
       case 'EL': return 'bg-yellow-100 text-yellow-800 font-bold';
       case 'LL': return 'bg-amber-100 text-amber-800 font-bold';
       case 'E_L': return 'bg-rose-100 text-rose-800 font-bold';
       case 'PL': return 'bg-indigo-100 text-indigo-800 font-bold';
-      case 'LLV': return 'bg-purple-100 text-purple-800 font-bold';
+      case 'LLV': return 'bg-purple-100 text-purple-800 font-bold text-[8px]';
       case 'NH': return 'bg-cyan-100 text-cyan-800 font-bold';
       case 'FH': return 'bg-lime-100 text-lime-800 font-bold';
       case 'T': return 'bg-violet-100 text-violet-800 font-bold';
-      case 'LOP': return 'bg-gray-200 text-gray-800 font-bold';
+      case 'LOP': return 'bg-gray-200 text-gray-800 font-bold text-[8px]';
       case 'PeL': return 'bg-fuchsia-100 text-fuchsia-800 font-bold';
+      case 'ONBO': return 'bg-sky-100 text-sky-800 font-bold text-[7px]';
+      case 'RESIG': return 'bg-rose-100 text-rose-800 font-bold text-[7px]';
       default: return 'bg-slate-50 text-slate-400';
     }
   };
@@ -889,8 +887,9 @@ export default function PavitraReportPage() {
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-pink-100 text-pink-800 font-bold flex items-center justify-center text-[8px]">HD</span> Half Day</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-slate-200 text-slate-800 font-bold flex items-center justify-center text-[8px]">WO</span> Weekly Off</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-teal-100 text-teal-800 font-bold flex items-center justify-center text-[8px]">WFH</span> Work From Home</span>
-                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-yellow-100 text-yellow-800 font-bold flex items-center justify-center text-[8px]">EL</span> Early Out</span>
                 <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-indigo-100 text-indigo-800 font-bold flex items-center justify-center text-[8px]">PL</span> Paid Leave</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-sky-100 text-sky-800 font-bold flex items-center justify-center text-[7px]">ONBO</span> Onboarding</span>
+                <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-rose-100 text-rose-800 font-bold flex items-center justify-center text-[7px]">RESIG</span> Resigned</span>
               </div>
             </div>
 

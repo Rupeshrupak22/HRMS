@@ -219,58 +219,48 @@ export function EmployeeMaster() {
         console.warn('CRM employee fetch failed:', crmErr);
       }
 
-      // SECONDARY: Also fetch internal DB employees and merge (for specialists/admin who aren't in CRM)
-      try {
-        const res = await apiRequest('/employees');
-        const internalList = Array.isArray(res)
-          ? res
-          : res?.data && Array.isArray(res.data)
-          ? res.data
-          : [];
+      // FALLBACK ONLY: If CRM returns no employees, fallback to internal DB
+      if (list.length === 0) {
+        try {
+          const res = await apiRequest('/employees');
+          const internalList = Array.isArray(res)
+            ? res
+            : res?.data && Array.isArray(res.data)
+            ? res.data
+            : [];
 
-        if (internalList.length > 0) {
-          const existingEmails = new Set(list.map(e => (e.email || '').toLowerCase().trim()).filter(Boolean));
-          const existingCodes = new Set(list.map(e => String(e.employeeId || '').toLowerCase().trim()).filter(Boolean));
-
-          const dbMapped = internalList
-            .filter((emp: any) => {
-              const email = (emp.user?.email || emp.email || '').toLowerCase().trim();
-              const code = String(emp.employeeCode || emp.id || '').toLowerCase().trim();
-              return (!email || !existingEmails.has(email)) && (!code || !existingCodes.has(code));
-            })
-            .map((emp: any) => ({
-              id: emp.id,
-              name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || 'Employee',
-              email: emp.user?.email || emp.email || '',
-              mobile: emp.mobileNumber || emp.phone || '',
-              department: emp.department?.name || (typeof emp.department === 'string' ? emp.department : 'General'),
-              designation: emp.designation?.title || (typeof emp.designation === 'string' ? emp.designation : 'Staff'),
-              role: emp.user?.role || emp.role || 'EMPLOYEE',
-              employmentType: emp.employmentType || 'FULL_TIME',
-              gender: emp.gender || 'MALE',
-              status: emp.status || 'ACTIVE',
-              isActive: emp.status === 'ACTIVE',
-              employeeId: emp.employeeCode || emp.id,
-              joiningDate: emp.joiningDate || emp.createdAt,
-              dateOfBirth: emp.dateOfBirth || '',
-              reportingManager: emp.manager ? `${emp.manager.firstName || ''} ${emp.manager.lastName || ''}`.trim() : '',
-              teamId: emp.teamId || emp.team?.id || '',
-              teamName: emp.team?.name || '',
-              baseSalary: emp.salaryStructure?.basicSalary || 0,
-              bankName: emp.bankName || '',
-              bankAccountNumber: emp.bankAccountNo || '',
-              bankIfsc: emp.ifscCode || '',
-              address: emp.address || '',
-              emergencyContactName: emp.emergencyContactName || '',
-              emergencyContactPhone: emp.emergencyPhone || '',
-              documents: emp.documents || [],
-              raw: emp,
-            }));
-
-          list = [...list, ...dbMapped];
+          list = internalList.map((emp: any) => ({
+            id: emp.id,
+            name: `${emp.firstName || ''} ${emp.lastName || ''}`.trim() || 'Employee',
+            email: emp.user?.email || emp.email || '',
+            mobile: emp.mobileNumber || emp.phone || '',
+            department: emp.department?.name || (typeof emp.department === 'string' ? emp.department : 'General'),
+            designation: emp.designation?.title || (typeof emp.designation === 'string' ? emp.designation : 'Staff'),
+            role: emp.user?.role || emp.role || 'EMPLOYEE',
+            employmentType: emp.employmentType || 'FULL_TIME',
+            gender: emp.gender || 'MALE',
+            status: emp.status || 'ACTIVE',
+            isActive: emp.status === 'ACTIVE',
+            employeeId: emp.employeeCode || emp.id,
+            joiningDate: emp.joiningDate || emp.createdAt,
+            dateOfBirth: emp.dateOfBirth || '',
+            reportingManager: emp.manager ? `${emp.manager.firstName || ''} ${emp.manager.lastName || ''}`.trim() : '',
+            teamId: emp.teamId || emp.team?.id || '',
+            teamName: emp.team?.name || '',
+            baseSalary: emp.salaryStructure?.basicSalary || 0,
+            bankName: emp.bankName || '',
+            bankAccountNumber: emp.bankAccountNo || '',
+            bankIfsc: emp.ifscCode || '',
+            address: emp.address || '',
+            emergencyContactName: emp.emergencyContactName || '',
+            emergencyContactPhone: emp.emergencyPhone || '',
+            notes: '',
+            weekOff: '',
+            specialization: '',
+          }));
+        } catch (dbErr) {
+          console.warn('DB employee fetch failed:', dbErr);
         }
-      } catch (dbErr) {
-        console.warn('Internal DB fetch failed:', dbErr);
       }
 
       // If both failed, show error
