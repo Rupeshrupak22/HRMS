@@ -15,8 +15,16 @@ const SPECIALIST_CONFIG: Record<string, { role: Role; specialization: string }> 
   'aravind@adyapan.com': { role: 'HR_EXECUTIVE', specialization: 'RESIGNATION_EXIT' },
 };
 
-// In-memory cache for authenticated users to avoid redundant DB hits during parallel requests (TTL: 60s)
+// In-memory cache for authenticated users to avoid redundant DB hits during parallel requests (TTL: 10s)
 const userCache = new Map<string, { user: any; expiry: number }>();
+
+export function invalidateUserCache(key?: string) {
+  if (key) {
+    userCache.delete(key);
+  } else {
+    userCache.clear();
+  }
+}
 
 function getCachedUser(key: string) {
   const cached = userCache.get(key);
@@ -28,7 +36,7 @@ function getCachedUser(key: string) {
 }
 
 function setCachedUser(key: string, user: any) {
-  userCache.set(key, { user, expiry: Date.now() + 60 * 1000 });
+  userCache.set(key, { user, expiry: Date.now() + 10 * 1000 });
 }
 
 /**
@@ -116,9 +124,9 @@ export async function authenticate(req: AuthRequest, _res: Response, next: NextF
       throw new UnauthorizedError('Session expired due to security update. Please log in again.');
     }
 
-    // Check force-logout flag (another device logged in)
+    // Strict Single-Device Session enforcement — if another device/browser logs in, invalidate this session
     const tokenDeviceId = (payload as any).deviceId;
-    if (user.forceLogout && tokenDeviceId && user.activeDeviceId !== tokenDeviceId) {
+    if (tokenDeviceId && user.activeDeviceId && tokenDeviceId !== user.activeDeviceId) {
       throw new UnauthorizedError('FORCE_LOGOUT');
     }
 

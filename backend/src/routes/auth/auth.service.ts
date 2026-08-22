@@ -5,6 +5,7 @@ import prisma from '../../lib/prisma';
 import { env } from '../../lib/env';
 import { UnauthorizedError, ForbiddenError, BadRequestError } from '../../lib/errors';
 import { logAudit } from '../../lib/audit';
+import { invalidateUserCache } from '../../middleware/auth';
 import { LoginDto, RefreshTokenDto, ChangePasswordDto } from './auth.schema';
 import { JwtPayload } from '../../types';
 
@@ -137,30 +138,10 @@ export async function login(dto: LoginDto & { forceLogin?: boolean; deviceId?: s
     throw new UnauthorizedError(`Invalid email or password. ${remaining} attempts remaining.`);
   }
 
-  // Password valid — check for active session on another device
-  // Only show popup if session is truly active (user interacting within 15 min)
-  // After idle timeout, session is considered dead — no popup needed
-  const activeSession = hasActiveSession(user);
-  if (activeSession && !dto.forceLogin && dto.deviceId !== user.activeDeviceId) {
-    // Return requireSessionConfirmation flag — frontend shows popup
-    return {
-      requireSessionConfirmation: true,
-      message: 'There is an active session on another device. Do you want to end it and login here?',
-    };
-  }
-
-  // If forceLogin, mark old device for force logout
-  if (dto.forceLogin && user.activeDeviceId) {
-    await prisma.user.update({
-      where: { id: user.id },
-      data: { forceLogout: true },
-    });
-  }
-
-  // Generate new device ID
+  // Generate new unique device ID for this login session
   const deviceId = dto.deviceId || generateDeviceId();
 
-  // Reset failed attempts + update session tracking
+  // Reset failed attempts + update session tracking with new activeDeviceId
   await prisma.user.update({
     where: { id: user.id },
     data: {
@@ -171,6 +152,10 @@ export async function login(dto: LoginDto & { forceLogin?: boolean; deviceId?: s
       activeDeviceId: deviceId,
     },
   });
+
+  // Instantly invalidate in-memory user cache so any other device is immediately kicked
+  invalidateUserCache(user.id);
+  invalidateUserCache(user.email);
 
   logAudit({ action: 'LOGIN_SUCCESS', userId: user.id, userEmail: user.email, metadata: { deviceId } });
 

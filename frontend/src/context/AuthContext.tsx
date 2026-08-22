@@ -271,6 +271,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('auth:force-logout' as any, handleForceLogout);
   }, []);
 
+  // --- Active Session Heartbeat (every 20s) to detect login from another device ---
+  useEffect(() => {
+    if (!user) return;
+
+    const checkSessionHeartbeat = async () => {
+      try {
+        await apiRequest('/auth/me', { method: 'GET' });
+      } catch {
+        // Handled by apiRequest dispatching auth:force-logout
+      }
+    };
+
+    const interval = setInterval(checkSessionHeartbeat, 20 * 1000);
+    return () => clearInterval(interval);
+  }, [user]);
+
   // --- Login ---
   const login = async (identifier: string, password: string) => {
     setLoading(true);
