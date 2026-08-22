@@ -172,6 +172,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [sessionConfirmation, setSessionConfirmation] = useState<SessionConfirmation | null>(null);
 
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
+  const isCheckingRef = useRef(false);
+  const isLoggedOutRef = useRef(false);
 
   // --- Session restoration on mount ---
   useEffect(() => {
@@ -181,6 +183,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (storedUser && storedToken) {
       try {
         setUser(JSON.parse(storedUser));
+        isLoggedOutRef.current = false;
       } catch {
         clearSession();
       }
@@ -190,12 +193,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // --- Token Auto-Refresh (Periodic silent background refresh) ---
   useEffect(() => {
-    if (!user) return;
+    if (!user || isLoggedOutRef.current) return;
 
     const refreshTokens = async () => {
       try {
         const refreshToken = localStorage.getItem('adyapan_refresh_token');
-        if (!refreshToken) return;
+        if (!refreshToken || isLoggedOutRef.current) return;
 
         const data = await apiRequest('/auth/refresh', {
           method: 'POST',
@@ -211,7 +214,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (msg === 'FORCE_LOGOUT' || msg.includes('FORCE_LOGOUT') || msg.includes('another device') || msg.includes('compromised')) {
           performLogout('force_logout', 'Session ended. You have been logged in on another device.');
         }
-        // Non-critical errors (network blips) are ignored silently so user stays logged in
       }
     };
 
@@ -231,16 +233,108 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener('auth:force-logout' as any, handleForceLogout);
   }, []);
 
-  // --- Active Session Heartbeat (every 20s) to detect login from another device ---
+  // --- Multi-Tab Synchronization via BroadcastChannel ---
   useEffect(() => {
-    if (!user) return;
+    if (typeof window === 'undefined' || !('BroadcastChannel' in window)) return;
+    const channel = new BroadcastChannel('adyapan_auth_channel');
+
+    channel.onmessage = (event) => {
+      if (event.data?.type === 'FORCE_LOGOUT') {
+        performLogout('force_logout', event.data.message, false);
+      } else if (event.data?.type === 'MANUAL_LOGOUT') {
+        performLogout('manual', undefined, false);
+      }
+    };
+
+    return () => {
+      channel.close();
+    };
+  }, []);
+
+  // --- Instant Real-Time Session Invalidation Stream (SSE) ---
+  useEffect(() => {
+    if (!user || isLoggedOutRef.current) return;
+
+    const abortController = new AbortController();
+
+    const connectSSE = async () => {
+      const token = localStorage.getItem('adyapan_access_token');
+      if (!token || isLoggedOutRef.current) return;
+
+      try {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000/api/v1'}/auth/session-events`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+          signal: abortController.signal,
+          credentials: 'include',
+        });
+
+        if (res.status === 401) {
+          performLogout('force_logout', 'You have been logged out because your account was signed in on another device.');
+          return;
+        }
+
+        if (!res.ok || !res.body) return;
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n\n');
+          buffer = lines.pop() || '';
+
+          for (const chunk of lines) {
+            const trimmed = chunk.trim();
+            if (trimmed.startsWith('data: ')) {
+              try {
+                const payload = JSON.parse(trimmed.slice(6));
+                if (payload.type === 'FORCE_LOGOUT') {
+                  performLogout(
+                    'force_logout',
+                    payload.reason || 'You have been logged out because your account was signed in on another device.'
+                  );
+                  return;
+                }
+              } catch {}
+            }
+          }
+        }
+      } catch (err: any) {
+        if (err?.name === 'AbortError') return;
+        // Auto-reconnect after 5s on network disconnect if still authenticated
+        if (!isLoggedOutRef.current && user) {
+          setTimeout(connectSSE, 5000);
+        }
+      }
+    };
+
+    connectSSE();
+
+    return () => {
+      abortController.abort();
+    };
+  }, [user]);
+
+  // --- Lightweight Active Session Heartbeat (every 30s) as backup check ---
+  useEffect(() => {
+    if (!user || isLoggedOutRef.current) return;
 
     const checkSessionHeartbeat = async () => {
+      if (isLoggedOutRef.current || isCheckingRef.current) return;
+      isCheckingRef.current = true;
+
       try {
         const token = localStorage.getItem('adyapan_access_token');
-        if (!token) return;
+        if (!token || isLoggedOutRef.current) {
+          isCheckingRef.current = false;
+          return;
+        }
 
-        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000/api/v1'}/auth/me`, {
+        const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000/api/v1'}/auth/session-status`, {
           headers: { 'Authorization': `Bearer ${token}` },
           credentials: 'include',
         });
@@ -248,12 +342,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (res.status === 401) {
           const data = await res.json().catch(() => ({}));
           const msg = String(data.message || data.error || '');
-          if (data.forceLogout || msg === 'FORCE_LOGOUT' || msg.includes('FORCE_LOGOUT') || msg.includes('another device')) {
-            performLogout('force_logout', 'Session ended. You have been logged in on another device.');
+          if (data.forceLogout || data.code === 'FORCE_LOGOUT' || msg === 'FORCE_LOGOUT' || msg.includes('FORCE_LOGOUT') || msg.includes('another device')) {
+            performLogout('force_logout', 'You have been logged out because your account was signed in on another device.');
             return;
           }
 
-          // Token expired or invalid — attempt silent refresh
+          // Token expired or invalid — attempt silent refresh once
           const refreshToken = localStorage.getItem('adyapan_refresh_token');
           if (refreshToken) {
             try {
@@ -272,15 +366,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
               }
             } catch {}
           }
-          // If refresh fails, cleanly terminate session so it stops looping
+          // If refresh fails, cleanly terminate session
           performLogout('expired', 'Session expired. Please log in again.');
         }
-      } catch {}
+      } catch {} finally {
+        isCheckingRef.current = false;
+      }
     };
 
-    // Immediate check on window focus or tab visibility change
+    // Immediate check on window focus or tab visibility change (with debounce/concurrency guard)
     const onVisibilityOrFocus = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && !isLoggedOutRef.current && !isCheckingRef.current) {
         checkSessionHeartbeat();
       }
     };
@@ -288,7 +384,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     window.addEventListener('focus', onVisibilityOrFocus);
     document.addEventListener('visibilitychange', onVisibilityOrFocus);
 
-    const interval = setInterval(checkSessionHeartbeat, 6 * 1000);
+    const interval = setInterval(checkSessionHeartbeat, 30 * 1000);
     return () => {
       clearInterval(interval);
       window.removeEventListener('focus', onVisibilityOrFocus);
@@ -343,6 +439,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // --- Complete login (store tokens, set user) ---
   const completeLogin = (data: any, identifier: string) => {
+    isLoggedOutRef.current = false;
     const userProfile: UserProfile = {
       id: data.user.id,
       email: data.user.email,
@@ -372,14 +469,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     performLogout('manual');
   };
 
-  const performLogout = (reason: string, message?: string) => {
+  const performLogout = (reason: string, message?: string, broadcast = true) => {
+    isLoggedOutRef.current = true;
+
+    const defaultMsg = 'You have been logged out because your account was signed in on another device.';
+    const finalMsg = message || defaultMsg;
+
+    if (broadcast && typeof window !== 'undefined' && 'BroadcastChannel' in window) {
+      try {
+        const channel = new BroadcastChannel('adyapan_auth_channel');
+        channel.postMessage({
+          type: reason === 'force_logout' ? 'FORCE_LOGOUT' : 'MANUAL_LOGOUT',
+          message: finalMsg,
+        });
+        channel.close();
+      } catch {}
+    }
+
     // Call backend to invalidate refresh token
     apiRequest('/auth/logout', { method: 'POST' }).catch(() => {});
     clearSession();
 
     if (reason === 'force_logout') {
-      // Show toast message before redirect
-      sessionStorage.setItem('adyapan_logout_reason', message || 'Session ended. You have been logged in on another device.');
+      sessionStorage.setItem('adyapan_logout_reason', finalMsg);
     } else if (reason === 'idle_timeout') {
       sessionStorage.setItem('adyapan_logout_reason', 'Session expired due to inactivity (15 minutes).');
     }

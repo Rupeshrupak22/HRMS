@@ -297,64 +297,75 @@ export default function DailyReportsPage() {
           </div>
 
           <div className="space-y-3 overflow-y-auto max-h-[550px] pr-1">
-            {reports.map((rep) => (
-              <div
-                key={rep.id}
-                className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs hover:border-orange-300 transition-all"
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="font-extrabold text-slate-900">{rep.employeeName}</span>
-                    <span className="text-[10px] text-slate-400">({rep.userEmail})</span>
-                  </div>
-                  <span
-                    className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${
-                      rep.status === 'APPROVED'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : rep.status === 'REJECTED'
-                        ? 'bg-red-50 text-red-700 border border-red-200'
-                        : 'bg-amber-50 text-amber-700 border border-amber-200'
-                    }`}
-                  >
-                    {rep.status}
-                  </span>
-                </div>
-
-                <div className="text-[11px] text-slate-500 flex items-center gap-4">
-                  <span>Date: <strong className="text-slate-800">{rep.date}</strong></span>
-                  <span>Hours: <strong className="text-slate-800">{rep.hoursWorked} hrs</strong></span>
-                </div>
-
-                <div className="bg-white p-3 rounded-xl border border-slate-200 text-slate-800 leading-relaxed font-medium">
-                  <strong>Work Done:</strong> {rep.tasksCompleted}
-                </div>
-
-                {rep.blockers && rep.blockers !== 'None' && (
-                  <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-amber-900 flex items-start gap-1.5">
-                    <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <span><strong>Blockers:</strong> {rep.blockers}</span>
-                  </div>
-                )}
-
-                {/* Manager / Admin Action Buttons */}
-                {isAdminOrHRManager && rep.status === 'SUBMITTED' && (
-                  <div className="pt-2 flex items-center gap-2 justify-end">
-                    <button
-                      onClick={() => handleApprove(rep.id)}
-                      className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
-                      <CheckCircle2 className="w-3.5 h-3.5" /> Approve
-                    </button>
-                    <button
-                      onClick={() => handleReject(rep.id)}
-                      className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
-                    >
-                      <XCircle className="w-3.5 h-3.5" /> Reject
-                    </button>
-                  </div>
-                )}
+            {loading ? (
+              <div className="py-12 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+                <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+                <span>Loading daily work reports from database...</span>
               </div>
-            ))}
+            ) : reports.length === 0 ? (
+              <div className="py-12 text-center text-xs text-slate-400 font-medium">
+                No daily work reports logged yet.
+              </div>
+            ) : (
+              reports.map((rep) => (
+                <div
+                  key={rep.id}
+                  className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2 text-xs hover:border-orange-300 transition-all"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="font-extrabold text-slate-900">{rep.employeeName}</span>
+                      <span className="text-[10px] text-slate-400">({rep.userEmail})</span>
+                    </div>
+                    <span
+                      className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${
+                        rep.status === 'APPROVED'
+                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                          : rep.status === 'REJECTED'
+                          ? 'bg-red-50 text-red-700 border border-red-200'
+                          : 'bg-amber-50 text-amber-700 border border-amber-200'
+                      }`}
+                    >
+                      {rep.status}
+                    </span>
+                  </div>
+
+                  <div className="text-[11px] text-slate-500 flex items-center gap-4">
+                    <span>Date: <strong className="text-slate-800">{rep.date}</strong></span>
+                    <span>Hours: <strong className="text-slate-800">{rep.hoursWorked} hrs</strong></span>
+                  </div>
+
+                  <div className="bg-white p-3 rounded-xl border border-slate-200 text-slate-800 leading-relaxed font-medium">
+                    <strong>Work Done:</strong> {rep.tasksCompleted}
+                  </div>
+
+                  {rep.blockers && rep.blockers !== 'None' && (
+                    <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-200 text-amber-900 flex items-start gap-1.5">
+                      <AlertCircle className="w-3.5 h-3.5 text-amber-600 flex-shrink-0 mt-0.5" />
+                      <span><strong>Blockers:</strong> {rep.blockers}</span>
+                    </div>
+                  )}
+
+                  {/* Manager / Admin Action Buttons */}
+                  {isAdminOrHRManager && rep.status === 'SUBMITTED' && (
+                    <div className="pt-2 flex items-center gap-2 justify-end">
+                      <button
+                        onClick={() => handleApprove(rep.id)}
+                        className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                      >
+                        <CheckCircle2 className="w-3.5 h-3.5" /> Approve
+                      </button>
+                      <button
+                        onClick={() => handleReject(rep.id)}
+                        className="px-3 py-1 rounded-lg bg-red-600 hover:bg-red-500 text-white font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                      >
+                        <XCircle className="w-3.5 h-3.5" /> Reject
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))
+            )}
           </div>
         </div>
       </div>

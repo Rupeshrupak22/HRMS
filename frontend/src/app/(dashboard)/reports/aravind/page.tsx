@@ -17,6 +17,7 @@ export default function AravindReportPage() {
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [filterDate, setFilterDate] = useState('');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Pagination states
   const [pageRet, setPageRet] = useState(1);
@@ -30,30 +31,44 @@ export default function AravindReportPage() {
   const PAGE_SIZE = 20;
 
   useEffect(() => {
-    aravindApi.getRetention().then(setRetention).catch(() => {});
-    aravindApi.getResignation().then(setResignation).catch(() => {});
-    aravindApi.getAbscond().then(setAbscond).catch(() => {});
-    aravindApi.getExitClearance().then(setExit).catch(() => {});
-    aravindApi.getFnF().then(setFnf).catch(() => {});
-    aravindApi.getComplaints().then(setComplaints).catch(() => {});
-    aravindApi.getExitInterview().then(setInterviews).catch(() => {});
-    apiRequest('/reports/daily').then((res) => {
-      const arr = Array.isArray(res) ? res : [];
-      setDailyReports(arr.filter((r: any) => 
-        r.userEmail === 'aravind@adyapan.com' || 
-        r.specialization === 'RESIGNATION_EXIT' || 
-        (r.employeeName || '').toLowerCase().includes('aravind')
-      ));
-    }).catch(() => {
-      aravindApi.getDailyReports().then((res) => {
-        const arr = Array.isArray(res) ? res : [];
-        setDailyReports(arr.filter((r: any) => 
-          r.userEmail === 'aravind@adyapan.com' || 
-          r.specialization === 'RESIGNATION_EXIT' || 
-          (r.employeeName || '').toLowerCase().includes('aravind')
-        ));
-      }).catch(() => setDailyReports([]));
-    });
+    async function loadData() {
+      setLoading(true);
+      try {
+        const [retRes, resRes, absRes, exitRes, fnfRes, compRes, intvRes, dailyRes] = await Promise.allSettled([
+          aravindApi.getRetention().catch(() => []),
+          aravindApi.getResignation().catch(() => []),
+          aravindApi.getAbscond().catch(() => []),
+          aravindApi.getExitClearance().catch(() => []),
+          aravindApi.getFnF().catch(() => []),
+          aravindApi.getComplaints().catch(() => []),
+          aravindApi.getExitInterview().catch(() => []),
+          apiRequest('/reports/daily').catch(() => aravindApi.getDailyReports()),
+        ]);
+
+        if (retRes.status === 'fulfilled' && Array.isArray(retRes.value)) setRetention(retRes.value);
+        if (resRes.status === 'fulfilled' && Array.isArray(resRes.value)) setResignation(resRes.value);
+        if (absRes.status === 'fulfilled' && Array.isArray(absRes.value)) setAbscond(absRes.value);
+        if (exitRes.status === 'fulfilled' && Array.isArray(exitRes.value)) setExit(exitRes.value);
+        if (fnfRes.status === 'fulfilled' && Array.isArray(fnfRes.value)) setFnf(fnfRes.value);
+        if (compRes.status === 'fulfilled' && Array.isArray(compRes.value)) setComplaints(compRes.value);
+        if (intvRes.status === 'fulfilled' && Array.isArray(intvRes.value)) setInterviews(intvRes.value);
+        if (dailyRes.status === 'fulfilled' && Array.isArray(dailyRes.value)) {
+          setDailyReports(
+            dailyRes.value.filter(
+              (r: any) =>
+                r.userEmail === 'aravind@adyapan.com' ||
+                r.specialization === 'RESIGNATION_EXIT' ||
+                (r.employeeName || '').toLowerCase().includes('aravind')
+            )
+          );
+        }
+      } catch (err) {
+        console.error('Failed to load Aravind report data:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
   }, []);
 
   const filterByDate = (records: any[]) => {
@@ -119,22 +134,22 @@ export default function AravindReportPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-red-100 shadow-xs">
           <p className="text-[11px] font-bold text-red-600 uppercase tracking-wider">Resignations Tracked</p>
-          <p className="text-2xl font-black text-slate-900 mt-1">{filteredResignation.length || 36}</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{loading ? '...' : filteredResignation.length}</p>
           <p className="text-[10px] text-slate-400 mt-0.5">Active & Historical Cases</p>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-rose-100 shadow-xs">
           <p className="text-[11px] font-bold text-rose-600 uppercase tracking-wider">Abscond Cases</p>
-          <p className="text-2xl font-black text-slate-900 mt-1">{filteredAbscond.length}</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{loading ? '...' : filteredAbscond.length}</p>
           <p className="text-[10px] text-slate-400 mt-0.5">Logged Absconders</p>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
           <p className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">F&F Settlements</p>
-          <p className="text-2xl font-black text-slate-900 mt-1">{filteredFnf.length}</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{loading ? '...' : filteredFnf.length}</p>
           <p className="text-[10px] text-slate-400 mt-0.5">Final Dues Records</p>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-xs">
           <p className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Exit Clearances</p>
-          <p className="text-2xl font-black text-slate-900 mt-1">{filteredExit.length}</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{loading ? '...' : filteredExit.length}</p>
           <p className="text-[10px] text-slate-400 mt-0.5">Department Approvals</p>
         </div>
       </div>
@@ -142,9 +157,16 @@ export default function AravindReportPage() {
       {/* Retention Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <ShieldAlert className="w-4 h-4 text-amber-600" /> Retention Cases ({filteredRetention.length})
+          <ShieldAlert className="w-4 h-4 text-amber-600" /> Retention Cases ({loading ? 'Loading...' : filteredRetention.length})
         </h2>
-        {filteredRetention.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No retention records found.</p> : (
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading retention records...</span>
+          </div>
+        ) : filteredRetention.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No retention records found.</p>
+        ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
@@ -176,9 +198,16 @@ export default function AravindReportPage() {
       {/* Resignation Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <UserX className="w-4 h-4 text-red-600" /> Resignations ({filteredResignation.length})
+          <UserX className="w-4 h-4 text-red-600" /> Resignations ({loading ? 'Loading...' : filteredResignation.length})
         </h2>
-        {filteredResignation.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No resignation records found.</p> : (
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading resignation records...</span>
+          </div>
+        ) : filteredResignation.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No resignation records found.</p>
+        ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
@@ -212,9 +241,16 @@ export default function AravindReportPage() {
       {/* Abscond Cases Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <UserMinus className="w-4 h-4 text-rose-600" /> Abscond Cases ({filteredAbscond.length})
+          <UserMinus className="w-4 h-4 text-rose-600" /> Abscond Cases ({loading ? 'Loading...' : filteredAbscond.length})
         </h2>
-        {filteredAbscond.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No abscond records found.</p> : (
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading abscond records...</span>
+          </div>
+        ) : filteredAbscond.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No abscond records found.</p>
+        ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
@@ -244,9 +280,16 @@ export default function AravindReportPage() {
       {/* Daily Reports Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <FileText className="w-4 h-4 text-sky-600" /> Daily Reports Submitted ({filteredDailyReports.length})
+          <FileText className="w-4 h-4 text-sky-600" /> Daily Reports Submitted ({loading ? 'Loading...' : filteredDailyReports.length})
         </h2>
-        {filteredDailyReports.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No daily reports submitted yet</p> : (
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-sky-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading daily reports...</span>
+          </div>
+        ) : filteredDailyReports.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No daily reports submitted yet</p>
+        ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">

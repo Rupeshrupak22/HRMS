@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { authenticate, authorize } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { z } from 'zod';
@@ -336,8 +336,18 @@ router.get('/all-logs', async (req: AuthRequest, res: Response, next) => {
   }
 });
 
+const allowPavitraOrAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+  const user = req.user;
+  const isPavitra = user?.email === 'pavitra@adyapan.com' || user?.specialization === 'ATTENDANCE_LEAVE';
+  const isAdminOrManager = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN';
+  if (!isPavitra && !isAdminOrManager) {
+    return res.status(403).json({ success: false, message: 'Forbidden: Only Pavitra or HR Admin can modify Attendance records.' });
+  }
+  next();
+};
+
 // POST /api/attendance/bulk-import — batch import attendance from XLSX/CSV
-router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), allowPavitraOrAdmin, async (req: AuthRequest, res: Response, next) => {
   try {
     const { records } = req.body;
     if (!records || !Array.isArray(records) || records.length === 0) {
@@ -475,7 +485,7 @@ function parseTimeString(timeStr: string, baseDate: Date): Date | null {
 }
 
 // PUT /api/attendance/monthly-update — update monthly attendance records from month view edit
-router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), allowPavitraOrAdmin, async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, employeeCode, originalEmployeeCode, employeeName, department, designation, role, month, records } = req.body;
     if ((!employeeCode && !employeeId) || !month || !records || !Array.isArray(records)) {
@@ -567,7 +577,7 @@ router.put('/monthly-update', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE
 });
 
 // DELETE /api/attendance/monthly-delete — delete a whole month's records for an employee
-router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), allowPavitraOrAdmin, async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, employeeCode, originalEmployeeCode, month } = req.body;
     if ((!employeeId && !employeeCode) || !month) {
@@ -601,7 +611,7 @@ router.delete('/monthly-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUT
 });
 
 // DELETE /api/attendance/daily-delete — delete a specific date's record
-router.delete('/daily-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+router.delete('/daily-delete', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), allowPavitraOrAdmin, async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, employeeCode, date } = req.body;
     if ((!employeeId && !employeeCode) || !date) {

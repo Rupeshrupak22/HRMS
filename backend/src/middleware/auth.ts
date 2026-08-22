@@ -2,7 +2,7 @@ import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import prisma from '../lib/prisma';
 import { env } from '../lib/env';
-import { UnauthorizedError, ForbiddenError } from '../lib/errors';
+import { UnauthorizedError, ForbiddenError, ServiceUnavailableError, AuthError } from '../lib/errors';
 import { AuthRequest, JwtPayload, Role } from '../types';
 
 const SPECIALIST_CONFIG: Record<string, { role: Role; specialization: string }> = {
@@ -15,7 +15,7 @@ const SPECIALIST_CONFIG: Record<string, { role: Role; specialization: string }> 
   'aravind@adyapan.com': { role: 'HR_EXECUTIVE', specialization: 'RESIGNATION_EXIT' },
 };
 
-// In-memory cache for authenticated users to avoid redundant DB hits during parallel requests (TTL: 10s)
+// In-memory cache for authenticated users to avoid redundant DB hits during parallel requests (TTL: 5s)
 const userCache = new Map<string, { user: any; expiry: number }>();
 
 export function invalidateUserCache(key?: string) {
@@ -36,7 +36,7 @@ function getCachedUser(key: string) {
 }
 
 function setCachedUser(key: string, user: any) {
-  userCache.set(key, { user, expiry: Date.now() + 10 * 1000 });
+  userCache.set(key, { user, expiry: Date.now() + 5 * 1000 });
 }
 
 /**
@@ -93,15 +93,8 @@ export async function authenticate(req: AuthRequest, _res: Response, next: NextF
           setCachedUser(cacheKey, user);
         }
       } catch (dbErr: any) {
-        console.warn('⚠️ Auth DB query fallback to token payload:', dbErr?.message);
-        // Fallback: If DB connection pool is momentarily saturated, construct user from valid JWT payload
-        user = {
-          id: payload.sub,
-          email: payload.email || '',
-          role: payload.role || 'HR_ADMIN',
-          isLocked: false,
-          employee: null,
-        };
+        console.error('Auth DB query failed:', dbErr?.message);
+        throw new ServiceUnavailableError('Authentication service temporarily unavailable. Please retry.');
       }
     }
 
@@ -116,7 +109,11 @@ export async function authenticate(req: AuthRequest, _res: Response, next: NextF
       if (Date.now() - lastTime > lockDuration) {
         // Will be unlocked on next login attempt
       } else {
-        throw new UnauthorizedError('User account is locked. Try again later.');
+        const remainingMins = Math.max(1, Math.ceil((lockDuration - (Date.now() - lastTime)) / 60000));
+        throw new AuthError(`User account is locked. Try again in ${remainingMins} minutes.`, 401, {
+          code: 'ACCOUNT_LOCKED',
+          lockoutMinutes: remainingMins,
+        });
       }
     }
 
@@ -125,10 +122,10 @@ export async function authenticate(req: AuthRequest, _res: Response, next: NextF
     const tokenDeviceId = (payload as any).deviceId;
 
     if (tokenTv !== undefined && (user as any).tokenVersion !== undefined && tokenTv < (user as any).tokenVersion) {
-      throw new UnauthorizedError('FORCE_LOGOUT');
+      throw new AuthError('FORCE_LOGOUT', 401, { code: 'FORCE_LOGOUT', forceLogout: true });
     }
     if (tokenDeviceId && user.activeDeviceId && tokenDeviceId !== user.activeDeviceId) {
-      throw new UnauthorizedError('FORCE_LOGOUT');
+      throw new AuthError('FORCE_LOGOUT', 401, { code: 'FORCE_LOGOUT', forceLogout: true });
     }
 
 

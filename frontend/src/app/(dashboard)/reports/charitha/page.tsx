@@ -13,6 +13,7 @@ export default function CharithaReportPage() {
   const [filterDate, setFilterDate] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Pagination states
   const [repPage, setRepPage] = useState(1);
@@ -21,6 +22,7 @@ export default function CharithaReportPage() {
 
   useEffect(() => {
     async function loadData() {
+      setLoading(true);
       try {
         const [payRes, dailyRes] = await Promise.allSettled([
           apiRequest('/payroll-public').catch(() => apiRequest('/payroll/manual')),
@@ -49,6 +51,8 @@ export default function CharithaReportPage() {
         }
       } catch (e) {
         console.error('Failed to load Charitha report data:', e);
+      } finally {
+        setLoading(false);
       }
     }
     loadData();
@@ -139,23 +143,23 @@ export default function CharithaReportPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
           <p className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider">Payroll Records</p>
-          <p className="text-2xl font-black text-slate-900 mt-1">{payrollRecords.length}</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{loading ? '...' : payrollRecords.length}</p>
           <p className="text-[10px] text-slate-400 mt-0.5">Logged Employees</p>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-xs">
           <p className="text-[11px] font-bold text-blue-700 uppercase tracking-wider">Net Disbursed</p>
-          <p className="text-2xl font-black text-slate-900 mt-1">₹{totalNet.toLocaleString('en-IN')}</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{loading ? '...' : `₹${totalNet.toLocaleString('en-IN')}`}</p>
           <p className="text-[10px] text-slate-400 mt-0.5">Total CTC Disbursed</p>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-red-100 shadow-xs">
           <p className="text-[11px] font-bold text-red-700 uppercase tracking-wider">LOP Deductions</p>
-          <p className="text-2xl font-black text-red-600 mt-1">-₹{totalLop.toLocaleString('en-IN')}</p>
+          <p className="text-2xl font-black text-red-600 mt-1">{loading ? '...' : `-₹${totalLop.toLocaleString('en-IN')}`}</p>
           <p className="text-[10px] text-slate-400 mt-0.5">Loss of Pay Logged</p>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-purple-100 shadow-xs">
           <p className="text-[11px] font-bold text-purple-700 uppercase tracking-wider">Attendance Status</p>
           <p className="text-2xl font-black text-slate-900 mt-1">
-            {frozenCount > 0 ? `${frozenCount} Frozen` : 'Active'}
+            {loading ? '...' : (frozenCount > 0 ? `${frozenCount} Frozen` : 'Active')}
           </p>
           <p className="text-[10px] text-slate-400 mt-0.5">Monthly Payroll Lock</p>
         </div>
@@ -170,9 +174,14 @@ export default function CharithaReportPage() {
       {/* 1. Daily Work Reports Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <FileText className="w-4 h-4 text-rose-500" /> Daily Work Reports ({filteredDailyReports.length})
+          <FileText className="w-4 h-4 text-rose-500" /> Daily Work Reports ({loading ? 'Loading...' : filteredDailyReports.length})
         </h2>
-        {filteredDailyReports.length === 0 ? (
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-rose-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading daily work reports...</span>
+          </div>
+        ) : filteredDailyReports.length === 0 ? (
           <p className="text-xs text-slate-400 py-4 text-center">No daily reports submitted for this date.</p>
         ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
@@ -224,9 +233,14 @@ export default function CharithaReportPage() {
       {/* 2. Payroll Records Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <CreditCard className="w-4 h-4 text-purple-600" /> Payroll Records ({filteredPayrollRecords.length})
+          <CreditCard className="w-4 h-4 text-purple-600" /> Payroll Records ({loading ? 'Loading...' : filteredPayrollRecords.length})
         </h2>
-        {filteredPayrollRecords.length === 0 ? (
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading payroll records...</span>
+          </div>
+        ) : filteredPayrollRecords.length === 0 ? (
           <p className="text-xs text-slate-400 py-4 text-center">No payroll records for this date.</p>
         ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">

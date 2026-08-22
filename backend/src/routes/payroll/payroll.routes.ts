@@ -1,4 +1,4 @@
-import { Router, Response } from 'express';
+import { Router, Response, NextFunction } from 'express';
 import { authenticate, authorize } from '../../middleware/auth';
 import { validate } from '../../middleware/validate';
 import { z } from 'zod';
@@ -194,8 +194,18 @@ router.get('/manual', async (req: AuthRequest, res: Response, next) => {
   }
 });
 
+const allowCharithaOrAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+  const user = req.user;
+  const isCharitha = user?.email === 'charitha@adyapan.com' || user?.specialization === 'SALARY_PAYROLL';
+  const isAdminOrManager = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN' || user?.role === 'FINANCE';
+  if (!isCharitha && !isAdminOrManager) {
+    return res.status(403).json({ success: false, message: 'Forbidden: Only Charitha, Finance or HR Admin can modify Payroll records.' });
+  }
+  next();
+};
+
 // POST /api/payroll/manual
-router.post('/manual', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), validate(manualPayrollSchema), async (req: AuthRequest, res: Response, next) => {
+router.post('/manual', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), allowCharithaOrAdmin, validate(manualPayrollSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, employeeName, department, joinDate, exitDate, workingDays,
       attendanceFreeze, freezeReason, leavesTaken, lopDays, salaryChangeDate,
@@ -239,7 +249,7 @@ router.post('/manual', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), val
 });
 
 // PUT /api/payroll/manual/:id
-router.put('/manual/:id', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), validate(manualPayrollSchema), async (req: AuthRequest, res: Response, next) => {
+router.put('/manual/:id', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), allowCharithaOrAdmin, validate(manualPayrollSchema), async (req: AuthRequest, res: Response, next) => {
   try {
     const { employeeId, employeeName, department, joinDate, exitDate, workingDays,
       attendanceFreeze, freezeReason, leavesTaken, lopDays, salaryChangeDate,
@@ -284,7 +294,7 @@ router.put('/manual/:id', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), 
 });
 
 // DELETE /api/payroll/manual/:id
-router.delete('/manual/:id', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req: AuthRequest, res: Response, next) => {
+router.delete('/manual/:id', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), allowCharithaOrAdmin, async (req: AuthRequest, res: Response, next) => {
   try {
     await prisma.manualPayrollRecord.delete({
       where: { id: String(req.params.id) }
@@ -296,7 +306,7 @@ router.delete('/manual/:id', authorize('SUPER_ADMIN', 'HR_ADMIN'), async (req: A
 });
 
 // POST /api/payroll/manual/bulk
-router.post('/manual/bulk', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
+router.post('/manual/bulk', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), allowCharithaOrAdmin, async (req: AuthRequest, res: Response, next) => {
   try {
     const records = req.body;
     if (!Array.isArray(records)) {

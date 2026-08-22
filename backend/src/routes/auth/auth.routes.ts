@@ -111,14 +111,40 @@ router.get('/me', authenticate, async (req: AuthRequest, res: Response) => {
   res.json(req.user);
 });
 
-// GET /api/auth/session-status — Check if current session is still valid
-router.get('/session-status', authenticate, async (req: AuthRequest, res: Response, next) => {
+// GET /api/auth/session-status & /session-check — Lightweight session validity check
+const sessionStatusHandler = async (req: AuthRequest, res: Response, next: any) => {
   try {
     const status = await authService.checkSession(req.user!.id);
-    res.json(status);
+    res.json({ success: true, ...status });
   } catch (err) {
     next(err);
   }
+};
+
+router.get('/session-status', authenticate, sessionStatusHandler);
+router.get('/session-check', authenticate, sessionStatusHandler);
+
+// GET /api/auth/session-events — Live SSE connection for instantaneous single-device session invalidation
+router.get('/session-events', authenticate, async (req: AuthRequest, res: Response) => {
+  const token = req.cookies?.access_token || (req.headers.authorization?.startsWith('Bearer ') ? req.headers.authorization.split(' ')[1] : null);
+  let tokenTv = 0;
+  let tokenDeviceId = '';
+  if (token) {
+    try {
+      const jwt = (await import('jsonwebtoken')).default;
+      const decoded = jwt.decode(token) as any;
+      if (decoded) {
+        tokenTv = decoded.tv || 0;
+        tokenDeviceId = decoded.deviceId || '';
+      }
+    } catch {}
+  }
+
+  const { registerSessionClient } = await import('../../lib/sessionEvents');
+  const cleanup = registerSessionClient(req.user!.id, tokenDeviceId, tokenTv, res);
+
+  req.on('close', cleanup);
+  res.on('close', cleanup);
 });
 
 // GET /api/auth/csrf-token — CSRF protection token endpoint

@@ -7,6 +7,16 @@ const router = Router();
 router.use(authenticate);
 router.use(authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'));
 
+const allowAravindOrAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+  const user = req.user;
+  const isAravind = user?.email === 'aravind@adyapan.com' || user?.specialization === 'RESIGNATION_EXIT';
+  const isAdminOrManager = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN';
+  if (!isAravind && !isAdminOrManager) {
+    return res.status(403).json({ success: false, message: 'Forbidden: Only Aravind or HR Admin can modify Exit & Resignation records.' });
+  }
+  next();
+};
+
 // Helper for Database CRUD with ownership handling and proper error forwarding
 function crud(model: any) {
   return {
@@ -18,7 +28,7 @@ function crud(model: any) {
         next(e);
       }
     },
-    create: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    create: [allowAravindOrAdmin, async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         // Strip any dangerous fields from body
         const { id, _id, createdAt, updatedAt, ...safeBody } = req.body;
@@ -32,8 +42,8 @@ function crud(model: any) {
       } catch (e: any) {
         next(e);
       }
-    },
-    update: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    }],
+    update: [allowAravindOrAdmin, async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const id = String(req.params.id);
         const { id: _bodyId, _id, createdAt, updatedAt, createdByEmail, ...safeBody } = req.body;
@@ -48,8 +58,8 @@ function crud(model: any) {
         }
         next(e);
       }
-    },
-    remove: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    }],
+    remove: [allowAravindOrAdmin, async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const id = String(req.params.id);
         await model.delete({ where: { id } });
@@ -60,7 +70,7 @@ function crud(model: any) {
         }
         next(e);
       }
-    },
+    }],
   };
 }
 
@@ -94,8 +104,7 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
     const totalResignations = Math.max(
       resignationTrackers.length,
       resignationModel.length,
-      inactiveEmployees,
-      36
+      inactiveEmployees
     );
 
     return res.json({
@@ -106,10 +115,10 @@ router.get('/stats', async (req: AuthRequest, res: Response) => {
       resignationPending: Math.max(0, totalResignations - resignationTrackers.filter((r: any) => r.overall === 'Completed').length),
       abscondTotal: abscond.length,
       abscondPending: abscond.length,
-      exitTotal: exitClearance.length || Math.min(totalResignations, 36),
+      exitTotal: exitClearance.length,
       exitPending: exitClearance.filter((r: any) => r.overallClearance !== 'Completed').length,
-      fnfTotal: fnf.length || 2,
-      fnfPending: fnf.filter((r: any) => r.paymentStatus !== 'Processed' && r.paymentStatus !== 'COMPLETED').length || 2,
+      fnfTotal: fnf.length,
+      fnfPending: fnf.filter((r: any) => r.paymentStatus !== 'Processed' && r.paymentStatus !== 'COMPLETED').length,
       complaintsTotal: complaints.length,
       complaintsOpen: complaints.filter((r: any) => r.status === 'Open' || r.status === 'Under Investigation').length,
       interviewsTotal: exitInterview.length,

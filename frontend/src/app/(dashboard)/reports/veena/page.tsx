@@ -14,6 +14,7 @@ export default function VeenaReportPage() {
   const [filterDate, setFilterDate] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Pagination states
   const [pageRec, setPageRec] = useState(1);
@@ -24,6 +25,7 @@ export default function VeenaReportPage() {
 
   useEffect(() => {
     async function loadData() {
+      setLoading(true);
       try {
         const [recRes, onbRes, dropRes, dailyRes] = await Promise.allSettled([
           veenaApi.getRecruitment().catch(() => []),
@@ -53,6 +55,8 @@ export default function VeenaReportPage() {
         }
       } catch (err) {
         console.error('Failed to load Veena report data:', err);
+      } finally {
+        setLoading(false);
       }
     }
     loadData();
@@ -175,9 +179,16 @@ export default function VeenaReportPage() {
       {/* 1. Recruitment Tracker Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <UserPlus className="w-4 h-4 text-amber-600" /> Recruitment Tracker ({filteredRecruitment.length})
+          <UserPlus className="w-4 h-4 text-amber-600" /> Recruitment Tracker ({loading ? 'Loading...' : filteredRecruitment.length})
         </h2>
-        {filteredRecruitment.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No recruitment records found.</p> : (
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading recruitment records...</span>
+          </div>
+        ) : filteredRecruitment.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No recruitment records found.</p>
+        ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
@@ -219,9 +230,16 @@ export default function VeenaReportPage() {
       {/* 2. Onboarding Pipeline Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <Target className="w-4 h-4 text-blue-600" /> Onboarding Pipeline ({filteredOnboarding.length})
+          <Target className="w-4 h-4 text-blue-600" /> Onboarding Pipeline ({loading ? 'Loading...' : filteredOnboarding.length})
         </h2>
-        {filteredOnboarding.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No onboarding records found.</p> : (
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading onboarding records...</span>
+          </div>
+        ) : filteredOnboarding.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No onboarding records found.</p>
+        ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
@@ -263,9 +281,16 @@ export default function VeenaReportPage() {
       {/* 3. Dropout Tracker Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <UserX className="w-4 h-4 text-red-600" /> Dropout Records ({filteredDropouts.length})
+          <UserX className="w-4 h-4 text-red-600" /> Dropout Records ({loading ? 'Loading...' : filteredDropouts.length})
         </h2>
-        {filteredDropouts.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No dropout records found.</p> : (
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading dropout records...</span>
+          </div>
+        ) : filteredDropouts.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No dropout records found.</p>
+        ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
@@ -295,9 +320,16 @@ export default function VeenaReportPage() {
       {/* 4. Daily Reports Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <FileText className="w-4 h-4 text-amber-600" /> Daily Reports Submitted ({filteredDailyReports.length})
+          <FileText className="w-4 h-4 text-amber-600" /> Daily Reports Submitted ({loading ? 'Loading...' : filteredDailyReports.length})
         </h2>
-        {filteredDailyReports.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No daily reports submitted yet</p> : (
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-amber-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading daily reports...</span>
+          </div>
+        ) : filteredDailyReports.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No daily reports submitted yet</p>
+        ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">

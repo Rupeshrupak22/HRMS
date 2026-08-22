@@ -14,6 +14,7 @@ export default function NitishaReportPage() {
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [filterDate, setFilterDate] = useState('');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
+  const [loading, setLoading] = useState(true);
 
   // Pagination states
   const [pagePerf, setPagePerf] = useState(1);
@@ -24,29 +25,38 @@ export default function NitishaReportPage() {
   const PAGE_SIZE = 20;
 
   useEffect(() => {
-    nitishaApi.getPerformances().then(setPerformances).catch(() => {});
-    nitishaApi.getIssues().then(setIssues).catch(() => {});
-    nitishaApi.getDiscipline().then(setDiscipline).catch(() => {});
-    nitishaApi.getRelations().then(setRelations).catch(() => {});
-    
-    apiRequest('/reports/daily').then((res) => {
-      const arr = Array.isArray(res) ? res : [];
-      const filtered = arr.filter((r: any) => 
-        r.userEmail === 'nitisha@adyapan.com' || 
-        r.specialization === 'DISCIPLINE_POSH' || 
-        (r.employeeName || '').toLowerCase().includes('nitisha')
-      );
-      setDailyReports(filtered);
-    }).catch(() => {
-      nitishaApi.getDailyReports().then((res) => {
-        const arr = Array.isArray(res) ? res : [];
-        setDailyReports(arr.filter((r: any) => 
-          r.userEmail === 'nitisha@adyapan.com' || 
-          r.specialization === 'DISCIPLINE_POSH' || 
-          (r.employeeName || '').toLowerCase().includes('nitisha')
-        ));
-      }).catch(() => setDailyReports([]));
-    });
+    async function loadData() {
+      setLoading(true);
+      try {
+        const [perfRes, issRes, discRes, relRes, dailyRes] = await Promise.allSettled([
+          nitishaApi.getPerformances().catch(() => []),
+          nitishaApi.getIssues().catch(() => []),
+          nitishaApi.getDiscipline().catch(() => []),
+          nitishaApi.getRelations().catch(() => []),
+          apiRequest('/reports/daily').catch(() => nitishaApi.getDailyReports()),
+        ]);
+
+        if (perfRes.status === 'fulfilled' && Array.isArray(perfRes.value)) setPerformances(perfRes.value);
+        if (issRes.status === 'fulfilled' && Array.isArray(issRes.value)) setIssues(issRes.value);
+        if (discRes.status === 'fulfilled' && Array.isArray(discRes.value)) setDiscipline(discRes.value);
+        if (relRes.status === 'fulfilled' && Array.isArray(relRes.value)) setRelations(relRes.value);
+        if (dailyRes.status === 'fulfilled' && Array.isArray(dailyRes.value)) {
+          setDailyReports(
+            dailyRes.value.filter(
+              (r: any) =>
+                r.userEmail === 'nitisha@adyapan.com' ||
+                r.specialization === 'DISCIPLINE_POSH' ||
+                (r.employeeName || '').toLowerCase().includes('nitisha')
+            )
+          );
+        }
+      } catch (err) {
+        console.error('Failed to load Nitisha report data:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    loadData();
   }, []);
 
   const filterByDate = (records: any[]) => {
@@ -118,9 +128,16 @@ export default function NitishaReportPage() {
       {/* Performance & PIP Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <TrendingUp className="w-4 h-4 text-purple-600" /> Performance & PIP Records ({filteredPerformances.length})
+          <TrendingUp className="w-4 h-4 text-purple-600" /> Performance & PIP Records ({loading ? 'Loading...' : filteredPerformances.length})
         </h2>
-        {filteredPerformances.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No performance records found.</p> : (
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading performance records...</span>
+          </div>
+        ) : filteredPerformances.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No performance records found.</p>
+        ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
@@ -163,9 +180,16 @@ export default function NitishaReportPage() {
       {/* Employee Issues Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <AlertCircle className="w-4 h-4 text-orange-600" /> Employee Issues & Explanations ({filteredIssues.length})
+          <AlertCircle className="w-4 h-4 text-orange-600" /> Employee Issues & Explanations ({loading ? 'Loading...' : filteredIssues.length})
         </h2>
-        {filteredIssues.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No employee issues recorded.</p> : (
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading employee issues...</span>
+          </div>
+        ) : filteredIssues.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No employee issues recorded.</p>
+        ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">
@@ -205,9 +229,16 @@ export default function NitishaReportPage() {
       {/* Discipline Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <ShieldAlert className="w-4 h-4 text-red-600" /> Discipline & POSH Cases ({filteredDiscipline.length})
+          <ShieldAlert className="w-4 h-4 text-red-600" /> Discipline & POSH Cases ({loading ? 'Loading...' : filteredDiscipline.length})
         </h2>
-        {filteredDiscipline.length === 0 ? <p className="text-xs text-slate-400 py-4 text-center">No discipline cases found.</p> : (
+        {loading ? (
+          <div className="py-8 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading discipline cases...</span>
+          </div>
+        ) : filteredDiscipline.length === 0 ? (
+          <p className="text-xs text-slate-400 py-4 text-center">No discipline cases found.</p>
+        ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-xs text-left">

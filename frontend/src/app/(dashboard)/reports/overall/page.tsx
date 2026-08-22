@@ -76,7 +76,24 @@ export default function OverallReportPage() {
     );
   }
 
-  if (loading) return <div className="p-10 text-center text-slate-400 text-sm">Loading overall report...</div>;
+  if (loading) {
+    return (
+      <div className="space-y-6 max-w-[1400px] mx-auto animate-pulse font-sans">
+        <div className="bg-slate-200/80 rounded-3xl p-6 sm:p-8 h-32 flex flex-col justify-between" />
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="bg-white p-5 rounded-2xl border border-slate-100 h-24" />
+          ))}
+        </div>
+        <div className="bg-white p-6 rounded-3xl border border-slate-100 h-64 flex items-center justify-center text-xs text-slate-400 font-medium">
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading overall specialist reports from database...</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // Filter array elements by date
   // Filter array elements by date safely

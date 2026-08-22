@@ -43,7 +43,7 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
       const errorMessage = err.message || 'API request failed';
 
       // Detect force-logout only when another device logs in (explicit FORCE_LOGOUT)
-      if (res.status === 401 && (errorMessage === 'FORCE_LOGOUT' || errorMessage.includes('FORCE_LOGOUT'))) {
+      if (res.status === 401 && (errorMessage === 'FORCE_LOGOUT' || errorMessage.includes('FORCE_LOGOUT') || err.forceLogout || err.code === 'FORCE_LOGOUT')) {
         if (typeof window !== 'undefined') {
           window.dispatchEvent(new CustomEvent('auth:force-logout', {
             detail: {
@@ -51,10 +51,18 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
             },
           }));
         }
-        throw new Error('FORCE_LOGOUT');
+        const error = new Error('FORCE_LOGOUT');
+        (error as any).code = 'FORCE_LOGOUT';
+        (error as any).forceLogout = true;
+        throw error;
       }
 
-      throw new Error(errorMessage);
+      const error = new Error(errorMessage);
+      (error as any).code = err.code;
+      (error as any).remainingAttempts = err.remainingAttempts;
+      (error as any).lockoutMinutes = err.lockoutMinutes;
+      (error as any).status = res.status;
+      throw error;
     }
 
     const result = await res.json();

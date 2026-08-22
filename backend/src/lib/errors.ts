@@ -39,3 +39,32 @@ export class ConflictError extends AppError {
     super(message, 409);
   }
 }
+
+export interface AuthErrorOptions {
+  code?: string;
+  remainingAttempts?: number;
+  lockoutMinutes?: number;
+  forceLogout?: boolean;
+}
+
+export class AuthError extends AppError {
+  public readonly code?: string;
+  public readonly remainingAttempts?: number;
+  public readonly lockoutMinutes?: number;
+  public readonly forceLogout?: boolean;
+
+  constructor(message: string, statusCode = 401, options: AuthErrorOptions = {}) {
+    super(message, statusCode);
+    this.code = options.code;
+    this.remainingAttempts = options.remainingAttempts;
+    this.lockoutMinutes = options.lockoutMinutes;
+    this.forceLogout = options.forceLogout;
+    Object.setPrototypeOf(this, AuthError.prototype);
+  }
+}
+
+export class ServiceUnavailableError extends AppError {
+  constructor(message = 'Service temporarily unavailable') {
+    super(message, 503);
+  }
+}

@@ -67,6 +67,16 @@ function qualifiesForOnboarding(statusRaw: string = ''): boolean {
   return validStatuses.includes(status);
 }
 
+const allowVeenaOrAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+  const user = req.user;
+  const isVeena = user?.email === 'veena@adyapan.com' || user?.specialization === 'ONBOARDING_HIRING';
+  const isAdminOrManager = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN';
+  if (!isVeena && !isAdminOrManager) {
+    return res.status(403).json({ success: false, message: 'Forbidden: Only Veena or HR Admin can modify Recruitment & Onboarding records.' });
+  }
+  next();
+};
+
 // Helper for pure Database CRUD
 function crud(model: any) {
   return {
@@ -78,7 +88,7 @@ function crud(model: any) {
         next(e);
       }
     },
-    create: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    create: [allowVeenaOrAdmin, async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const dbCreated = await model.create({
           data: {
@@ -90,8 +100,8 @@ function crud(model: any) {
       } catch (e: any) {
         next(e);
       }
-    },
-    update: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    }],
+    update: [allowVeenaOrAdmin, async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const id = String(req.params.id);
         const updated = await model.update({
@@ -105,8 +115,8 @@ function crud(model: any) {
         }
         next(e);
       }
-    },
-    remove: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    }],
+    remove: [allowVeenaOrAdmin, async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const id = String(req.params.id);
         await model.delete({ where: { id } });
@@ -117,7 +127,7 @@ function crud(model: any) {
         }
         next(e);
       }
-    },
+    }],
   };
 }
 

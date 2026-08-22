@@ -17,9 +17,13 @@ export function errorHandler(err: Error, _req: Request, res: Response, _next: Ne
 
   // Known operational errors
   if (err instanceof AppError) {
+    const authErr = err as any;
     res.status(err.statusCode).json({
       message: err.message,
-      forceLogout: err.message === 'FORCE_LOGOUT' || err.message.includes('FORCE_LOGOUT'),
+      code: authErr.code,
+      remainingAttempts: authErr.remainingAttempts,
+      lockoutMinutes: authErr.lockoutMinutes,
+      forceLogout: authErr.forceLogout ?? (err.message === 'FORCE_LOGOUT' || err.message.includes('FORCE_LOGOUT')),
     });
     return;
   }

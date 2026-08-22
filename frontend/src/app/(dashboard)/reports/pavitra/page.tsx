@@ -31,7 +31,7 @@ export default function PavitraReportPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedDepartment, setSelectedDepartment] = useState('ALL');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Employee Master directory filters
   const [empStatusFilter, setEmpStatusFilter] = useState<'ALL' | 'ACTIVE' | 'INACTIVE'>('ALL');
@@ -626,13 +626,13 @@ export default function PavitraReportPage() {
         </div>
       )}
 
-      {/* 1. Employee Master Roster Section */}
+      {/* 1. Employee Master Directory Section */}
       <section className="space-y-4 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-3">
           <div className="flex items-center gap-2">
             <Users className="w-4 h-4 text-blue-600" />
             <h2 className="text-sm font-black text-slate-900">
-              Employee Master Directory ({filteredEmployees.length})
+              Employee Master Directory ({loading ? 'Loading...' : filteredEmployees.length})
             </h2>
           </div>
 
@@ -718,7 +718,12 @@ export default function PavitraReportPage() {
           </div>
         </div>
 
-        {filteredEmployees.length === 0 ? (
+        {loading ? (
+          <div className="py-12 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading employee directory records...</span>
+          </div>
+        ) : filteredEmployees.length === 0 ? (
           <p className="text-xs text-slate-400 py-8 text-center">No employee records match the selected filter criteria.</p>
         ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
@@ -777,7 +782,7 @@ export default function PavitraReportPage() {
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-emerald-600" />
             <h2 className="text-sm font-black text-slate-900">
-              Attendance Records — Monthly Grid ({filteredGroupedAttendance.length} employees)
+              Attendance Records — Monthly Grid ({loading ? 'Loading...' : `${filteredGroupedAttendance.length} employees`})
             </h2>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -813,7 +818,12 @@ export default function PavitraReportPage() {
           </div>
         </div>
 
-        {filteredGroupedAttendance.length === 0 ? (
+        {loading ? (
+          <div className="py-12 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading attendance records...</span>
+          </div>
+        ) : filteredGroupedAttendance.length === 0 ? (
           <p className="text-xs text-slate-400 py-8 text-center">No attendance records found for the selected criteria.</p>
         ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
@@ -906,9 +916,14 @@ export default function PavitraReportPage() {
       {/* 3. Leave Applications Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <Calendar className="w-4 h-4 text-purple-600" /> Leave Applications ({filteredLeaves.length})
+          <Calendar className="w-4 h-4 text-purple-600" /> Leave Applications ({loading ? 'Loading...' : filteredLeaves.length})
         </h2>
-        {filteredLeaves.length === 0 ? (
+        {loading ? (
+          <div className="py-12 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading leave application records...</span>
+          </div>
+        ) : filteredLeaves.length === 0 ? (
           <p className="text-xs text-slate-400 py-4 text-center">No leave applications found for this date.</p>
         ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">
@@ -959,9 +974,14 @@ export default function PavitraReportPage() {
       {/* 4. Daily Reports Section */}
       <section className="space-y-3 bg-white p-5 rounded-3xl border border-slate-200 shadow-xs">
         <h2 className="text-sm font-black text-slate-900 flex items-center gap-2 border-b border-slate-100 pb-3">
-          <FileText className="w-4 h-4 text-indigo-600" /> Daily Reports Submitted ({filteredDailyReports.length})
+          <FileText className="w-4 h-4 text-indigo-600" /> Daily Reports Submitted ({loading ? 'Loading...' : filteredDailyReports.length})
         </h2>
-        {filteredDailyReports.length === 0 ? (
+        {loading ? (
+          <div className="py-12 text-center text-xs text-slate-400 font-medium flex items-center justify-center gap-2">
+            <div className="w-4 h-4 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+            <span>Loading daily work reports...</span>
+          </div>
+        ) : filteredDailyReports.length === 0 ? (
           <p className="text-xs text-slate-400 py-4 text-center">No daily reports submitted yet.</p>
         ) : (
           <div className="rounded-2xl border border-slate-200 overflow-hidden">

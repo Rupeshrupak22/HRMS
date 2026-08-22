@@ -572,25 +572,45 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
       prisma.dailyReport.count(),
     ]);
 
-    // Live Attendance calculation (Direct from today's logs or Pavitra's daily report)
+    // Live Attendance calculation (Direct from today's logs or Pavitra's daily report for TODAY)
+    const todayStr = new Date().toISOString().split('T')[0];
+    const localTodayStr = new Date().toLocaleDateString('en-CA');
+    let attendanceMarkedToday = todayAttendance.length > 0;
     let todayPresent = todayAttendance.filter((a: any) => a.status === 'PRESENT' || a.status === 'LATE' || a.status === 'P').length;
     let todayLate = todayAttendance.filter((a: any) => a.status === 'LATE' || a.status === 'LL').length;
     let todayHalfDay = todayAttendance.filter((a: any) => a.status === 'HALF_DAY' || a.status === 'HD').length;
-    let todayAbsent = Math.max(0, activeEmployees - todayPresent - todayHalfDay);
+    let todayAbsent = attendanceMarkedToday ? Math.max(0, activeEmployees - todayPresent - todayHalfDay) : 0;
 
     const latestPav = pavitraReportsList.length > 0 ? pavitraReportsList[0] : null;
     if (latestPav && todayAttendance.length === 0) {
-      const text = `${latestPav.keyUpdates || ''} ${latestPav.comment || ''} ${latestPav.issue || ''} ${(latestPav as any).tasksCompleted || ''}`;
-      const presMatch = text.match(/Present:\s*(\d+)/i);
-      const absMatch = text.match(/Absent:\s*(\d+)/i);
-      const lateMatch = text.match(/Late:\s*(\d+)/i);
+      const pavDate = latestPav.date || (latestPav.createdAt ? latestPav.createdAt.toISOString().split('T')[0] : '');
+      const isToday = pavDate === todayStr || pavDate === localTodayStr || (latestPav.createdAt && new Date(latestPav.createdAt).toDateString() === new Date().toDateString());
+      if (isToday) {
+        const text = `${latestPav.keyUpdates || ''} ${latestPav.comment || ''} ${latestPav.issue || ''} ${(latestPav as any).tasksCompleted || ''}`;
+        const presMatch = text.match(/Present:\s*(\d+)/i);
+        const absMatch = text.match(/Absent:\s*(\d+)/i);
+        const lateMatch = text.match(/Late:\s*(\d+)/i);
 
-      if (presMatch) todayPresent = parseInt(presMatch[1], 10);
-      if (absMatch) todayAbsent = parseInt(absMatch[1], 10);
-      if (lateMatch) todayLate = parseInt(lateMatch[1], 10);
+        if (presMatch) {
+          todayPresent = parseInt(presMatch[1], 10);
+          attendanceMarkedToday = true;
+        }
+        if (absMatch) todayAbsent = parseInt(absMatch[1], 10);
+        if (lateMatch) todayLate = parseInt(lateMatch[1], 10);
+      } else {
+        todayPresent = 0;
+        todayAbsent = 0;
+        todayLate = 0;
+        attendanceMarkedToday = false;
+      }
+    } else if (todayAttendance.length === 0) {
+      todayPresent = 0;
+      todayAbsent = 0;
+      todayLate = 0;
+      attendanceMarkedToday = false;
     }
 
-    const attendanceRate = activeEmployees > 0 ? Math.min(100, Math.round(((todayPresent + (todayHalfDay * 0.5)) / activeEmployees) * 100)) : 0;
+    const attendanceRate = attendanceMarkedToday && activeEmployees > 0 ? Math.min(100, Math.round(((todayPresent + (todayHalfDay * 0.5)) / activeEmployees) * 100)) : 0;
 
     // Helper to safely parse any currency or number string
     const parseCleanNum = (val: any) => {
@@ -625,8 +645,7 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
       resignationTrackers,
       resignationModelCount,
       exitClearancesCount,
-      inactiveDbEmployees,
-      36
+      inactiveDbEmployees
     );
 
     res.json({
@@ -638,6 +657,7 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
       todayLate,
       todayAbsent,
       todayHalfDay,
+      attendanceMarkedToday,
       pendingLeaves,
       approvedLeavesToday,
       attendanceRate,
@@ -654,6 +674,7 @@ router.get('/dashboard-metrics', async (req: AuthRequest, res: Response, next) =
           present: todayPresent,
           absent: todayAbsent,
           late: todayLate,
+          attendanceMarkedToday,
         },
         charitha: {
           totalRecords: payrollTotalEmployees,

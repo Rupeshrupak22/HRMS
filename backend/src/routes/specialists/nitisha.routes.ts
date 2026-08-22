@@ -7,6 +7,16 @@ const router = Router();
 router.use(authenticate);
 router.use(authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'));
 
+const allowNitishaOrAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+  const user = req.user;
+  const isNitisha = user?.email === 'nitisha@adyapan.com' || user?.specialization === 'DISCIPLINE_POSH';
+  const isAdminOrManager = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN';
+  if (!isNitisha && !isAdminOrManager) {
+    return res.status(403).json({ success: false, message: 'Forbidden: Only Nitisha or HR Admin can modify Discipline & Performance records.' });
+  }
+  next();
+};
+
 // Helper for Database CRUD with ownership handling and proper error forwarding
 function crud(model: any) {
   return {
@@ -26,7 +36,7 @@ function crud(model: any) {
         next(e);
       }
     },
-    create: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    create: [allowNitishaOrAdmin, async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const { id, _id, _isPlaceholder, createdAt, updatedAt, ...rest } = req.body;
         if (rest.dailyData && typeof rest.dailyData === 'object') {
@@ -45,8 +55,8 @@ function crud(model: any) {
       } catch (e: any) {
         next(e);
       }
-    },
-    update: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    }],
+    update: [allowNitishaOrAdmin, async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const id = String(req.params.id);
         const { id: bodyId, _id, _isPlaceholder, createdAt, updatedAt, ...rest } = req.body;
@@ -92,8 +102,8 @@ function crud(model: any) {
         }
         next(e);
       }
-    },
-    remove: async (req: AuthRequest, res: Response, next: NextFunction) => {
+    }],
+    remove: [allowNitishaOrAdmin, async (req: AuthRequest, res: Response, next: NextFunction) => {
       try {
         const id = String(req.params.id);
         await model.delete({ where: { id } });
@@ -104,7 +114,7 @@ function crud(model: any) {
         }
         next(e);
       }
-    },
+    }],
   };
 }
 
@@ -171,7 +181,7 @@ router.get('/performance', async (req: AuthRequest, res: Response, next: NextFun
   }
 });
 
-router.post('/performance', async (req: AuthRequest, res: Response, next: NextFunction) => {
+router.post('/performance', allowNitishaOrAdmin, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const sanitized = sanitizePerformanceData(req.body);
     const { performanceMonth, ...sanitizedData } = sanitized as any;

@@ -35,9 +35,12 @@ export default function LoginPage() {
     }
   }, []);
 
+  const [errorDetails, setErrorDetails] = useState<{ code?: string; remainingAttempts?: number; lockoutMinutes?: number } | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+    setErrorDetails(null);
     try {
       await login(identifier, password);
       router.push('/dashboard');
@@ -45,6 +48,13 @@ export default function LoginPage() {
       const msg = err.message || 'Authentication failed. Please check your credentials.';
       if (msg === 'FORCE_LOGOUT') return; // handled by context
       setError(msg);
+      if (err.remainingAttempts !== undefined || err.lockoutMinutes !== undefined || err.code) {
+        setErrorDetails({
+          code: err.code,
+          remainingAttempts: err.remainingAttempts,
+          lockoutMinutes: err.lockoutMinutes,
+        });
+      }
     }
   };
 
@@ -96,7 +106,13 @@ export default function LoginPage() {
 
             {/* Error Message */}
             {error && (
-              <div className="w-full mb-3 p-2 rounded-lg bg-red-50 border border-red-200 text-[10px] text-red-600 text-center font-medium">
+              <div className={`w-full mb-3 p-2.5 rounded-lg border text-[11px] text-center font-medium ${
+                errorDetails?.code === 'ACCOUNT_LOCKED'
+                  ? 'bg-rose-50 border-rose-200 text-rose-700'
+                  : errorDetails?.remainingAttempts !== undefined && errorDetails.remainingAttempts <= 2
+                  ? 'bg-amber-50 border-amber-300 text-amber-800 font-semibold'
+                  : 'bg-red-50 border-red-200 text-red-600'
+              }`}>
                 {error}
               </div>
             )}

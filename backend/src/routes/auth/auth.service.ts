@@ -2,7 +2,7 @@ import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
 import prisma from '../../lib/prisma';
 import { env } from '../../lib/env';
-import { UnauthorizedError } from '../../lib/errors';
+import { UnauthorizedError, AuthError } from '../../lib/errors';
 import { logAudit } from '../../lib/audit';
 import { LoginDto, RefreshTokenDto } from './auth.schema';
 import { JwtPayload } from '../../types';
@@ -45,9 +45,13 @@ export async function login(dto: LoginDto) {
         data: { isLocked: false, failedAttempts: 0 },
       });
     } else {
-      const remainingMins = Math.ceil((lockDuration - (Date.now() - lastAttemptTime)) / 60000);
+      const remainingMins = Math.max(1, Math.ceil((lockDuration - (Date.now() - lastAttemptTime)) / 60000));
       logAudit({ action: 'LOGIN_FAILED', userId: user.id, userEmail: user.email, metadata: { reason: 'account_locked' } });
-      throw new UnauthorizedError(`Account locked due to too many failed attempts. Try again in ${remainingMins} minutes.`);
+      throw new AuthError(`Account locked due to too many failed attempts. Try again in ${remainingMins} minutes.`, 401, {
+        code: 'ACCOUNT_LOCKED',
+        lockoutMinutes: remainingMins,
+        remainingAttempts: 0,
+      });
     }
   }
 
@@ -55,6 +59,7 @@ export async function login(dto: LoginDto) {
   if (!isPasswordValid) {
     const updatedAttempts = user.failedAttempts + 1;
     const isNowLocked = updatedAttempts >= 5;
+    const remaining = Math.max(0, 5 - updatedAttempts);
     await prisma.user.update({
       where: { id: user.id },
       data: {
@@ -70,9 +75,16 @@ export async function login(dto: LoginDto) {
       metadata: { failedAttempts: updatedAttempts, locked: isNowLocked },
     });
     if (isNowLocked) {
-      throw new UnauthorizedError('Account locked after 5 failed attempts. Try again after 15 minutes.');
+      throw new AuthError('Account locked after 5 failed attempts. Try again after 15 minutes.', 401, {
+        code: 'ACCOUNT_LOCKED',
+        lockoutMinutes: 15,
+        remainingAttempts: 0,
+      });
     }
-    throw new UnauthorizedError('Invalid credentials');
+    throw new AuthError(`Invalid credentials. ${remaining} attempt${remaining === 1 ? '' : 's'} remaining before lockout.`, 401, {
+      code: 'INVALID_CREDENTIALS',
+      remainingAttempts: remaining,
+    });
   }
 
   // Generate a unique session ID & device ID — invalidates all previous device sessions
@@ -97,6 +109,10 @@ export async function login(dto: LoginDto) {
   const { invalidateUserCache } = await import('../../middleware/auth');
   invalidateUserCache(user.id);
   invalidateUserCache(user.email);
+
+  // Instantly notify and revoke all other connected devices for this user via SSE
+  const { notifyOtherDevicesOfNewLogin } = await import('../../lib/sessionEvents');
+  notifyOtherDevicesOfNewLogin(user.id, incomingDeviceId, newTokenVersion);
 
   logAudit({ action: 'LOGIN_SUCCESS', userId: user.id, userEmail: user.email });
 
@@ -185,22 +201,35 @@ async function updateRefreshToken(userId: string, token: string) {
   });
 }
 
-export async function checkSession(userId: string) {
+export async function checkSession(userId: string, clientDeviceId?: string, clientTv?: number) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true, refreshToken: true, lastLoginAt: true, isLocked: true },
+    select: { id: true, refreshToken: true, lastLoginAt: true, isLocked: true, activeDeviceId: true, tokenVersion: true },
   });
 
   if (!user) {
-    throw new UnauthorizedError('User not found');
+    throw new AuthError('User not found', 401, { code: 'USER_NOT_FOUND', forceLogout: true });
   }
 
   if (user.isLocked) {
-    throw new UnauthorizedError('Account is locked');
+    throw new AuthError('Account is locked', 401, { code: 'ACCOUNT_LOCKED', forceLogout: true });
+  }
+
+  if (!user.refreshToken) {
+    throw new AuthError('FORCE_LOGOUT', 401, { code: 'FORCE_LOGOUT', forceLogout: true });
+  }
+
+  if (clientTv !== undefined && user.tokenVersion !== undefined && clientTv < user.tokenVersion) {
+    throw new AuthError('FORCE_LOGOUT', 401, { code: 'FORCE_LOGOUT', forceLogout: true });
+  }
+
+  if (clientDeviceId && user.activeDeviceId && clientDeviceId !== user.activeDeviceId) {
+    throw new AuthError('FORCE_LOGOUT', 401, { code: 'FORCE_LOGOUT', forceLogout: true });
   }
 
   return {
-    valid: Boolean(user.refreshToken),
+    valid: true,
+    activeDeviceId: user.activeDeviceId,
     lastLoginAt: user.lastLoginAt,
   };
 }

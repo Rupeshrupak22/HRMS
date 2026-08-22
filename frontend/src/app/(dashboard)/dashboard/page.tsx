@@ -19,6 +19,7 @@ import {
   TrendingUp,
   CheckCircle2,
   FileText,
+  Clock,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -50,6 +51,7 @@ interface DashboardMetrics {
   todayLate: number;
   todayAbsent: number;
   todayHalfDay: number;
+  attendanceMarkedToday?: boolean;
   pendingLeaves: number;
   approvedLeavesToday: number;
   attendanceRate: number;
@@ -74,6 +76,7 @@ interface DashboardMetrics {
       present: number;
       absent: number;
       late: number;
+      attendanceMarkedToday?: boolean;
     };
     charitha?: {
       totalRecords: number;
@@ -383,13 +386,7 @@ export default function DashboardPage() {
     return <NandiniDashboard />;
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-[400px]">
-        <div className="w-9 h-9 border-4 border-orange-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+
 
   const m: DashboardMetrics = metrics || {
     totalEmployees: 0,
@@ -459,6 +456,12 @@ export default function DashboardPage() {
             <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/20 backdrop-blur-md text-[11px] font-bold text-white border border-white/20">
               <Sparkles className="w-3.5 h-3.5" />
               <span>Executive Command Matrix</span>
+              {loading && (
+                <span className="inline-flex items-center gap-1.5 ml-2 px-2.5 py-0.5 rounded-full bg-black/30 text-[10px] font-bold text-orange-200 border border-white/30 animate-pulse">
+                  <div className="w-2.5 h-2.5 border-2 border-orange-300 border-t-transparent rounded-full animate-spin" />
+                  <span>Processing & Loading Data...</span>
+                </span>
+              )}
             </div>
             <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-white">
               {greeting}, {user?.firstName || 'Admin'}
@@ -473,27 +476,38 @@ export default function DashboardPage() {
             <div className="bg-white/15 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 min-w-[135px]">
               <p className="text-[10px] uppercase font-bold text-orange-100">Workforce Master</p>
               <div className="flex items-baseline gap-1.5 mt-0.5">
-                <span className="text-2xl font-black text-white">{m.totalEmployees}</span>
-                <span className="text-[10px] text-white/90 font-bold">({m.activeEmployees} Active)</span>
+                <span className="text-2xl font-black text-white">{loading ? '...' : m.totalEmployees}</span>
+                <span className="text-[10px] text-white/90 font-bold">({loading ? '...' : m.activeEmployees} Active)</span>
               </div>
-              <p className="text-[9px] text-orange-200 mt-0.5">{m.inactiveEmployees} Inactive</p>
+              <p className="text-[9px] text-orange-200 mt-0.5">{loading ? '...' : `${m.inactiveEmployees} Inactive`}</p>
             </div>
 
             <div className="bg-white/15 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 min-w-[135px]">
               <p className="text-[10px] uppercase font-bold text-orange-100">Today&apos;s Attendance</p>
-              <div className="flex items-baseline gap-1.5 mt-0.5">
-                <span className="text-2xl font-black text-white">{m.todayPresent}</span>
-                <span className="text-[10px] text-emerald-200 font-bold">Present</span>
-              </div>
-              <p className="text-[9px] text-orange-200 mt-0.5">{m.todayAbsent} Absent Today</p>
+              {loading ? (
+                <span className="text-2xl font-black text-white">...</span>
+              ) : m.attendanceMarkedToday ? (
+                <>
+                  <div className="flex items-baseline gap-1.5 mt-0.5">
+                    <span className="text-2xl font-black text-white">{m.todayPresent}</span>
+                    <span className="text-[10px] text-emerald-200 font-bold">Present</span>
+                  </div>
+                  <p className="text-[9px] text-orange-200 mt-0.5">{m.todayAbsent} Absent Today</p>
+                </>
+              ) : (
+                <div className="mt-1">
+                  <p className="text-xs font-black text-amber-200">Not Marked Today</p>
+                  <p className="text-[9px] text-orange-100/80 mt-0.5">Daily Log Pending</p>
+                </div>
+              )}
             </div>
 
             <div className="bg-white/15 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 min-w-[135px]">
               <p className="text-[10px] uppercase font-bold text-orange-100">Monthly Payroll</p>
               <div className="flex items-baseline gap-1 mt-0.5">
-                <span className="text-xl font-black text-white">{formatCurrency(m.payroll.totalGross || m.totalPayrollCtc)}</span>
+                <span className="text-xl font-black text-white">{loading ? '...' : formatCurrency(m.payroll.totalGross || m.totalPayrollCtc)}</span>
               </div>
-              <p className="text-[9px] text-orange-200 mt-0.5">{m.payroll.totalRecords} Active Records</p>
+              <p className="text-[9px] text-orange-200 mt-0.5">{loading ? '...' : `${m.payroll.totalRecords} Active Records`}</p>
             </div>
           </div>
         </div>
@@ -506,13 +520,13 @@ export default function DashboardPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Employee Master</p>
-              <p className="text-3xl font-black text-slate-900 mt-1">{m.totalEmployees}</p>
+              <p className="text-3xl font-black text-slate-900 mt-1">{loading ? '...' : m.totalEmployees}</p>
               <div className="flex items-center gap-2 mt-2">
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                  {m.activeEmployees} Active
+                  {loading ? '...' : `${m.activeEmployees} Active`}
                 </span>
                 <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600">
-                  {m.inactiveEmployees} Inactive
+                  {loading ? '...' : `${m.inactiveEmployees} Inactive`}
                 </span>
               </div>
             </div>
@@ -527,15 +541,26 @@ export default function DashboardPage() {
           <div className="flex justify-between items-start">
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Present Today</p>
-              <p className="text-3xl font-black text-emerald-600 mt-1">{m.todayPresent}</p>
-              <div className="flex items-center gap-2 mt-2">
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                  {m.todayPresent} Present
-                </span>
-                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
-                  {m.todayAbsent} Absent
-                </span>
-              </div>
+              {loading ? (
+                <p className="text-3xl font-black text-slate-400 mt-1">...</p>
+              ) : m.attendanceMarkedToday ? (
+                <>
+                  <p className="text-3xl font-black text-emerald-600 mt-1">{m.todayPresent}</p>
+                  <div className="flex items-center gap-2 mt-2">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                      {m.todayPresent} Present
+                    </span>
+                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
+                      {m.todayAbsent} Absent
+                    </span>
+                  </div>
+                </>
+              ) : (
+                <div className="mt-2">
+                  <p className="text-sm font-black text-amber-600">Attendance not marked today</p>
+                  <p className="text-[10px] text-slate-400 mt-1">Pending from Attendance Specialist</p>
+                </div>
+              )}
             </div>
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
               <UserCheck className="w-6 h-6" />
@@ -549,10 +574,10 @@ export default function DashboardPage() {
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Monthly Payroll CTC</p>
               <p className="text-3xl font-black text-emerald-600 mt-1 truncate">
-                {formatCurrency(m.payroll.totalGross || m.totalPayrollCtc)}
+                {loading ? '...' : formatCurrency(m.payroll.totalGross || m.totalPayrollCtc)}
               </p>
               <p className="text-[11px] text-slate-500 font-medium mt-2">
-                <span className="font-bold text-emerald-700">{m.payroll.totalRecords} Records</span> · Uploaded Sheet
+                <span className="font-bold text-emerald-700">{loading ? '...' : `${m.payroll.totalRecords} Records`}</span> · Uploaded Sheet
               </p>
             </div>
             <div className="w-12 h-12 rounded-2xl bg-emerald-50 flex items-center justify-center text-emerald-600">
@@ -567,7 +592,7 @@ export default function DashboardPage() {
             <div>
               <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">POSH & Discipline</p>
               <p className="text-3xl font-black text-indigo-600 mt-1">
-                {m.specialists?.nitisha?.activeComplaints ?? 0}
+                {loading ? '...' : (m.specialists?.nitisha?.activeComplaints ?? 0)}
               </p>
               <p className="text-[11px] text-slate-500 font-medium mt-2">
                 <span className="font-bold text-indigo-700">0 Open Complaints</span> · 100% Clean
@@ -616,29 +641,47 @@ export default function DashboardPage() {
                 </span>
               </div>
 
-              <div className="grid grid-cols-2 gap-2 pt-3 pb-2 text-center">
-                <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-100">
-                  <p className="text-[9px] font-bold text-emerald-700 uppercase">Present Today</p>
-                  <p className="text-base font-black text-emerald-800 mt-0.5">{m.specialists?.pavitra?.present ?? m.todayPresent}</p>
+              {loading ? (
+                <div className="grid grid-cols-2 gap-2 pt-3 pb-2 text-center">
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    <p className="text-[9px] font-bold text-slate-500 uppercase">Present Today</p>
+                    <p className="text-base font-black text-slate-400 mt-0.5">...</p>
+                  </div>
+                  <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    <p className="text-[9px] font-bold text-slate-500 uppercase">Absent Today</p>
+                    <p className="text-base font-black text-slate-400 mt-0.5">...</p>
+                  </div>
                 </div>
-                <div className="bg-red-50 p-2.5 rounded-xl border border-red-100">
-                  <p className="text-[9px] font-bold text-red-700 uppercase">Absent Today</p>
-                  <p className="text-base font-black text-red-800 mt-0.5">{m.specialists?.pavitra?.absent ?? m.todayAbsent}</p>
+              ) : (m.specialists?.pavitra?.attendanceMarkedToday ?? m.attendanceMarkedToday) ? (
+                <div className="grid grid-cols-2 gap-2 pt-3 pb-2 text-center">
+                  <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-100">
+                    <p className="text-[9px] font-bold text-emerald-700 uppercase">Present Today</p>
+                    <p className="text-base font-black text-emerald-800 mt-0.5">{m.specialists?.pavitra?.present ?? m.todayPresent}</p>
+                  </div>
+                  <div className="bg-red-50 p-2.5 rounded-xl border border-red-100">
+                    <p className="text-[9px] font-bold text-red-700 uppercase">Absent Today</p>
+                    <p className="text-base font-black text-red-800 mt-0.5">{m.specialists?.pavitra?.absent ?? m.todayAbsent}</p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="my-3 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-center">
+                  <p className="text-xs font-black text-amber-800">Attendance not marked today</p>
+                  <p className="text-[10px] text-amber-600 mt-0.5">Daily attendance sheet pending</p>
+                </div>
+              )}
 
               <div className="space-y-1.5 text-xs text-slate-600 pt-1 pb-3">
                 <div className="flex justify-between py-1 border-b border-slate-50">
                   <span className="text-[11px] text-slate-500">Employee Master</span>
-                  <span className="font-bold text-slate-800">{m.totalEmployees} Total ({m.activeEmployees} Active)</span>
+                  <span className="font-bold text-slate-800">{loading ? '...' : `${m.totalEmployees} Total (${m.activeEmployees} Active)`}</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-50">
                   <span className="text-[11px] text-slate-500">Late Arrivals</span>
-                  <span className="font-bold text-amber-700">{m.specialists?.pavitra?.late ?? m.todayLate} Logged</span>
+                  <span className="font-bold text-amber-700">{loading ? '...' : `${m.specialists?.pavitra?.late ?? m.todayLate} Logged`}</span>
                 </div>
                 <div className="flex justify-between py-1">
                   <span className="text-[11px] text-slate-500">Pending Leave Requests</span>
-                  <span className="font-bold text-purple-700">{m.pendingLeaves} Requests</span>
+                  <span className="font-bold text-purple-700">{loading ? '...' : `${m.pendingLeaves} Requests`}</span>
                 </div>
               </div>
             </div>
@@ -793,7 +836,7 @@ export default function DashboardPage() {
                 <div className="bg-rose-50 p-2.5 rounded-xl border border-rose-100">
                   <p className="text-[9px] font-bold text-rose-700 uppercase">Resignations Tracked</p>
                   <p className="text-base font-black text-rose-900 mt-0.5">
-                    {m.specialists?.aravind?.resignationTrackers ?? 36}
+                    {m.specialists?.aravind?.resignationTrackers ?? 0}
                   </p>
                 </div>
                 <div className="bg-amber-50 p-2.5 rounded-xl border border-amber-100">
@@ -1039,13 +1082,28 @@ export default function DashboardPage() {
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">Live counts from attendance table</p>
             </div>
-            <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
-              {m.attendanceRate || 53}% Rate
-            </span>
+            {loading ? (
+              <span className="text-[11px] font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200">
+                ...
+              </span>
+            ) : m.attendanceMarkedToday ? (
+              <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
+                {m.attendanceRate}% Rate
+              </span>
+            ) : (
+              <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
+                Not Marked
+              </span>
+            )}
           </div>
 
           <div className="flex items-center justify-center gap-6 h-[230px]">
-            {attendancePieData.length > 0 ? (
+            {loading ? (
+              <div className="flex items-center justify-center text-xs text-slate-400 font-medium gap-2">
+                <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+                <span>Loading today&apos;s attendance ratio...</span>
+              </div>
+            ) : m.attendanceMarkedToday && attendancePieData.length > 0 ? (
               <>
                 <div className="w-[170px] h-[170px]">
                   <ResponsiveContainer width="100%" height="100%">
@@ -1080,9 +1138,12 @@ export default function DashboardPage() {
                 </div>
               </>
             ) : (
-              <div className="flex flex-col items-center justify-center text-center p-4">
-                <p className="text-xs font-semibold text-slate-500">No attendance records logged for today</p>
-                <p className="text-[10px] text-slate-400 mt-1">Import attendance sheet or submit Pavitra daily report</p>
+              <div className="flex flex-col items-center justify-center text-center p-6 bg-amber-50/50 rounded-2xl border border-amber-100 w-full">
+                <Clock className="w-8 h-8 text-amber-500 mb-2" />
+                <p className="text-sm font-black text-amber-900">Attendance not marked today</p>
+                <p className="text-[11px] text-amber-700 mt-1 max-w-xs">
+                  Pavitra hasn&apos;t marked or submitted today&apos;s attendance report yet.
+                </p>
               </div>
             )}
           </div>
