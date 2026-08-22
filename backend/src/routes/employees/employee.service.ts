@@ -93,14 +93,20 @@ export async function create(dto: CreateEmployeeDto, createdByEmail?: string) {
 
   const employeeCode = dto.employeeCode || `ADP${String(Math.floor(Math.random() * 9999)).padStart(4, '0')}`;
 
-  const user = await prisma.user.create({
-    data: {
-      email: dto.email.toLowerCase(),
-      passwordHash: hashedPassword,
-      role: dto.role || 'EMPLOYEE',
-      isEmailVerified: true,
-    },
-  });
+  const isSpecialistOrAdmin = dto.role && ['SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'].includes(dto.role);
+  let userId: string | null = null;
+
+  if (isSpecialistOrAdmin) {
+    const user = await prisma.user.create({
+      data: {
+        email: dto.email.toLowerCase(),
+        passwordHash: hashedPassword,
+        role: dto.role || 'HR_EXECUTIVE',
+        isEmailVerified: true,
+      },
+    });
+    userId = user.id;
+  }
 
   const mobileNumber = dto.mobileNumber || (dto as any).mobile || null;
   const bankAccountNo = dto.bankAccountNo || (dto as any).accountNumber || null;
@@ -109,7 +115,7 @@ export async function create(dto: CreateEmployeeDto, createdByEmail?: string) {
 
   const emp = await prisma.employee.create({
     data: {
-      userId: user.id,
+      userId,
       employeeCode,
       firstName,
       lastName,

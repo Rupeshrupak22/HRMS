@@ -232,23 +232,11 @@ export async function upsertEmployeeFromCrm(data: CrmEmployeeData): Promise<{ ac
 
     return { action: 'updated', employeeId: existingEmployee.id };
   } else {
-    // CREATE new employee
-    const hashedPassword = await bcrypt.hash(generateSecurePassword(), 12);
-
-    const user = await prisma.user.create({
-      data: {
-        email,
-        passwordHash: hashedPassword,
-        role: mappedRole,
-        isEmailVerified: true,
-      },
-    });
-
     const employeeCode = data.employeeId || `CRM${String(Math.floor(Math.random() * 99999)).padStart(5, '0')}`;
 
     const emp = await prisma.employee.create({
       data: {
-        userId: user.id,
+        userId: null,
         crmExternalId: crmId,
         employeeCode,
         firstName,

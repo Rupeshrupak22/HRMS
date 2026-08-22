@@ -43,11 +43,6 @@ interface SessionConfirmation {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Idle timeout: 15 minutes
-const IDLE_TIMEOUT_MS = 15 * 60 * 1000;
-// Token refresh interval: 2 minutes (also acts as session validity check for single-device enforcement)
-const TOKEN_REFRESH_INTERVAL_MS = 2 * 60 * 1000;
-
 export const HR_SPECIALIST_ACCOUNTS: Record<string, UserProfile> = {
   'nandini@adyapan.com': {
     id: 'usr-nandini',
@@ -176,7 +171,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [sessionConfirmation, setSessionConfirmation] = useState<SessionConfirmation | null>(null);
 
-  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
   const refreshTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   // --- Session restoration on mount ---
@@ -194,68 +188,34 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false);
   }, []);
 
-  // --- Idle Timeout (15 minutes) ---
-  const resetIdleTimer = useCallback(() => {
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    if (!user) return;
-
-    idleTimerRef.current = setTimeout(() => {
-      // Idle timeout reached — auto logout
-      performLogout('idle_timeout');
-    }, IDLE_TIMEOUT_MS);
-  }, [user]);
-
-  useEffect(() => {
-    if (!user) return;
-
-    // Start idle timer
-    resetIdleTimer();
-
-    // Reset on any user interaction
-    const events = ['mousedown', 'keydown', 'scroll', 'touchstart', 'click'];
-    const handler = () => resetIdleTimer();
-    events.forEach((e) => window.addEventListener(e, handler, { passive: true }));
-
-    return () => {
-      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-      events.forEach((e) => window.removeEventListener(e, handler));
-    };
-  }, [user, resetIdleTimer]);
-
-  // --- Token Auto-Refresh (every 50 minutes) ---
+  // --- Token Auto-Refresh (Periodic silent background refresh) ---
   useEffect(() => {
     if (!user) return;
 
     const refreshTokens = async () => {
       try {
         const refreshToken = localStorage.getItem('adyapan_refresh_token');
-        if (!refreshToken) {
-          performLogout('no_refresh_token');
-          return;
-        }
+        if (!refreshToken) return;
 
         const data = await apiRequest('/auth/refresh', {
           method: 'POST',
           body: JSON.stringify({ refreshToken }),
         });
 
-        if (data.accessToken && data.refreshToken) {
+        if (data && data.accessToken && data.refreshToken) {
           localStorage.setItem('adyapan_access_token', data.accessToken);
           localStorage.setItem('adyapan_refresh_token', data.refreshToken);
         }
       } catch (err: any) {
-        // Token refresh failed — session ended
-        const msg = err?.message || '';
-        if (msg.includes('FORCE_LOGOUT') || msg.includes('another device') || msg.includes('compromised')) {
-          performLogout('force_logout', msg);
-        } else {
-          performLogout('refresh_failed');
+        const msg = String(err?.message || '');
+        if (msg === 'FORCE_LOGOUT' || msg.includes('FORCE_LOGOUT') || msg.includes('another device') || msg.includes('compromised')) {
+          performLogout('force_logout', 'Session ended. You have been logged in on another device.');
         }
+        // Non-critical errors (network blips) are ignored silently so user stays logged in
       }
     };
 
-    // Refresh immediately if token might be stale, then every 50 min
-    refreshTimerRef.current = setInterval(refreshTokens, TOKEN_REFRESH_INTERVAL_MS);
+    refreshTimerRef.current = setInterval(refreshTokens, 60 * 60 * 1000); // 1 hour
 
     return () => {
       if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
@@ -401,7 +361,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('adyapan_refresh_token');
     localStorage.removeItem('adyapan_user');
     setUser(null);
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     if (refreshTimerRef.current) clearInterval(refreshTimerRef.current);
   };
 
