@@ -142,3 +142,49 @@ async function updateRefreshToken(userId: string, token: string) {
     data: { refreshToken: hash },
   });
 }
+
+export async function checkSession(userId: string) {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, refreshToken: true, lastLoginAt: true, isLocked: true },
+  });
+
+  if (!user) {
+    throw new UnauthorizedError('User not found');
+  }
+
+  if (user.isLocked) {
+    throw new UnauthorizedError('Account is locked');
+  }
+
+  return {
+    valid: Boolean(user.refreshToken),
+    lastLoginAt: user.lastLoginAt,
+  };
+}
+
+export async function changePassword(userId: string, dto: { currentPassword: string; newPassword: string }) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user) {
+    throw new UnauthorizedError('User not found');
+  }
+
+  const isCurrentValid = await bcrypt.compare(dto.currentPassword, user.passwordHash);
+  if (!isCurrentValid) {
+    throw new UnauthorizedError('Current password is incorrect');
+  }
+
+  if (dto.newPassword.length < 8) {
+    throw new UnauthorizedError('New password must be at least 8 characters');
+  }
+
+  const newHash = await bcrypt.hash(dto.newPassword, 12);
+  await prisma.user.update({
+    where: { id: userId },
+    data: { passwordHash: newHash, refreshToken: null },
+  });
+
+  logAudit({ action: 'PASSWORD_CHANGED', userId, userEmail: user.email });
+
+  return { success: true, message: 'Password changed successfully. Please login again.' };
+}
