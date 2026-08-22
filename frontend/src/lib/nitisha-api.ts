@@ -1,51 +1,9 @@
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:4000/api/v1';
-const BASE = API_BASE + '/nitisha';
+import { apiRequest } from './api';
 
-function getCsrfToken(): string | null {
-  if (typeof document === 'undefined') return null;
-  const match = document.cookie.match(/(?:^|;\s*)csrf_token=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : null;
-}
+const BASE = '/nitisha';
 
-async function request(endpoint: string, options: RequestInit = {}) {
-  const token = typeof window !== 'undefined'
-    ? localStorage.getItem('adyapan_access_token') || localStorage.getItem('token')
-    : null;
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    ...(options.headers as Record<string, string>),
-  };
-
-  const method = (options.method || 'GET').toUpperCase();
-  if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) {
-    const csrf = getCsrfToken();
-    if (csrf) {
-      headers['X-CSRF-Token'] = csrf;
-    }
-  }
-
-  const res = await fetch(`${BASE}${endpoint}`, {
-    cache: 'no-store',
-    credentials: 'include',
-    ...options,
-    headers,
-  });
-
-  if (!res.ok) {
-    let errorDetail = res.statusText;
-    try {
-      const errJson = await res.json();
-      if (errJson?.error) errorDetail = errJson.error;
-    } catch {}
-    console.warn(`Nitisha API [${method} ${endpoint}] returned ${res.status}: ${errorDetail}`);
-    throw new Error(errorDetail || `API error: ${res.statusText}`);
-  }
-  const result = await res.json().catch(() => ({}));
-  if (result && typeof result === 'object' && result.success && result.data !== undefined) {
-    return result.data;
-  }
-  return result;
+function request(endpoint: string, options: RequestInit = {}) {
+  return apiRequest(`${BASE}${endpoint}`, options);
 }
 
 export const nitishaApi = {
