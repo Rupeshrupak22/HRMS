@@ -62,7 +62,15 @@ export async function login(dto: LoginDto) {
   // Generate a unique session ID — invalidates all previous sessions
   const sessionId = crypto.randomBytes(16).toString('hex');
 
-  // Reset failed attempts, update lastLogin and store sessionId in refreshToken field prefix
+  // Check if there's an active session on another device
+  if (user.refreshToken && !(dto as any).forceLogin) {
+    return {
+      requireSessionConfirmation: true,
+      message: 'Active login session found on another device. Do you want to login here and end the other session?',
+    };
+  }
+
+  // Reset failed attempts, update lastLogin
   await prisma.user.update({
     where: { id: user.id },
     data: { failedAttempts: 0, lastLoginAt: new Date() },
@@ -184,7 +192,7 @@ export async function changePassword(userId: string, dto: { currentPassword: str
     data: { passwordHash: newHash, refreshToken: null },
   });
 
-  logAudit({ action: 'PASSWORD_CHANGED', userId, userEmail: user.email });
+  logAudit({ action: 'PASSWORD_CHANGE', userId, userEmail: user.email });
 
   return { success: true, message: 'Password changed successfully. Please login again.' };
 }

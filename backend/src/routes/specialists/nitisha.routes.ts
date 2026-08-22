@@ -142,8 +142,7 @@ function sanitizePerformanceData(body: any) {
   if (body.managerRemark !== undefined) data.managerRemark = body.managerRemark ? String(body.managerRemark).trim() : null;
   if (body.finalRemark !== undefined) data.finalRemark = body.finalRemark ? String(body.finalRemark).trim() : null;
   if (body.furtherActions !== undefined) data.furtherActions = body.furtherActions ? String(body.furtherActions).trim() : null;
-  if (body.performanceMonth !== undefined) data.performanceMonth = body.performanceMonth ? String(body.performanceMonth).trim() : null;
-  if (body.monthPerformance !== undefined) data.monthPerformance = body.monthPerformance ? String(body.monthPerformance).trim() : null;
+  if (body.monthPerformance !== undefined) data.monthlyPerformance = body.monthPerformance ? String(body.monthPerformance).trim() : '';
   
   // Persist day-wise and week-wise JSON reliably in DB columns
   if (dailyDataStr !== null) data.employeeExplanation = dailyDataStr;
@@ -175,19 +174,19 @@ router.get('/performance', async (req: AuthRequest, res: Response, next: NextFun
 router.post('/performance', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const sanitized = sanitizePerformanceData(req.body);
+    const { performanceMonth, ...sanitizedData } = sanitized as any;
 
-    if (sanitized.employeeId && sanitized.performanceMonth) {
+    if (sanitizedData.employeeId && performanceMonth) {
       const existing = await prisma.employeePerformance.findFirst({
         where: {
-          employeeId: sanitized.employeeId,
-          performanceMonth: sanitized.performanceMonth,
+          employeeId: sanitizedData.employeeId,
         },
       });
 
       if (existing) {
         const updated = await prisma.employeePerformance.update({
           where: { id: existing.id },
-          data: sanitized,
+          data: sanitizedData,
         });
         return res.json(mapPerformanceOutput(updated));
       }
@@ -195,7 +194,7 @@ router.post('/performance', async (req: AuthRequest, res: Response, next: NextFu
 
     const created = await prisma.employeePerformance.create({
       data: {
-        ...sanitized,
+        ...sanitizedData,
         createdByEmail: req.user?.email || null,
       },
     });
@@ -218,11 +217,10 @@ router.put('/performance/:id', async (req: AuthRequest, res: Response, next: Nex
       });
       return res.json(mapPerformanceOutput(updated));
     } else {
-      if (sanitized.employeeId && sanitized.performanceMonth) {
+      if (sanitized.employeeId) {
         const byEmpAndMonth = await prisma.employeePerformance.findFirst({
           where: {
             employeeId: sanitized.employeeId,
-            performanceMonth: sanitized.performanceMonth,
           },
         });
 

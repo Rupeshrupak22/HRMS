@@ -130,10 +130,10 @@ export async function authenticate(req: AuthRequest, _res: Response, next: NextF
       throw new UnauthorizedError('FORCE_LOGOUT');
     }
 
-    // Record activity (non-blocking)
+    // Record last login activity (non-blocking)
     prisma.user.update({
       where: { id: user.id },
-      data: { lastActivityAt: new Date() },
+      data: { lastLoginAt: new Date() },
     }).catch(() => {});
 
 
