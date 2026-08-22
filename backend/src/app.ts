@@ -135,9 +135,9 @@ app.use(csrfProtection);
 // Request logging — structured JSON in production, compact in development
 app.use(productionLogger);
 
-// Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString(), environment: env.NODE_ENV });
+// Root & Health check endpoints for Render and uptime monitors
+app.all(['/', '/health', '/api/health'], (_req, res) => {
+  res.status(200).json({ status: 'ok', uptime: process.uptime(), timestamp: new Date().toISOString(), environment: env.NODE_ENV });
 });
 
 // API Routes — mounted at both /api and /api/v1 for frontend compatibility
