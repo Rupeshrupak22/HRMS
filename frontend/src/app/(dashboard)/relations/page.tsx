@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, X, Pencil, Trash2, Users, Search } from 'lucide-react';
+import { Plus, X, Pencil, Trash2, Users, Search, Loader2 } from 'lucide-react';
 import { nitishaApi } from '@/lib/nitisha-api';
 import { Pagination } from '@/components/Pagination';
 
 export default function RelationsPage() {
   const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -23,7 +24,8 @@ export default function RelationsPage() {
   });
 
   useEffect(() => {
-    nitishaApi.getRelations().then(setRecords).catch(() => {});
+    setLoading(true);
+    nitishaApi.getRelations().then(setRecords).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   const resetForm = () => {
@@ -190,7 +192,16 @@ export default function RelationsPage() {
               </tr>
             </thead>
             <tbody>
-              {paginatedRecords.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-4 py-16 text-center text-slate-500 font-semibold">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="w-7 h-7 animate-spin text-orange-500" />
+                      <span className="text-xs font-bold text-slate-700">Loading relations records...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedRecords.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="px-4 py-8 text-center text-slate-400">
                     No relation records found. Click &quot;Add Relation Record&quot; to create one.

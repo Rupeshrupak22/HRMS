@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, UserPlus, UserX, Calendar, Eye, X, Download, Target, Search, Users, ClipboardCheck } from 'lucide-react';
+import { FileText, UserPlus, UserX, Calendar, Eye, X, Download, Target, Search, Users, ClipboardCheck, Trash2 } from 'lucide-react';
 import { veenaApi } from '@/lib/veena-api';
 import { apiRequest } from '@/lib/api';
 import { Pagination } from '@/components/Pagination';
@@ -12,9 +12,16 @@ export default function VeenaReportPage() {
   const [dropouts, setDropouts] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [filterDate, setFilterDate] = useState('');
+  const [filterMonth, setFilterMonth] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const currentMonthStr = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  })();
 
   // Pagination states
   const [pageRec, setPageRec] = useState(1);
@@ -62,28 +69,77 @@ export default function VeenaReportPage() {
     loadData();
   }, []);
 
-  const filterCandidates = (records: any[]) => {
-    if (!searchTerm) return records;
-    const q = searchTerm.toLowerCase().trim();
-    return records.filter((r) => {
-      const name = (r.candidateName || r.name || r.employeeName || '').toLowerCase();
-      const phone = (r.phoneNumber || r.mobileNumber || r.phone || '').toLowerCase();
-      const role = (r.roleApplied || r.role || r.department || '').toLowerCase();
-      const status = (r.status || r.currentStage || '').toLowerCase();
-      return name.includes(q) || phone.includes(q) || role.includes(q) || status.includes(q);
-    });
+  const getRecordImportDate = (r: any, isDailyReport = false): string => {
+    if (isDailyReport) {
+      if (r.reportDate) return String(r.reportDate).split('T')[0];
+      if (r.date) return String(r.date).split('T')[0];
+    }
+    // For imported XLSX records (Recruitment, Onboarding, Dropouts), use the date the file was imported / created
+    if (r.importedDate) return String(r.importedDate).split('T')[0];
+    if (r.importDate) return String(r.importDate).split('T')[0];
+    if (r.uploadDate) return String(r.uploadDate).split('T')[0];
+    if (r.createdAt) {
+      if (typeof r.createdAt === 'string') return r.createdAt.split('T')[0];
+      try { return new Date(r.createdAt).toISOString().split('T')[0]; } catch {}
+    }
+    if (r.updatedAt) {
+      if (typeof r.updatedAt === 'string') return r.updatedAt.split('T')[0];
+      try { return new Date(r.updatedAt).toISOString().split('T')[0]; } catch {}
+    }
+    // Fallbacks
+    if (r.reportDate) return String(r.reportDate).split('T')[0];
+    if (r.date) return String(r.date).split('T')[0];
+    return '';
   };
 
-  const filteredRecruitment = filterCandidates(recruitment);
-  const filteredOnboarding = filterCandidates(onboarding);
-  const filteredDropouts = filterCandidates(dropouts);
+  const matchesImportDateOrMonth = (r: any, isDailyReport = false) => {
+    if (!filterDate && !filterMonth) return true;
+    const recordDate = getRecordImportDate(r, isDailyReport);
+    if (!recordDate) return false;
+    if (filterDate) return recordDate === filterDate;
+    if (filterMonth) return recordDate.startsWith(filterMonth);
+    return true;
+  };
 
-  const filteredDailyReports = filterDate
-    ? dailyReports.filter((r) => {
-        const created = r.reportDate || r.date || (r.createdAt ? r.createdAt.split('T')[0] : '');
-        return created === filterDate;
-      })
-    : dailyReports;
+  const matchesSearch = (r: any) => {
+    if (!searchTerm) return true;
+    const q = searchTerm.toLowerCase().trim();
+    const name = (r.candidateName || r.name || r.employeeName || '').toLowerCase();
+    const phone = (r.phoneNumber || r.mobileNumber || r.phone || '').toLowerCase();
+    const role = (r.roleApplied || r.role || r.department || '').toLowerCase();
+    const status = (r.status || r.currentStage || '').toLowerCase();
+    return name.includes(q) || phone.includes(q) || role.includes(q) || status.includes(q);
+  };
+
+  const filteredRecruitment = useMemo(() => {
+    return recruitment.filter((r) => matchesImportDateOrMonth(r, false) && matchesSearch(r));
+  }, [recruitment, filterDate, filterMonth, searchTerm]);
+
+  const filteredOnboarding = useMemo(() => {
+    return onboarding.filter((r) => matchesImportDateOrMonth(r, false) && matchesSearch(r));
+  }, [onboarding, filterDate, filterMonth, searchTerm]);
+
+  const filteredDropouts = useMemo(() => {
+    return dropouts.filter((r) => matchesImportDateOrMonth(r, false) && matchesSearch(r));
+  }, [dropouts, filterDate, filterMonth, searchTerm]);
+
+  const filteredDailyReports = useMemo(() => {
+    return dailyReports.filter((r) => matchesImportDateOrMonth(r, true) && matchesSearch(r));
+  }, [dailyReports, filterDate, filterMonth, searchTerm]);
+
+  const handleDeleteReport = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this daily report? It will be removed from all records and dashboards.')) return;
+    try {
+      await apiRequest(`/reports/daily/${id}`, { method: 'DELETE' });
+      try { await veenaApi.deleteDailyReport(id); } catch {}
+      setDailyReports((prev) => prev.filter((r) => r.id !== id));
+      if (selectedReport?.id === id) setSelectedReport(null);
+      alert('Daily report deleted successfully from all records.');
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete daily report');
+    }
+  };
 
   return (
     <div className="space-y-8 max-w-[1400px] mx-auto font-sans">
@@ -109,35 +165,114 @@ export default function VeenaReportPage() {
               className="pl-8 pr-3 py-2 bg-white/10 border border-white/20 rounded-xl text-xs text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-amber-400 min-w-[220px]"
             />
           </div>
+        </div>
+      </div>
 
-          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 border border-white/20 shadow-xs">
-            <Calendar className="w-4 h-4 text-amber-400" />
+      {/* 📅 Date & Month Filter Controls Bar */}
+      <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Calendar className="w-4 h-4 text-amber-600" />
+          <span className="font-extrabold text-slate-800">Filter Data:</span>
+          {filterDate && (
+            <span className="px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-bold text-[10px] border border-amber-200">
+              📅 Specific Date: {filterDate}
+            </span>
+          )}
+          {filterMonth && !filterDate && (
+            <span className="px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-800 font-bold text-[10px] border border-indigo-200">
+              📆 Monthly View: {filterMonth}
+            </span>
+          )}
+          {!filterDate && !filterMonth && (
+            <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px]">
+              🌐 All-Time Records
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Month Picker */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50">
+            <span className="text-[10px] font-bold text-slate-500 uppercase">Month:</span>
             <input
-              type="date"
-              value={filterDate}
+              type="month"
+              value={filterMonth}
               onChange={(e) => {
-                setFilterDate(e.target.value);
+                setFilterMonth(e.target.value);
+                setFilterDate('');
                 setPageRec(1);
                 setPageOnb(1);
                 setPageDrop(1);
                 setPageRep(1);
               }}
-              className="text-xs font-bold text-white border-none outline-none bg-transparent cursor-pointer"
+              className="text-xs font-bold text-slate-800 outline-none bg-transparent cursor-pointer"
             />
           </div>
-          {(filterDate || searchTerm) && (
+
+          {/* Date Picker */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50">
+            <span className="text-[10px] font-bold text-slate-500 uppercase">Date:</span>
+            <input
+              type="date"
+              value={filterDate}
+              onChange={(e) => {
+                setFilterDate(e.target.value);
+                setFilterMonth('');
+                setPageRec(1);
+                setPageOnb(1);
+                setPageDrop(1);
+                setPageRep(1);
+              }}
+              className="text-xs font-bold text-slate-800 outline-none bg-transparent cursor-pointer"
+            />
+          </div>
+
+          <button
+            onClick={() => {
+              setFilterDate(todayStr);
+              setFilterMonth('');
+              setPageRec(1);
+              setPageOnb(1);
+              setPageDrop(1);
+              setPageRep(1);
+            }}
+            className={`px-3 py-1.5 rounded-xl font-bold transition-colors cursor-pointer ${
+              filterDate === todayStr ? 'bg-amber-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Today
+          </button>
+
+          <button
+            onClick={() => {
+              setFilterMonth(currentMonthStr);
+              setFilterDate('');
+              setPageRec(1);
+              setPageOnb(1);
+              setPageDrop(1);
+              setPageRep(1);
+            }}
+            className={`px-3 py-1.5 rounded-xl font-bold transition-colors cursor-pointer ${
+              filterMonth === currentMonthStr && !filterDate ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            This Month
+          </button>
+
+          {(filterDate || filterMonth || searchTerm) && (
             <button
               onClick={() => {
                 setFilterDate('');
+                setFilterMonth('');
                 setSearchTerm('');
                 setPageRec(1);
                 setPageOnb(1);
                 setPageDrop(1);
                 setPageRep(1);
               }}
-              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold transition cursor-pointer border border-rose-200"
             >
-              Clear
+              Reset Filter
             </button>
           )}
         </div>
@@ -147,26 +282,26 @@ export default function VeenaReportPage() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-amber-100 shadow-xs">
           <p className="text-[10px] font-bold text-amber-700 uppercase tracking-wider">Recruitment Tracker</p>
-          <p className="text-2xl font-black text-amber-900 mt-1">{recruitment.length}</p>
-          <p className="text-[10px] text-slate-500 mt-0.5">{filteredRecruitment.length} Matched in Filter</p>
+          <p className="text-2xl font-black text-amber-900 mt-1">{filteredRecruitment.length}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Total in DB: {recruitment.length}</p>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-xs">
           <p className="text-[10px] font-bold text-blue-700 uppercase tracking-wider">Onboarding Pipeline</p>
-          <p className="text-2xl font-black text-blue-900 mt-1">{onboarding.length}</p>
-          <p className="text-[10px] text-slate-500 mt-0.5">{filteredOnboarding.length} Matched in Filter</p>
+          <p className="text-2xl font-black text-blue-900 mt-1">{filteredOnboarding.length}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Total in DB: {onboarding.length}</p>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-rose-100 shadow-xs">
           <p className="text-[10px] font-bold text-rose-700 uppercase tracking-wider">Dropout Records</p>
-          <p className="text-2xl font-black text-rose-900 mt-1">{dropouts.length}</p>
-          <p className="text-[10px] text-slate-500 mt-0.5">{filteredDropouts.length} Matched in Filter</p>
+          <p className="text-2xl font-black text-rose-900 mt-1">{filteredDropouts.length}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Total in DB: {dropouts.length}</p>
         </div>
 
         <div className="bg-white p-4 rounded-2xl border border-indigo-100 shadow-xs">
           <p className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider">Daily Submissions</p>
-          <p className="text-2xl font-black text-indigo-900 mt-1">{dailyReports.length}</p>
-          <p className="text-[10px] text-slate-500 mt-0.5">{filteredDailyReports.length} Matched in Filter</p>
+          <p className="text-2xl font-black text-indigo-900 mt-1">{filteredDailyReports.length}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Total in DB: {dailyReports.length}</p>
         </div>
       </div>
 
@@ -349,12 +484,21 @@ export default function VeenaReportPage() {
                     <td className="px-4 py-2.5 text-rose-600 max-w-xs truncate" title={r.issue}>{r.issue || '-'}</td>
                     <td className="px-4 py-2.5"><span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">APPROVED</span></td>
                     <td className="px-4 py-2.5 text-right">
-                      <button
-                        onClick={() => setSelectedReport(r)}
-                        className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-xs font-bold transition cursor-pointer"
-                      >
-                        Preview
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <button
+                          onClick={() => setSelectedReport(r)}
+                          className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-xs font-bold transition cursor-pointer"
+                        >
+                          Preview
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteReport(r.id, e)}
+                          className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                          title="Delete Daily Report"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}</tbody>
@@ -381,6 +525,21 @@ export default function VeenaReportPage() {
               <div className="py-2 border-b border-slate-50"><span className="text-slate-500 font-medium block mb-1">Key Performance Actions:</span><p className="p-2.5 rounded-xl bg-slate-50 text-slate-800 font-medium">{selectedReport.keyUpdates || '-'}</p></div>
               <div className="py-2 border-b border-slate-50"><span className="text-slate-500 font-medium block mb-1">Issues / Blockers:</span><p className="p-2.5 rounded-xl bg-rose-50 text-rose-800 font-medium">{selectedReport.issue || '-'}</p></div>
               <div className="py-2"><span className="text-slate-500 font-medium block mb-1">Remarks / Comments:</span><p className="p-2.5 rounded-xl bg-amber-50 text-amber-900 font-medium">{selectedReport.comment || '-'}</p></div>
+            </div>
+            <div className="pt-3 border-t border-slate-100 flex items-center justify-between">
+              <button
+                onClick={() => handleDeleteReport(selectedReport.id)}
+                className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs transition flex items-center gap-1.5 border border-rose-200 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete Report</span>
+              </button>
+              <button
+                onClick={() => setSelectedReport(null)}
+                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer"
+              >
+                Close
+              </button>
             </div>
           </div>
         </div>

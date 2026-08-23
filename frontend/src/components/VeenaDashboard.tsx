@@ -24,6 +24,7 @@ import {
   UserCheck,
   ArrowUpRight,
   ClipboardCheck,
+  Loader2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { veenaApi } from '@/lib/veena-api';
@@ -906,8 +907,12 @@ export function VeenaDashboard() {
             <tbody className="divide-y divide-slate-100">
               {loading ? (
                 <tr>
-                  <td colSpan={18} className="py-8 text-center text-slate-400 font-medium">
-                    Loading Candidate Register...
+                  <td colSpan={18} className="py-16 text-center text-slate-500 font-semibold">
+                    <div className="flex flex-col items-center justify-center gap-2.5">
+                      <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                      <span className="text-xs font-bold text-slate-700">Loading candidate records...</span>
+                      <span className="text-[10px] text-slate-400">Fetching recruitment pipeline & candidate database</span>
+                    </div>
                   </td>
                 </tr>
               ) : filteredCandidates.length === 0 ? (

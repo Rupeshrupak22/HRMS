@@ -16,6 +16,7 @@ import {
   FileSpreadsheet,
   CheckCircle2,
   IdCard,
+  Loader2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { veenaApi } from '@/lib/veena-api';
@@ -149,7 +150,7 @@ function findRowValue(row: Record<string, any>, aliases: string[]): any {
 
 export default function OnboardingPage() {
   const [records, setRecords] = useState<OnboardingRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('');
   const [filterStage, setFilterStage] = useState('');
@@ -1032,7 +1033,17 @@ export default function OnboardingPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedRecords.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={20} className="text-center py-16 text-slate-500 font-semibold">
+                    <div className="flex flex-col items-center justify-center gap-2.5">
+                      <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                      <span className="text-xs font-bold text-slate-700">Loading onboarding records...</span>
+                      <span className="text-[10px] text-slate-400">Fetching induction pipeline & new joiners</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedRecords.length === 0 ? (
                 <tr>
                   <td colSpan={20} className="text-center py-12 text-slate-400 font-medium">
                     No onboarding candidates found. Candidates with Stage &quot;Joining&quot; and Status &quot;Active&quot; from Recruitment will automatically appear here.

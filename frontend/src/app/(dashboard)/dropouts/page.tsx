@@ -14,6 +14,7 @@ import {
   TrendingDown,
   Users,
   BarChart3,
+  Loader2,
 } from 'lucide-react';
 import { ActionBar } from '@/components/ActionBar';
 import { apiRequest } from '@/lib/api';
@@ -67,12 +68,18 @@ export default function DropoutTrackerPage() {
   const [viewingDropout, setViewingDropout] = useState<DropoutEntry | null>(null);
 
   const [dropouts, setDropouts] = useState<DropoutEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
   const loadDropouts = async () => {
+    setLoading(true);
     try {
       const data = await apiRequest('/veena/dropouts');
       setDropouts(Array.isArray(data) ? data : []);
-    } catch { setDropouts([]); }
+    } catch {
+      setDropouts([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => { loadDropouts(); }, []);
@@ -288,37 +295,48 @@ export default function DropoutTrackerPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-50">
-              {paginatedDropouts.map((drop) => (
-                <tr key={drop.id} className="hover:bg-orange-50/30 transition-colors">
-                  <td className="py-3 px-4">
-                    <div className="font-bold text-slate-900">{drop.candidateName}</div>
-                    <div className="text-[10px] text-slate-400">{drop.employeeId}</div>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-semibold rounded">{drop.role}</span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="px-2 py-0.5 bg-violet-50 text-violet-700 text-[10px] font-semibold rounded">{drop.source}</span>
-                  </td>
-                  <td className="py-3 px-4 text-slate-700 font-medium">{formatDisplayDate(drop.dropoutDate)}</td>
-                  <td className="py-3 px-4">
-                    <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-[10px] font-semibold rounded">{drop.dropoutStage}</span>
-                  </td>
-                  <td className="py-3 px-4">
-                    <span className="px-2 py-0.5 bg-red-50 text-red-700 text-[10px] font-semibold rounded">{drop.dropoutReason}</span>
-                  </td>
-                  <td className="py-3 px-4 text-slate-700 font-medium">{drop.recruiter}</td>
-                  <td className="py-3 px-4">
-                    <div className="flex items-center justify-center gap-0.5">
-                      <button onClick={() => setViewingDropout(drop)} title="View" className="p-1.5 rounded-md text-blue-600 hover:bg-blue-50 cursor-pointer"><Eye className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => handleEdit(drop)} title="Edit" className="p-1.5 rounded-md text-amber-600 hover:bg-amber-50 cursor-pointer"><Pencil className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => handleDelete(drop.id)} title="Delete" className="p-1.5 rounded-md text-red-500 hover:bg-red-50 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+              {loading ? (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center text-slate-500 font-semibold">
+                    <div className="flex flex-col items-center justify-center gap-2.5">
+                      <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                      <span className="text-xs font-bold text-slate-700">Loading dropout records...</span>
+                      <span className="text-[10px] text-slate-400">Fetching candidate and employee dropout analytics</span>
                     </div>
                   </td>
                 </tr>
-              ))}
-              {filteredDropouts.length === 0 && (
-                <tr><td colSpan={8} className="py-10 text-center text-slate-400 text-xs">No dropout records found.</td></tr>
+              ) : filteredDropouts.length === 0 ? (
+                <tr><td colSpan={8} className="py-12 text-center text-slate-400 text-xs">No dropout records found.</td></tr>
+              ) : (
+                paginatedDropouts.map((drop) => (
+                  <tr key={drop.id} className="hover:bg-orange-50/30 transition-colors">
+                    <td className="py-3 px-4">
+                      <div className="font-bold text-slate-900">{drop.candidateName}</div>
+                      <div className="text-[10px] text-slate-400">{drop.employeeId}</div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 bg-blue-50 text-blue-700 text-[10px] font-semibold rounded">{drop.role}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 bg-violet-50 text-violet-700 text-[10px] font-semibold rounded">{drop.source}</span>
+                    </td>
+                    <td className="py-3 px-4 text-slate-700 font-medium">{formatDisplayDate(drop.dropoutDate)}</td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 bg-orange-50 text-orange-700 text-[10px] font-semibold rounded">{drop.dropoutStage}</span>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 bg-red-50 text-red-700 text-[10px] font-semibold rounded">{drop.dropoutReason}</span>
+                    </td>
+                    <td className="py-3 px-4 text-slate-700 font-medium">{drop.recruiter}</td>
+                    <td className="py-3 px-4">
+                      <div className="flex items-center justify-center gap-0.5">
+                        <button onClick={() => setViewingDropout(drop)} title="View" className="p-1.5 rounded-md text-blue-600 hover:bg-blue-50 cursor-pointer"><Eye className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handleEdit(drop)} title="Edit" className="p-1.5 rounded-md text-amber-600 hover:bg-amber-50 cursor-pointer"><Pencil className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handleDelete(drop.id)} title="Delete" className="p-1.5 rounded-md text-red-500 hover:bg-red-50 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
               )}
             </tbody>
           </table>

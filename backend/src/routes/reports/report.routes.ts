@@ -417,8 +417,25 @@ router.post('/daily', validate(createReportSchema), async (req: AuthRequest, res
 });
 
 // PUT /api/reports/daily/:id/approve — HR Manager or Admin approves a report
-router.put('/daily/:id/approve', authorize('HR_ADMIN', 'SUPER_ADMIN'), async (req: AuthRequest, res: Response, next) => {
+router.put('/daily/:id/approve', async (req: AuthRequest, res: Response, next) => {
   try {
+    const userRole = req.user?.role;
+    const userEmail = req.user?.email;
+    const isAllowed = 
+      userRole === 'SUPER_ADMIN' || 
+      userRole === 'HR_ADMIN' || 
+      userRole === 'ADMIN' ||
+      req.user?.specialization === 'HR_MANAGER_ALL' || 
+      userEmail === 'nandini@adyapan.com' || 
+      userEmail === 'nandani@adyapan.com' || 
+      userEmail === 'admin@adyapan.com' ||
+      userEmail === 'superadmin@adyapan.com';
+
+    if (!isAllowed) {
+      res.status(403).json({ success: false, message: 'Forbidden: Only HR Manager or Admin can approve reports' });
+      return;
+    }
+
     const report = await prisma.dailyReport.update({
       where: { id: String(req.params.id) },
       data: { status: 'APPROVED', reviewedByEmail: req.user!.email } as any,
@@ -430,13 +447,97 @@ router.put('/daily/:id/approve', authorize('HR_ADMIN', 'SUPER_ADMIN'), async (re
 });
 
 // PUT /api/reports/daily/:id/reject — HR Manager or Admin rejects a report
-router.put('/daily/:id/reject', authorize('HR_ADMIN', 'SUPER_ADMIN'), async (req: AuthRequest, res: Response, next) => {
+router.put('/daily/:id/reject', async (req: AuthRequest, res: Response, next) => {
   try {
+    const userRole = req.user?.role;
+    const userEmail = req.user?.email;
+    const isAllowed = 
+      userRole === 'SUPER_ADMIN' || 
+      userRole === 'HR_ADMIN' || 
+      userRole === 'ADMIN' ||
+      req.user?.specialization === 'HR_MANAGER_ALL' || 
+      userEmail === 'nandini@adyapan.com' || 
+      userEmail === 'nandani@adyapan.com' || 
+      userEmail === 'admin@adyapan.com' ||
+      userEmail === 'superadmin@adyapan.com';
+
+    if (!isAllowed) {
+      res.status(403).json({ success: false, message: 'Forbidden: Only HR Manager or Admin can reject reports' });
+      return;
+    }
+
     const report = await prisma.dailyReport.update({
       where: { id: String(req.params.id) },
       data: { status: 'REJECTED', reviewedByEmail: req.user!.email } as any,
     });
     res.json({ success: true, data: report });
+  } catch (err) {
+    next(err);
+  }
+});
+
+// DELETE /api/reports/daily/:id — Specialist or Admin deletes a daily report
+router.delete('/daily/:id', async (req: AuthRequest, res: Response, next) => {
+  try {
+    const id = String(req.params.id);
+    const userRole = req.user!.role;
+    const userEmail = req.user!.email;
+
+    const isManagerOrAdmin = 
+      userRole === 'SUPER_ADMIN' || 
+      userRole === 'HR_ADMIN' || 
+      userRole === 'ADMIN' ||
+      req.user!.specialization === 'HR_MANAGER_ALL' || 
+      userEmail === 'nandini@adyapan.com' || 
+      userEmail === 'nandani@adyapan.com' || 
+      userEmail === 'admin@adyapan.com' ||
+      userEmail === 'superadmin@adyapan.com';
+
+    // 1. Try deleting from core DailyReport table
+    try {
+      const existing = await prisma.dailyReport.findUnique({ where: { id } });
+      if (existing) {
+        if (!isManagerOrAdmin && existing.userEmail !== userEmail) {
+          return res.status(403).json({ error: 'You can only delete your own daily reports' });
+        }
+        await prisma.dailyReport.delete({ where: { id } });
+      }
+    } catch {}
+
+    // 2. Try deleting from VeenaDailyReport table
+    try {
+      const existingVeena = await prisma.veenaDailyReport.findUnique({ where: { id } });
+      if (existingVeena) {
+        if (!isManagerOrAdmin && existingVeena.createdByEmail && existingVeena.createdByEmail !== userEmail) {
+          return res.status(403).json({ error: 'You can only delete your own daily reports' });
+        }
+        await prisma.veenaDailyReport.delete({ where: { id } });
+      }
+    } catch {}
+
+    // 3. Try deleting from NitishaDailyReport table
+    try {
+      const existingNitisha = await prisma.nitishaDailyReport.findUnique({ where: { id } });
+      if (existingNitisha) {
+        if (!isManagerOrAdmin && existingNitisha.createdByEmail && existingNitisha.createdByEmail !== userEmail) {
+          return res.status(403).json({ error: 'You can only delete your own daily reports' });
+        }
+        await prisma.nitishaDailyReport.delete({ where: { id } });
+      }
+    } catch {}
+
+    // 4. Try deleting from AravindDailyReport table
+    try {
+      const existingAravind = await prisma.aravindDailyReport.findUnique({ where: { id } });
+      if (existingAravind) {
+        if (!isManagerOrAdmin && existingAravind.createdByEmail && existingAravind.createdByEmail !== userEmail) {
+          return res.status(403).json({ error: 'You can only delete your own daily reports' });
+        }
+        await prisma.aravindDailyReport.delete({ where: { id } });
+      }
+    } catch {}
+
+    return res.json({ success: true, message: 'Daily report deleted successfully' });
   } catch (err) {
     next(err);
   }

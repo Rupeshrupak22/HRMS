@@ -13,6 +13,7 @@ import {
   Trash2,
   FileSpreadsheet,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { veenaApi } from '@/lib/veena-api';
@@ -659,7 +660,17 @@ export default function InterviewsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedCandidates.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={13} className="text-center py-16 text-slate-500 font-semibold">
+                    <div className="flex flex-col items-center justify-center gap-2.5">
+                      <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                      <span className="text-xs font-bold text-slate-700">Loading interview records...</span>
+                      <span className="text-[10px] text-slate-400">Fetching candidate interviews & evaluations</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedCandidates.length === 0 ? (
                 <tr>
                   <td colSpan={13} className="text-center py-12 text-slate-400 font-medium">
                     No candidates found in Recruitment table.

@@ -22,6 +22,16 @@ const markAttendanceSchema = z.object({
   notes: z.string().optional(),
 });
 
+const allowPavitraOrAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
+  const user = req.user;
+  const isPavitra = user?.email === 'pavitra@adyapan.com' || user?.specialization === 'ATTENDANCE_LEAVE';
+  const isAdminOrManager = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN';
+  if (!isPavitra && !isAdminOrManager) {
+    return res.status(403).json({ success: false, message: 'Forbidden: Only Pavitra or HR Admin can modify Attendance records.' });
+  }
+  next();
+};
+
 // GET /api/attendance — list attendance records
 router.get('/', async (req: AuthRequest, res: Response, next) => {
   try {
@@ -152,14 +162,34 @@ router.post('/mark', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_MANAGER', 'HR_EXEC
   }
 });
 
-// GET /api/attendance/today-stats — attendance stats for today
+// GET /api/attendance/today-stats — attendance stats for today or a specific date
 router.get('/today-stats', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), async (req: AuthRequest, res: Response, next) => {
   try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+    let targetDateStr = String(req.query.date || '').split('T')[0];
+    let dateObj: Date;
+    if (targetDateStr && /^\d{4}-\d{2}-\d{2}$/.test(targetDateStr)) {
+      const [y, m, d] = targetDateStr.split('-').map(Number);
+      dateObj = new Date(Date.UTC(y, m - 1, d, 12, 0, 0, 0));
+    } else {
+      const today = new Date();
+      targetDateStr = safeFormatDate(today) || today.toISOString().split('T')[0];
+      const y = today.getFullYear();
+      const m = today.getMonth() + 1;
+      const d = today.getDate();
+      dateObj = new Date(Date.UTC(y, m - 1, d, 12, 0, 0, 0));
+    }
+
+    const searchStart = new Date(dateObj.getTime() - (24 * 60 * 60 * 1000));
+    const searchEnd = new Date(dateObj.getTime() + (24 * 60 * 60 * 1000));
 
     const totalEmployees = await prisma.employee.count({ where: { status: { in: ['ACTIVE', 'PROBATION'] } } });
-    const todayRecords = await prisma.attendanceRecord.findMany({ where: { date: today } });
+    const allRecords = await prisma.attendanceRecord.findMany({
+      where: {
+        date: { gte: searchStart, lte: searchEnd },
+      },
+    });
+
+    const todayRecords = allRecords.filter((r) => safeFormatDate(r.date) === targetDateStr);
 
     const isPresent = (s: string) => s === 'PRESENT' || s === 'P' || s === 'PR' || s === 'PRES' || s === '1' || s === 'WORK_FROM_HOME' || s === 'WFH';
     const isLate = (s: string) => s === 'LATE' || s === 'LATE_LOGIN' || s === 'LL';
@@ -173,13 +203,116 @@ router.get('/today-stats', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'),
     const lop = todayRecords.filter((r) => isLOP(r.status)).length;
     const onLeave = todayRecords.filter((r) => isOnLeave(r.status)).length;
     const explicitAbsent = todayRecords.filter((r) => r.status === 'ABSENT' || r.status === 'A').length;
-    const absent = Math.max(explicitAbsent, totalEmployees - present - late - halfDay - onLeave - lop);
+    const effectiveTotal = Math.max(totalEmployees, todayRecords.length);
+    const absent = Math.max(explicitAbsent, effectiveTotal - present - late - halfDay - onLeave - lop);
 
     res.json({
       success: true,
-      data: { totalEmployees, present: present + late, absent, late, onLeave, halfDay, lop },
+      data: {
+        date: targetDateStr,
+        totalEmployees: effectiveTotal,
+        present,
+        absent,
+        late,
+        onLeave,
+        halfDay,
+        lop,
+        recordedCount: todayRecords.length,
+      },
     });
   } catch (err) {
+    next(err);
+  }
+});
+
+// POST /api/attendance/daily-import — Single-day attendance bulk import
+router.post('/daily-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), allowPavitraOrAdmin, async (req: AuthRequest, res: Response, next) => {
+  try {
+    const { date, records } = req.body;
+    if (!records || !Array.isArray(records) || records.length === 0) {
+      res.status(400).json({ success: false, message: 'No records provided' });
+      return;
+    }
+
+    const targetDateStr = String(date || records[0]?.date || new Date().toISOString().split('T')[0]).split('T')[0];
+    const [y, m, d] = targetDateStr.split('-').map(Number);
+    const targetDateObj = new Date(Date.UTC(y, m - 1, d, 12, 0, 0, 0));
+
+    const insertPayload: any[] = [];
+    const empIdsToUpdate = new Set<string>();
+
+    for (const row of records) {
+      const empCode = String(row.empId || row.employeeCode || row.employeeId || '').trim();
+      if (!empCode) continue;
+
+      const rawStatus = row.status !== undefined && row.status !== null ? String(row.status).trim() : '';
+      if (!rawStatus || rawStatus === '-' || rawStatus === 'UNDEFINED' || rawStatus === 'NULL') {
+        // Skip inserting empty/unmarked records so it stays blank
+        continue;
+      }
+
+      empIdsToUpdate.add(empCode);
+
+      const status = rawStatus.toUpperCase();
+      let checkInTime: Date | null = null;
+      let checkOutTime: Date | null = null;
+      if (row.checkInTime) checkInTime = parseTimeString(row.checkInTime, targetDateObj);
+      if (row.checkOutTime) checkOutTime = parseTimeString(row.checkOutTime, targetDateObj);
+
+      const workHours = checkInTime && checkOutTime
+        ? Math.round(((checkOutTime.getTime() - checkInTime.getTime()) / (1000 * 60 * 60)) * 100) / 100
+        : 0;
+
+      const notesToStore = JSON.stringify({
+        empId: empCode,
+        empName: row.empName || row.employeeName || undefined,
+        department: row.department || undefined,
+        designation: row.designation || undefined,
+        role: row.role || undefined,
+        remarks: row.remarks || undefined,
+      });
+
+      insertPayload.push({
+        employeeId: empCode,
+        date: targetDateObj,
+        status,
+        checkInTime,
+        checkOutTime,
+        workHours,
+        notes: notesToStore,
+        source: 'EXCEL_DAILY',
+      });
+    }
+
+    if (insertPayload.length === 0) {
+      res.status(400).json({ success: false, message: 'No valid employee attendance records found' });
+      return;
+    }
+
+    // Delete existing records ONLY for the target date and updated employees
+    const dayStart = new Date(targetDateObj.getTime() - (12 * 60 * 60 * 1000));
+    const dayEnd = new Date(targetDateObj.getTime() + (12 * 60 * 60 * 1000));
+
+    await prisma.attendanceRecord.deleteMany({
+      where: {
+        employeeId: { in: Array.from(empIdsToUpdate) },
+        date: { gte: dayStart, lte: dayEnd },
+      },
+    }).catch(() => {});
+
+    // Insert updated records
+    const result = await prisma.attendanceRecord.createMany({
+      data: insertPayload,
+      skipDuplicates: true,
+    });
+
+    res.status(201).json({
+      success: true,
+      message: `Successfully updated attendance for ${result.count} employees on ${targetDateStr}`,
+      count: result.count,
+      date: targetDateStr,
+    });
+  } catch (err: any) {
     next(err);
   }
 });
@@ -336,16 +469,6 @@ router.get('/all-logs', async (req: AuthRequest, res: Response, next) => {
   }
 });
 
-const allowPavitraOrAdmin = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const user = req.user;
-  const isPavitra = user?.email === 'pavitra@adyapan.com' || user?.specialization === 'ATTENDANCE_LEAVE';
-  const isAdminOrManager = user?.role === 'SUPER_ADMIN' || user?.role === 'HR_ADMIN';
-  if (!isPavitra && !isAdminOrManager) {
-    return res.status(403).json({ success: false, message: 'Forbidden: Only Pavitra or HR Admin can modify Attendance records.' });
-  }
-  next();
-};
-
 // POST /api/attendance/bulk-import — batch import attendance from XLSX/CSV
 router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE'), allowPavitraOrAdmin, async (req: AuthRequest, res: Response, next) => {
   try {
@@ -403,11 +526,16 @@ router.post('/bulk-import', authorize('SUPER_ADMIN', 'HR_ADMIN', 'HR_EXECUTIVE')
         remarks: record.remarks || undefined,
       });
 
+      const recordStatus = record.status !== undefined && record.status !== null ? String(record.status).trim() : '';
+      if (!recordStatus || recordStatus === '-' || recordStatus === 'UNDEFINED' || recordStatus === 'NULL') {
+        continue;
+      }
+
       touchedEmployees.add(empCode);
       insertPayload.push({
         employeeId: empCode,
         date: dateObj,
-        status: record.status || 'PRESENT',
+        status: recordStatus,
         checkInTime,
         checkOutTime,
         workHours,

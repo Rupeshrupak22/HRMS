@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserX, Plus, X, Pencil, Trash2, Search, Download } from 'lucide-react';
+import { UserX, Plus, X, Pencil, Trash2, Search, Download, Loader2 } from 'lucide-react';
 import { aravindApi } from '@/lib/aravind-api';
 import { Pagination } from '@/components/Pagination';
 
@@ -25,6 +25,7 @@ interface ResignationRecord {
 
 export default function ResignationPage() {
   const [records, setRecords] = useState<ResignationRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -49,7 +50,8 @@ export default function ResignationPage() {
   };
 
   useEffect(() => {
-    aravindApi.getResignation().then((data) => setRecords(Array.isArray(data) ? data : [])).catch(() => setRecords([]));
+    setLoading(true);
+    aravindApi.getResignation().then((data) => setRecords(Array.isArray(data) ? data : [])).catch(() => setRecords([])).finally(() => setLoading(false));
   }, []);
 
   const handleEdit = (record: ResignationRecord) => {
@@ -316,7 +318,17 @@ export default function ResignationPage() {
               </tr>
             </thead>
             <tbody>
-              {paginatedRecords.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={15} className="px-4 py-16 text-center text-slate-500 font-semibold">
+                    <div className="flex flex-col items-center justify-center gap-2.5">
+                      <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                      <span className="text-xs font-bold text-slate-700">Loading resignation records...</span>
+                      <span className="text-[10px] text-slate-400">Fetching active resignation tracker & LWD</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedRecords.length === 0 ? (
                 <tr>
                   <td colSpan={15} className="px-4 py-8 text-center text-slate-400">
                     No resignation records found.

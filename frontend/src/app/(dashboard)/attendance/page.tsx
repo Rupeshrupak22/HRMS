@@ -8,6 +8,60 @@ import * as XLSX from 'xlsx';
 import UploadProgressModal from '@/components/UploadProgressModal';
 import { Pagination } from '@/components/Pagination';
 
+const normalizeStatusToCode = (status: string): string => {
+  const s = String(status || '').toUpperCase().trim();
+  if (!s) return '-';
+  if (s === 'PRESENT' || s === 'P' || s === 'PR' || s === 'PRES' || s === '1') return 'P';
+  if (s === 'ABSENT' || s === 'A' || s === 'AB' || s === 'ABS' || s === '0') return 'A';
+  if (s === 'CASUAL_LEAVE' || s === 'CL' || s === 'C.L' || s === 'CASUAL' || s === 'CASUAL LEAVE') return 'CL';
+  if (s === 'SICK_LEAVE' || s === 'SL' || s === 'S.L' || s === 'SICK' || s === 'SICK LEAVE') return 'SL';
+  if (s === 'HOLIDAY' || s === 'H' || s === 'HOL') return 'H';
+  if (s === 'WEEKLY_OFF' || s === 'WO' || s === 'W.O' || s === 'W/O' || s === 'OFF' || s === 'WEEKLY OFF' || s === 'WEEK OFF' || s === 'WEEKOFF' || s === 'WEEK-OFF') return 'WO';
+  if (s === 'OVERTIME' || s === 'OT' || s === 'O.T' || s === 'OVERTIME') return 'OT';
+  if (s === 'WORK_FROM_HOME' || s === 'WFH' || s === 'W.F.H' || s === 'WORK FROM HOME') return 'WFH';
+  if (s === 'HALF_DAY' || s === 'HD' || s === 'H.D' || s === 'HALF DAY' || s === 'HALF-DAY' || s === '0.5' || s === '0.5P') return 'HD';
+  if (s === 'EARLY_LOGOUT' || s === 'EL' || s === 'E.L' || s === 'EARLY LOGOUT' || s === 'EARLY OUT') return 'EL';
+  if (s === 'LATE_LOGIN' || s === 'LATE' || s === 'LL' || s === 'L.L' || s === 'LATE LOGIN' || s === 'LATE IN') return 'LL';
+  if (s === 'EMERGENCY_LEAVE' || s === 'E_L' || s === 'E.L.' || s === 'EMERGENCY' || s === 'EMERGENCY LEAVE') return 'E_L';
+  if (s === 'PAID_LEAVE' || s === 'PL' || s === 'P.L' || s === 'PAID LEAVE') return 'PL';
+  if (s === 'LONG_LEAVE' || s === 'LLV' || s === 'L.L.V' || s === 'LONG LEAVE' || s === 'LONG LEAVES') return 'LLV';
+  if (s === 'NATIONAL_HOLIDAY' || s === 'NH' || s === 'N.H' || s === 'NATIONAL HOLIDAY') return 'NH';
+  if (s === 'FESTIVE_HOLIDAY' || s === 'FH' || s === 'F.H' || s === 'FESTIVE HOLIDAY') return 'FH';
+  if (s === 'TRAINING' || s === 'T' || s === 'TR' || s === 'TRAINING') return 'T';
+  if (s === 'LOP' || s === 'L.O.P' || s === 'LOSS OF PAY' || s === 'LOSS_OF_PAY') return 'LOP';
+  if (s === 'PERSONAL_LEAVE' || s === 'PEL' || s === 'PERSONAL LEAVE') return 'PeL';
+  if (s === 'ONBOARDING' || s === 'ONBO' || s === 'JOINING') return 'ONBO';
+  if (s === 'RESIGNED' || s === 'RESIG' || s === 'RESIGNATION') return 'RESIG';
+  return s;
+};
+
+const getStatusBadgeStyle = (code: string) => {
+  switch (code) {
+    case 'P': return 'bg-emerald-100 text-emerald-800 font-bold';
+    case 'A': return 'bg-red-100 text-red-800 font-bold';
+    case 'CL': return 'bg-amber-100 text-amber-800 font-bold';
+    case 'SL': return 'bg-orange-100 text-orange-800 font-bold';
+    case 'H': return 'bg-slate-200 text-slate-800 font-bold';
+    case 'WO': return 'bg-slate-200 text-slate-800 font-bold text-[8px]';
+    case 'OT': return 'bg-blue-100 text-blue-800 font-bold';
+    case 'WFH': return 'bg-teal-100 text-teal-800 font-bold text-[8px]';
+    case 'HD': return 'bg-pink-100 text-pink-800 font-bold';
+    case 'EL': return 'bg-yellow-100 text-yellow-800 font-bold';
+    case 'LL': return 'bg-amber-100 text-amber-800 font-bold';
+    case 'E_L': return 'bg-rose-100 text-rose-800 font-bold';
+    case 'PL': return 'bg-indigo-100 text-indigo-800 font-bold';
+    case 'LLV': return 'bg-purple-100 text-purple-800 font-bold text-[8px]';
+    case 'NH': return 'bg-cyan-100 text-cyan-800 font-bold';
+    case 'FH': return 'bg-lime-100 text-lime-800 font-bold';
+    case 'T': return 'bg-violet-100 text-violet-800 font-bold';
+    case 'LOP': return 'bg-gray-200 text-gray-800 font-bold text-[8px]';
+    case 'PeL': return 'bg-fuchsia-100 text-fuchsia-800 font-bold';
+    case 'ONBO': return 'bg-sky-100 text-sky-800 font-bold text-[7px]';
+    case 'RESIG': return 'bg-rose-100 text-rose-800 font-bold text-[7px]';
+    default: return 'text-slate-300';
+  }
+};
+
 export default function AttendancePage() {
   const { user } = useAuth();
   const [allLogs, setAllLogs] = useState<any[]>([]);
@@ -249,9 +303,42 @@ export default function AttendancePage() {
       });
   }, [allEmployees, searchTerm, selectedDepartment, sortBy]);
 
-  useEffect(() => {
-    setPage(1);
-  }, [selectedMonth, searchTerm, selectedDepartment, sortBy]);
+  const [selectedDayNumber, setSelectedDayNumber] = useState<number>(() => {
+    const d = new Date();
+    return Math.min(d.getDate(), daysInMonth || 31);
+  });
+
+  const dayWiseStats = useMemo(() => {
+    let p = 0, a = 0, ll = 0, hd = 0, leave = 0, lop = 0, recorded = 0;
+    const targetDay = selectedDayNumber;
+
+    allEmployees.forEach((emp) => {
+      const code = normalizeStatusToCode(emp.days[targetDay] || '');
+      if (code && code !== '-') {
+        recorded++;
+        if (code === 'P' || code === 'WFH' || code === 'OT') p++;
+        else if (code === 'A') a++;
+        else if (code === 'LL') ll++;
+        else if (code === 'HD') hd++;
+        else if (code === 'LOP') lop++;
+        else if (code === 'SL' || code === 'CL' || code === 'PL' || code === 'E_L' || code === 'LLV' || code === 'PeL') leave++;
+      }
+    });
+
+    return {
+      day: targetDay,
+      dateStr: `${yearStr}-${monthStr}-${String(targetDay).padStart(2, '0')}`,
+      total: allEmployees.length,
+      recorded,
+      present: p,
+      purePresent: p,
+      absent: a,
+      late: ll,
+      halfDay: hd,
+      leave,
+      lop,
+    };
+  }, [allEmployees, selectedDayNumber, yearStr, monthStr]);
 
   const paginatedEmployees = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -277,6 +364,31 @@ export default function AttendancePage() {
     XLSX.writeFile(wb, `Attendance_Template_${selectedMonth}.xlsx`);
   };
 
+  const downloadDailyTemplate = (targetDate?: string) => {
+    const dateToUse = targetDate || new Date().toISOString().split('T')[0];
+    const headers = ['Sl#', 'Employee ID', 'Employee Name', 'Department', 'Designation', 'Date', 'Status (P/A/LL/HD/SL/CL/LOP)'];
+    
+    const rows = allEmployees.length > 0 
+      ? allEmployees.map((emp, idx) => [
+          idx + 1,
+          emp.empId,
+          emp.empName,
+          emp.department || '-',
+          emp.designation || '-',
+          dateToUse,
+          ''
+        ])
+      : [
+          ['1', 'EMP-001', 'John Doe', 'Engineering', 'Developer', dateToUse, ''],
+          ['2', 'EMP-002', 'Jane Smith', 'Sales', 'Executive', dateToUse, '']
+        ];
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Daily_Attendance');
+    XLSX.writeFile(wb, `Daily_Attendance_${dateToUse}.xlsx`);
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -295,15 +407,14 @@ export default function AttendancePage() {
         for (let r = 0; r < Math.min(rawRows.length, 15); r++) {
           const rowStr = rawRows[r].map(c => String(c).toLowerCase()).join(' ');
           if (
-            /emp.*(?:id|code)|employee.*(?:id|code)|staff.*(?:id|code)/i.test(rowStr) ||
-            (rowStr.includes('name') && (rowStr.includes('present') || rowStr.includes('absent') || /\b1\b.*\b2\b.*\b3\b/.test(rowStr)))
+            /emp|employee|staff|name|present|absent|status|sl#|\b1\b.*\b2\b/i.test(rowStr)
           ) {
             headerRowIdx = r;
             break;
           }
         }
 
-        const headerRow = rawRows[headerRowIdx].map((c: any) => String(c ?? '').trim().replace(/[\u00a0\r\n\t]/g, ' '));
+        const headerRow = (rawRows[headerRowIdx] || []).map((c: any) => String(c ?? '').trim().replace(/[\u00a0\r\n\t]/g, ' '));
         const dataRows = rawRows.slice(headerRowIdx + 1);
 
         const jsonData: any[] = [];
@@ -320,51 +431,35 @@ export default function AttendancePage() {
           jsonData.push(obj);
         }
 
-        const codeMap: Record<string, string> = {
-          'P': 'PRESENT', 'PR': 'PRESENT', 'PRES': 'PRESENT', 'PRESENT': 'PRESENT', '1': 'PRESENT',
-          'A': 'ABSENT', 'AB': 'ABSENT', 'ABS': 'ABSENT', 'ABSENT': 'ABSENT', '0': 'ABSENT',
-          'CL': 'CASUAL_LEAVE', 'C.L': 'CASUAL_LEAVE', 'CASUAL': 'CASUAL_LEAVE', 'CASUAL LEAVE': 'CASUAL_LEAVE', 'CASUAL_LEAVE': 'CASUAL_LEAVE',
-          'SL': 'SICK_LEAVE', 'S.L': 'SICK_LEAVE', 'SICK': 'SICK_LEAVE', 'SICK LEAVE': 'SICK_LEAVE', 'SICK_LEAVE': 'SICK_LEAVE',
-          'H': 'HOLIDAY', 'HOL': 'HOLIDAY', 'HOLIDAY': 'HOLIDAY',
-          'WO': 'WEEKLY_OFF', 'W.O': 'WEEKLY_OFF', 'W/O': 'WEEKLY_OFF', 'OFF': 'WEEKLY_OFF', 'WEEKLY OFF': 'WEEKLY_OFF', 'WEEKLY_OFF': 'WEEKLY_OFF', 'WEEK OFF': 'WEEKLY_OFF', 'WEEKOFF': 'WEEKLY_OFF', 'WEEK-OFF': 'WEEKLY_OFF',
-          'OT': 'OVERTIME', 'O.T': 'OVERTIME', 'OVERTIME': 'OVERTIME',
-          'WFH': 'WORK_FROM_HOME', 'W.F.H': 'WORK_FROM_HOME', 'WORK FROM HOME': 'WORK_FROM_HOME', 'WORK_FROM_HOME': 'WORK_FROM_HOME',
-          'HD': 'HALF_DAY', 'H.D': 'HALF_DAY', 'HALF DAY': 'HALF_DAY', 'HALF_DAY': 'HALF_DAY', 'HALF-DAY': 'HALF_DAY', '0.5': 'HALF_DAY', '0.5P': 'HALF_DAY',
-          'EL': 'EARLY_LOGOUT', 'E.L': 'EARLY_LOGOUT', 'EARLY LOGOUT': 'EARLY_LOGOUT', 'EARLY_LOGOUT': 'EARLY_LOGOUT', 'EARLY OUT': 'EARLY_LOGOUT',
-          'LL': 'LATE_LOGIN', 'L.L': 'LATE_LOGIN', 'LATE LOGIN': 'LATE_LOGIN', 'LATE_LOGIN': 'LATE_LOGIN', 'LATE IN': 'LATE_LOGIN',
-          'E_L': 'EMERGENCY_LEAVE', 'E.L.': 'EMERGENCY_LEAVE', 'EMERGENCY LEAVE': 'EMERGENCY_LEAVE', 'EMERGENCY_LEAVE': 'EMERGENCY_LEAVE', 'EMERGENCY': 'EMERGENCY_LEAVE',
-          'PL': 'PAID_LEAVE', 'P.L': 'PAID_LEAVE', 'PAID LEAVE': 'PAID_LEAVE', 'PAID_LEAVE': 'PAID_LEAVE',
-          'LLV': 'LONG_LEAVE', 'L.L.V': 'LONG_LEAVE', 'LONG LEAVE': 'LONG_LEAVE', 'LONG_LEAVE': 'LONG_LEAVE', 'LONG LEAVES': 'LONG_LEAVE',
-          'NH': 'NATIONAL_HOLIDAY', 'N.H': 'NATIONAL_HOLIDAY', 'NATIONAL HOLIDAY': 'NATIONAL_HOLIDAY', 'NATIONAL_HOLIDAY': 'NATIONAL_HOLIDAY',
-          'FH': 'FESTIVE_HOLIDAY', 'F.H': 'FESTIVE_HOLIDAY', 'FESTIVE HOLIDAY': 'FESTIVE_HOLIDAY', 'FESTIVE_HOLIDAY': 'FESTIVE_HOLIDAY',
-          'T': 'TRAINING', 'TR': 'TRAINING', 'TRAINING': 'TRAINING',
-          'LOP': 'LOP', 'L.O.P': 'LOP', 'LOSS OF PAY': 'LOP', 'LOSS_OF_PAY': 'LOP',
-          'PEL': 'PERSONAL_LEAVE', 'PeL': 'PERSONAL_LEAVE', 'PERSONAL LEAVE': 'PERSONAL_LEAVE', 'PERSONAL_LEAVE': 'PERSONAL_LEAVE',
-          'ONBO': 'ONBOARDING', 'ONBOARDING': 'ONBOARDING', 'JOINING': 'ONBOARDING',
-          'RESIG': 'RESIGNED', 'RESIGNED': 'RESIGNED', 'RESIGNATION': 'RESIGNED',
-        };
-
         const formattedRecords: any[] = [];
 
         for (const row of jsonData) {
           const keys = Object.keys(row);
           
-          const empIdKey = keys.find(k => /^(employee\s*id|emp\s*id|id|employee\s*code|emp\s*code|code|emp_id|employee_id|emp_code|employee_code)$/i.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
-          const rawEmpId = empIdKey ? row[empIdKey] : (row['Employee ID'] || row['ID'] || row['Emp ID'] || row['Employee Code'] || row['Emp Code'] || row['empId']);
+          const empIdKey = keys.find(k => {
+            const clean = k.trim().replace(/[\u00a0\r\n\t]/g, ' ').toLowerCase();
+            return /emp.*(?:id|code|no)|staff.*(?:id|code)|employee.*(?:id|code|no)|user.*id|^id$/i.test(clean) ||
+                   clean === 'id' || clean === 'emp id' || clean === 'employee id' || clean === 'emp code';
+          });
+          const rawEmpId = empIdKey ? row[empIdKey] : (row['Employee ID'] || row['ID'] || row['Emp ID'] || row['Employee Code'] || row['Emp Code'] || row['empId'] || row['Sl#']);
 
-          const empNameKey = keys.find(k => /^(employee\s*name|emp\s*name|name|staff\s*name|full\s*name|employee|staff|emp_name|employee_name)$/i.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
+          const empNameKey = keys.find(k => {
+            const clean = k.trim().replace(/[\u00a0\r\n\t]/g, ' ').toLowerCase();
+            return (/name|staff|employee/i.test(clean) && !/id|code|dept|role|desig|status|remark|date/i.test(clean)) ||
+                   clean === 'name' || clean === 'employee name' || clean === 'emp name';
+          });
           const rawEmpName = empNameKey ? row[empNameKey] : (row['Employee Name'] || row['Name'] || row['Emp Name']);
 
           const empId = rawEmpId !== undefined && rawEmpId !== null && String(rawEmpId).trim() !== '' ? String(rawEmpId).trim() : '';
           const empName = rawEmpName !== undefined && rawEmpName !== null && String(rawEmpName).trim() !== '' ? String(rawEmpName).trim() : '';
 
-          const deptKey = keys.find(k => /^(department|dept|dept\s*name|department\s*name)$/i.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
+          const deptKey = keys.find(k => /department|dept/i.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
           const department = deptKey ? String(row[deptKey] ?? '').trim() : (row['Department'] || row['Dept'] || '');
 
-          const desigKey = keys.find(k => /^(designation|desig|designation\s*title|title|position)$/i.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
+          const desigKey = keys.find(k => /designation|desig|title|position/i.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
           const designation = desigKey ? String(row[desigKey] ?? '').trim() : (row['Designation'] || row['Desig'] || '');
 
-          const roleKey = keys.find(k => /^(role|user\s*role)$/i.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
+          const roleKey = keys.find(k => /role/i.test(k.trim().replace(/[\u00a0\r\n\t]/g, ' ')));
           const role = roleKey ? String(row[roleKey] ?? '').trim() : (row['Role'] || '');
 
           const findVal = (regex: RegExp) => {
@@ -413,7 +508,7 @@ export default function AttendancePage() {
                 if (cleanK === dayStr || cleanK === paddedDay) return true;
 
                 // Exclude any summary, totals, or remarks column headers
-                if (/total|sum|count|leave|remark|status|reason|approved|mail|payable|salary/i.test(cleanK)) {
+                if (/total|sum|count|leave|remark|reason|approved|mail|payable|salary/i.test(cleanK)) {
                   return false;
                 }
 
@@ -435,7 +530,7 @@ export default function AttendancePage() {
               const rawVal = dayKey ? String(row[dayKey] ?? '').trim().toUpperCase() : '';
               if (rawVal && rawVal !== '-' && rawVal !== 'UNDEFINED' && rawVal !== 'NULL') {
                 hasDays = true;
-                const fullStatus = codeMap[rawVal] || rawVal;
+                const fullStatus = normalizeStatusToCode(rawVal) !== '-' ? normalizeStatusToCode(rawVal) : rawVal;
                 const dateStr = `${yearStr}-${monthStr}-${paddedDay}`;
                 
                 formattedRecords.push({
@@ -451,32 +546,64 @@ export default function AttendancePage() {
               }
             }
 
-            // If a row had employee details and summary columns but no day numbers
-            if (!hasDays && Object.keys(summary).length > 0) {
-              const dateStr = `${yearStr}-${monthStr}-01`;
-              formattedRecords.push({
-                employeeCode: finalEmpCode,
-                employeeName: finalEmpName,
-                department: department || undefined,
-                designation: designation || undefined,
-                role: role || undefined,
-                date: dateStr,
-                status: 'PRESENT',
-                summary,
+            // If a row is a Single-Day Sheet (e.g. Employee ID, Name, Status, Date)
+            if (!hasDays) {
+              const statusKey = keys.find(k => {
+                const clean = k.trim().replace(/[\u00a0\r\n\t]/g, ' ').toLowerCase();
+                return /status|attendance|punch|presence|p\/a/i.test(clean) && !/report|summary|comment/i.test(clean);
               });
+              const dateKey = keys.find(k => {
+                const clean = k.trim().replace(/[\u00a0\r\n\t]/g, ' ').toLowerCase();
+                return /date|punch\s*date|day|log\s*date/i.test(clean);
+              });
+              
+              let rowStatus = statusKey ? String(row[statusKey] ?? '').trim().toUpperCase() : '';
+              if (!rowStatus && row['Status']) rowStatus = String(row['Status']).trim().toUpperCase();
+              
+              let rowDate = dateKey ? String(row[dateKey] ?? '').trim() : '';
+              let targetDate = '';
+              if (rowDate) {
+                const dParts = rowDate.split('T')[0].split(/[-/]/);
+                if (dParts.length === 3) {
+                  if (dParts[0].length === 4) targetDate = `${dParts[0]}-${dParts[1].padStart(2, '0')}-${dParts[2].padStart(2, '0')}`;
+                  else if (dParts[2].length === 4) targetDate = `${dParts[2]}-${dParts[1].padStart(2, '0')}-${dParts[0].padStart(2, '0')}`;
+                }
+              }
+              if (!targetDate) {
+                targetDate = `${yearStr}-${monthStr}-${String(selectedDayNumber).padStart(2, '0')}`;
+              }
+
+              if (rowStatus && rowStatus !== '-' && rowStatus !== 'UNDEFINED' && rowStatus !== 'NULL') {
+                const fullStatus = normalizeStatusToCode(rowStatus) !== '-' ? normalizeStatusToCode(rowStatus) : rowStatus;
+                formattedRecords.push({
+                  employeeCode: finalEmpCode,
+                  employeeName: finalEmpName,
+                  department: department || undefined,
+                  designation: designation || undefined,
+                  role: role || undefined,
+                  date: targetDate,
+                  status: fullStatus,
+                  isSingleDay: true,
+                  summary: Object.keys(summary).length > 0 ? summary : undefined,
+                });
+              }
             }
           }
         }
 
         if (formattedRecords.length === 0) {
-          setImportError('No valid attendance day records found. Please check that your Excel file contains Employee ID and day columns.');
+          const errMsg = 'No valid employee attendance records recognized in this file. Please ensure columns include "Employee ID" and day numbers (1..31) or "Status".';
+          setImportError(errMsg);
+          alert(errMsg);
           return;
         }
 
         setImportData(formattedRecords);
         setShowImportModal(true);
       } catch (err: any) {
-        setImportError('Failed to parse file. Please ensure it is a valid .xlsx, .xls, or .csv document.');
+        const errMsg = 'Failed to parse Excel file: ' + (err?.message || 'Invalid format');
+        setImportError(errMsg);
+        alert(errMsg);
       }
     };
     reader.readAsArrayBuffer(file);
@@ -497,9 +624,15 @@ export default function AttendancePage() {
         setUploadProgress(currentProg);
       }, 150);
 
-      const res = await apiRequest('/attendance/bulk-import', {
+      const isSingleDay = importData.some((r: any) => r.isSingleDay);
+      const targetEndpoint = isSingleDay ? '/attendance/daily-import' : '/attendance/bulk-import';
+      const payload = isSingleDay 
+        ? { date: importData[0]?.date, records: importData }
+        : { records: importData };
+
+      await apiRequest(targetEndpoint, {
         method: 'POST',
-        body: JSON.stringify({ records: importData }),
+        body: JSON.stringify(payload),
       });
       
       clearInterval(progressInterval);
@@ -515,60 +648,6 @@ export default function AttendancePage() {
       setImportError(err?.message || 'Import failed. Please verify format.');
     } finally {
       setImporting(false);
-    }
-  };
-
-  const normalizeStatusToCode = (status: string): string => {
-    const s = String(status || '').toUpperCase().trim();
-    if (!s) return '-';
-    if (s === 'PRESENT' || s === 'P' || s === 'PR' || s === 'PRES' || s === '1') return 'P';
-    if (s === 'ABSENT' || s === 'A' || s === 'AB' || s === 'ABS' || s === '0') return 'A';
-    if (s === 'CASUAL_LEAVE' || s === 'CL' || s === 'C.L' || s === 'CASUAL' || s === 'CASUAL LEAVE') return 'CL';
-    if (s === 'SICK_LEAVE' || s === 'SL' || s === 'S.L' || s === 'SICK' || s === 'SICK LEAVE') return 'SL';
-    if (s === 'HOLIDAY' || s === 'H' || s === 'HOL') return 'H';
-    if (s === 'WEEKLY_OFF' || s === 'WO' || s === 'W.O' || s === 'W/O' || s === 'OFF' || s === 'WEEKLY OFF' || s === 'WEEK OFF' || s === 'WEEKOFF' || s === 'WEEK-OFF') return 'WO';
-    if (s === 'OVERTIME' || s === 'OT' || s === 'O.T' || s === 'OVERTIME') return 'OT';
-    if (s === 'WORK_FROM_HOME' || s === 'WFH' || s === 'W.F.H' || s === 'WORK FROM HOME') return 'WFH';
-    if (s === 'HALF_DAY' || s === 'HD' || s === 'H.D' || s === 'HALF DAY' || s === 'HALF-DAY' || s === '0.5' || s === '0.5P') return 'HD';
-    if (s === 'EARLY_LOGOUT' || s === 'EL' || s === 'E.L' || s === 'EARLY LOGOUT' || s === 'EARLY OUT') return 'EL';
-    if (s === 'LATE_LOGIN' || s === 'LATE' || s === 'LL' || s === 'L.L' || s === 'LATE LOGIN' || s === 'LATE IN') return 'LL';
-    if (s === 'EMERGENCY_LEAVE' || s === 'E_L' || s === 'E.L.' || s === 'EMERGENCY' || s === 'EMERGENCY LEAVE') return 'E_L';
-    if (s === 'PAID_LEAVE' || s === 'PL' || s === 'P.L' || s === 'PAID LEAVE') return 'PL';
-    if (s === 'LONG_LEAVE' || s === 'LLV' || s === 'L.L.V' || s === 'LONG LEAVE' || s === 'LONG LEAVES') return 'LLV';
-    if (s === 'NATIONAL_HOLIDAY' || s === 'NH' || s === 'N.H' || s === 'NATIONAL HOLIDAY') return 'NH';
-    if (s === 'FESTIVE_HOLIDAY' || s === 'FH' || s === 'F.H' || s === 'FESTIVE HOLIDAY') return 'FH';
-    if (s === 'TRAINING' || s === 'T' || s === 'TR' || s === 'TRAINING') return 'T';
-    if (s === 'LOP' || s === 'L.O.P' || s === 'LOSS OF PAY' || s === 'LOSS_OF_PAY') return 'LOP';
-    if (s === 'PERSONAL_LEAVE' || s === 'PEL' || s === 'PERSONAL LEAVE') return 'PeL';
-    if (s === 'ONBOARDING' || s === 'ONBO' || s === 'JOINING') return 'ONBO';
-    if (s === 'RESIGNED' || s === 'RESIG' || s === 'RESIGNATION') return 'RESIG';
-    return s;
-  };
-
-  const getStatusBadgeStyle = (code: string) => {
-    switch (code) {
-      case 'P': return 'bg-emerald-100 text-emerald-800 font-bold';
-      case 'A': return 'bg-red-100 text-red-800 font-bold';
-      case 'CL': return 'bg-amber-100 text-amber-800 font-bold';
-      case 'SL': return 'bg-orange-100 text-orange-800 font-bold';
-      case 'H': return 'bg-slate-200 text-slate-800 font-bold';
-      case 'WO': return 'bg-slate-200 text-slate-800 font-bold text-[8px]';
-      case 'OT': return 'bg-blue-100 text-blue-800 font-bold';
-      case 'WFH': return 'bg-teal-100 text-teal-800 font-bold text-[8px]';
-      case 'HD': return 'bg-pink-100 text-pink-800 font-bold';
-      case 'EL': return 'bg-yellow-100 text-yellow-800 font-bold';
-      case 'LL': return 'bg-amber-100 text-amber-800 font-bold';
-      case 'E_L': return 'bg-rose-100 text-rose-800 font-bold';
-      case 'PL': return 'bg-indigo-100 text-indigo-800 font-bold';
-      case 'LLV': return 'bg-purple-100 text-purple-800 font-bold text-[8px]';
-      case 'NH': return 'bg-cyan-100 text-cyan-800 font-bold';
-      case 'FH': return 'bg-lime-100 text-lime-800 font-bold';
-      case 'T': return 'bg-violet-100 text-violet-800 font-bold';
-      case 'LOP': return 'bg-gray-200 text-gray-800 font-bold text-[8px]';
-      case 'PeL': return 'bg-fuchsia-100 text-fuchsia-800 font-bold';
-      case 'ONBO': return 'bg-sky-100 text-sky-800 font-bold text-[7px]';
-      case 'RESIG': return 'bg-rose-100 text-rose-800 font-bold text-[7px]';
-      default: return 'text-slate-300';
     }
   };
 
@@ -829,18 +908,91 @@ export default function AttendancePage() {
           
           {isAdmin && (
             <div className="flex flex-wrap gap-2">
-              <button onClick={() => openEditModal({ isNew: true, empId: '', empName: '', days: {} })} className="px-4 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition flex items-center gap-2 font-semibold shadow-sm text-sm">
+              <button onClick={() => openEditModal({ isNew: true, empId: '', empName: '', days: {} })} className="px-3.5 py-2 bg-emerald-600 text-white rounded-xl hover:bg-emerald-700 transition flex items-center gap-1.5 font-semibold shadow-sm text-xs cursor-pointer">
                 <Plus className="w-4 h-4" /> Add Manually
               </button>
-              <button onClick={downloadTemplate} className="px-4 py-2 bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 transition flex items-center gap-2 font-semibold shadow-sm text-sm">
-                <Download className="w-4 h-4" /> Download Template
+              <button onClick={() => downloadDailyTemplate(dayWiseStats.dateStr)} className="px-3.5 py-2 bg-amber-50 text-amber-800 border border-amber-200 rounded-xl hover:bg-amber-100 transition flex items-center gap-1.5 font-bold shadow-sm text-xs cursor-pointer" title="Download 1-day pre-filled excel sheet to quickly fill attendance">
+                <Download className="w-4 h-4 text-amber-600" /> Download Daily Sheet ({selectedDayNumber} {monthStr})
               </button>
-              <button onClick={() => fileInputRef.current?.click()} className="px-4 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition flex items-center gap-2 font-semibold shadow-sm text-sm">
+              <button onClick={downloadTemplate} className="px-3.5 py-2 bg-white text-slate-700 border border-slate-200 rounded-xl hover:bg-slate-50 transition flex items-center gap-1.5 font-semibold shadow-sm text-xs cursor-pointer">
+                <Download className="w-4 h-4" /> Monthly Template
+              </button>
+              <button onClick={() => fileInputRef.current?.click()} className="px-3.5 py-2 bg-indigo-600 text-white rounded-xl hover:bg-indigo-700 transition flex items-center gap-1.5 font-semibold shadow-sm text-xs cursor-pointer" title="Import 1-Day or Full Month Excel/CSV">
                 <Upload className="w-4 h-4" /> Import Excel/CSV
               </button>
               <input type="file" ref={fileInputRef} className="hidden" accept=".xlsx,.xls,.csv" onChange={handleFileUpload} />
             </div>
           )}
+        </div>
+
+        {/* Day-Wise Dynamic KPI Bar */}
+        <div className="bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 p-5 rounded-2xl text-white shadow-md space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-white/10 pb-3">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="font-extrabold text-sm tracking-tight text-white">
+                Day-Wise Live Attendance Counters — {dayWiseStats.dateStr} (Day {selectedDayNumber})
+              </span>
+            </div>
+            <div className="flex items-center gap-2 flex-wrap text-xs">
+              <span className="text-slate-300 font-semibold">Select Day:</span>
+              <select
+                value={selectedDayNumber}
+                onChange={(e) => setSelectedDayNumber(parseInt(e.target.value, 10))}
+                className="px-3 py-1 rounded-lg bg-white/10 text-white font-bold border border-white/20 outline-none cursor-pointer"
+              >
+                {Array.from({ length: daysInMonth }, (_, i) => (
+                  <option key={i + 1} value={i + 1} className="text-slate-900">
+                    Day {i + 1} ({yearStr}-{monthStr}-{String(i + 1).padStart(2, '0')})
+                  </option>
+                ))}
+              </select>
+              <button
+                onClick={() => {
+                  const today = new Date();
+                  if (today.toISOString().startsWith(selectedMonth)) {
+                    setSelectedDayNumber(today.getDate());
+                  }
+                }}
+                className="px-2.5 py-1 rounded-lg bg-orange-600 hover:bg-orange-500 text-white font-bold cursor-pointer"
+              >
+                Today
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="bg-white/10 border border-white/10 rounded-xl p-3 text-center">
+              <div className="text-[11px] text-slate-300 font-bold uppercase">Total Roster</div>
+              <div className="text-xl font-black text-white mt-0.5">{dayWiseStats.total}</div>
+              <div className="text-[9px] text-slate-400 mt-0.5">{dayWiseStats.recorded} recorded</div>
+            </div>
+            <div className="bg-emerald-500/20 border border-emerald-400/30 rounded-xl p-3 text-center">
+              <div className="text-[11px] text-emerald-300 font-bold uppercase">Present (P)</div>
+              <div className="text-xl font-black text-emerald-400 mt-0.5">{dayWiseStats.present}</div>
+              <div className="text-[9px] text-emerald-200/70 mt-0.5">On time present</div>
+            </div>
+            <div className="bg-red-500/20 border border-red-400/30 rounded-xl p-3 text-center">
+              <div className="text-[11px] text-red-300 font-bold uppercase">Absent (A)</div>
+              <div className="text-xl font-black text-red-400 mt-0.5">{dayWiseStats.absent}</div>
+              <div className="text-[9px] text-red-200/70 mt-0.5">Unexcused absence</div>
+            </div>
+            <div className="bg-amber-500/20 border border-amber-400/30 rounded-xl p-3 text-center">
+              <div className="text-[11px] text-amber-300 font-bold uppercase">Late Login (LL)</div>
+              <div className="text-xl font-black text-amber-400 mt-0.5">{dayWiseStats.late}</div>
+              <div className="text-[9px] text-amber-200/70 mt-0.5">Late arrivals</div>
+            </div>
+            <div className="bg-pink-500/20 border border-pink-400/30 rounded-xl p-3 text-center">
+              <div className="text-[11px] text-pink-300 font-bold uppercase">Half Day (HD)</div>
+              <div className="text-xl font-black text-pink-400 mt-0.5">{dayWiseStats.halfDay}</div>
+              <div className="text-[9px] text-pink-200/70 mt-0.5">0.5 shift</div>
+            </div>
+            <div className="bg-blue-500/20 border border-blue-400/30 rounded-xl p-3 text-center">
+              <div className="text-[11px] text-blue-300 font-bold uppercase">Leave / LOP</div>
+              <div className="text-xl font-black text-blue-400 mt-0.5">{dayWiseStats.leave + dayWiseStats.lop}</div>
+              <div className="text-[9px] text-blue-200/70 mt-0.5">{dayWiseStats.leave} Approved • {dayWiseStats.lop} LOP</div>
+            </div>
+          </div>
         </div>
 
 

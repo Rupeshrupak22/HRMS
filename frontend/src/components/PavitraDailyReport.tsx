@@ -18,6 +18,7 @@ import {
   Sparkles,
   FileText,
   X,
+  Trash2,
 } from 'lucide-react';
 
 interface AttendanceStats {
@@ -194,6 +195,17 @@ export function PavitraDailyReport() {
       loadData();
     } catch (err: any) {
       alert(err.message || 'Failed to submit report');
+    }
+  };
+
+  const handleDeleteReport = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this daily report? It will be removed from all records and dashboards.')) return;
+    try {
+      await apiRequest(`/reports/daily/${id}`, { method: 'DELETE' });
+      setReports((prev) => prev.filter((r) => r.id !== id));
+      alert('Daily report deleted successfully.');
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete report');
     }
   };
 
@@ -452,11 +464,19 @@ export function PavitraDailyReport() {
                   <span className="font-bold text-slate-900">{rep.date}</span>
                   <span className="text-slate-500 ml-3">{rep.tasksCompleted?.substring(0, 100)}...</span>
                 </div>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                  rep.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
-                }`}>
-                  {rep.status}
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                    rep.status === 'APPROVED' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'
+                  }`}>
+                    {rep.status}
+                  </span>
+                  <button
+                    onClick={() => handleDeleteReport(rep.id)}
+                    className="text-slate-400 hover:text-red-600 transition"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>

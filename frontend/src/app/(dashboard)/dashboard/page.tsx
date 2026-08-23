@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { apiRequest } from '@/lib/api';
@@ -20,6 +20,7 @@ import {
   CheckCircle2,
   FileText,
   Clock,
+  Calendar,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -110,6 +111,9 @@ interface DashboardMetrics {
     nandini?: {
       submittedReports: number;
       dailyReportsCount: number;
+      todaySubmitted: number;
+      todayPending: number;
+      totalReports: number;
     };
   };
 }
@@ -118,6 +122,10 @@ export default function DashboardPage() {
   const { user } = useAuth();
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [loading, setLoading] = useState(true);
+  const todayStr = new Date().toISOString().split('T')[0];
+  const yesterdayStr = (() => { const d = new Date(); d.setDate(d.getDate() - 1); return d.toISOString().split('T')[0]; })();
+  const [selectedDashDate, setSelectedDashDate] = useState<string>(todayStr);
+  const [allPavitraReports, setAllPavitraReports] = useState<any[]>([]);
 
   useEffect(() => {
     async function loadData() {
@@ -251,9 +259,17 @@ export default function DashboardPage() {
           r.specialization === 'ATTENDANCE_LEAVE' ||
           (r.employeeName || '').toLowerCase().includes('pavitra')
         );
-        const latestPav = pavitraReports.length > 0 ? pavitraReports[0] : null;
-        if (latestPav) {
-          const text = `${latestPav.keyUpdates || ''} ${latestPav.comment || ''} ${latestPav.issue || ''} ${latestPav.tasksCompleted || ''}`;
+        setAllPavitraReports(pavitraReports);
+
+        // FIX: Only use TODAY's report for today's metrics (not yesterday's stale report)
+        const currentTodayStr = new Date().toISOString().split('T')[0];
+        const todayPavReport = pavitraReports.find((r: any) => {
+          const rDate = r.date || (r.createdAt ? r.createdAt.split('T')[0] : '');
+          return rDate === currentTodayStr;
+        }) || null;
+
+        if (todayPavReport) {
+          const text = `${todayPavReport.keyUpdates || ''} ${todayPavReport.comment || ''} ${todayPavReport.issue || ''} ${todayPavReport.tasksCompleted || ''}`;
           const presMatch = text.match(/Present[:\s-]+(\d+)/i) || text.match(/(\d+)\s*Present/i);
           const absMatch = text.match(/Absent[:\s-]+(\d+)/i) || text.match(/(\d+)\s*Absent/i) || text.match(/LOP[:\s-]+(\d+)/i);
           const lateMatch = text.match(/Late[:\s-]+(\d+)/i) || text.match(/(\d+)\s*Late/i);
@@ -364,8 +380,38 @@ export default function DashboardPage() {
               employeeRelations: nitishaRelList.length,
             },
             nandini: {
-              submittedReports: dailyList.length || 5,
-              dailyReportsCount: dailyList.length || 5,
+              submittedReports: dailyList.length || 0,
+              dailyReportsCount: dailyList.length || 0,
+              todaySubmitted: (() => {
+                const todayCheck = new Date().toISOString().split('T')[0];
+                const specialists = [
+                  { email: 'pavitra@adyapan.com', spec: 'ATTENDANCE_LEAVE' },
+                  { email: 'charitha@adyapan.com', spec: 'SALARY_PAYROLL' },
+                  { email: 'veena@adyapan.com', spec: 'ONBOARDING_HIRING' },
+                  { email: 'aravind@adyapan.com', spec: 'RESIGNATION_EXIT' },
+                  { email: 'nitisha@adyapan.com', spec: 'DISCIPLINE_POSH' },
+                ];
+                return specialists.filter(s => dailyList.some((r: any) => {
+                  const rDate = r.date || (r.createdAt ? r.createdAt.split('T')[0] : '');
+                  return rDate === todayCheck && (r.userEmail === s.email || r.specialization === s.spec);
+                })).length;
+              })(),
+              todayPending: (() => {
+                const todayCheck = new Date().toISOString().split('T')[0];
+                const specialists = [
+                  { email: 'pavitra@adyapan.com', spec: 'ATTENDANCE_LEAVE' },
+                  { email: 'charitha@adyapan.com', spec: 'SALARY_PAYROLL' },
+                  { email: 'veena@adyapan.com', spec: 'ONBOARDING_HIRING' },
+                  { email: 'aravind@adyapan.com', spec: 'RESIGNATION_EXIT' },
+                  { email: 'nitisha@adyapan.com', spec: 'DISCIPLINE_POSH' },
+                ];
+                const submitted = specialists.filter(s => dailyList.some((r: any) => {
+                  const rDate = r.date || (r.createdAt ? r.createdAt.split('T')[0] : '');
+                  return rDate === todayCheck && (r.userEmail === s.email || r.specialization === s.spec);
+                })).length;
+                return 5 - submitted;
+              })(),
+              totalReports: dailyList.length || 0,
             },
           },
         });
@@ -377,6 +423,43 @@ export default function DashboardPage() {
     }
     loadData();
   }, []);
+
+  // Compute attendance metrics based on selected date filter
+  const dateAttendance = useMemo(() => {
+    if (!allPavitraReports.length || !metrics) {
+      return { present: 0, absent: 0, late: 0, marked: false, rate: 0 };
+    }
+
+    const targetDate = selectedDashDate;
+    const report = allPavitraReports.find((r: any) => {
+      const rDate = r.date || (r.createdAt ? r.createdAt.split('T')[0] : '');
+      return rDate === targetDate;
+    });
+
+    if (!report) {
+      return { present: 0, absent: 0, late: 0, marked: false, rate: 0 };
+    }
+
+    const text = `${report.keyUpdates || ''} ${report.comment || ''} ${report.issue || ''} ${report.tasksCompleted || ''}`;
+    const presMatch = text.match(/Present[:\s-]+(\d+)/i) || text.match(/(\d+)\s*Present/i);
+    const absMatch = text.match(/Absent[:\s-]+(\d+)/i) || text.match(/(\d+)\s*Absent/i) || text.match(/LOP[:\s-]+(\d+)/i);
+    const lateMatch = text.match(/Late[:\s-]+(\d+)/i) || text.match(/(\d+)\s*Late/i);
+
+    let present = presMatch ? parseInt(presMatch[1], 10) : 0;
+    let absent = absMatch ? parseInt(absMatch[1], 10) : 0;
+    const late = lateMatch ? parseInt(lateMatch[1], 10) : 0;
+
+    const activeEmp = metrics.activeEmployees || 0;
+    if (present > 0 && absent === 0 && activeEmp > present) {
+      absent = Math.max(0, activeEmp - present);
+    }
+
+    const rate = activeEmp > 0 && present > 0 ? Math.min(100, Math.round((present / activeEmp) * 100)) : 0;
+
+    return { present, absent, late, marked: present > 0 || absent > 0, rate };
+  }, [selectedDashDate, allPavitraReports, metrics]);
+
+  const isToday = selectedDashDate === todayStr;
 
   const userEmail = (user?.email || '').toLowerCase();
 
@@ -433,13 +516,13 @@ export default function DashboardPage() {
       veena: { totalRecruitment: 0, totalOnboarding: 0, totalDropouts: 0, totalCandidates: 0, newJoiners: 0, openJobs: 0 },
       aravind: { resignationTrackers: 0, abscondCases: 0, fnfPending: 0, exitClearances: 0, retentionCases: 0 },
       nitisha: { activeComplaints: 0, openIssues: 0, disciplineCases: 0 },
-      nandini: { submittedReports: 0, dailyReportsCount: 0 },
+      nandini: { submittedReports: 0, dailyReportsCount: 0, todaySubmitted: 0, todayPending: 5, totalReports: 0 },
     },
   };
 
   const attendancePieData = [
-    { name: 'Present', value: m.todayPresent, color: '#10b981' },
-    { name: 'Absent', value: m.todayAbsent, color: '#ef4444' },
+    { name: 'Present', value: dateAttendance.present, color: '#10b981' },
+    { name: 'Absent', value: dateAttendance.absent, color: '#ef4444' },
   ].filter((d) => d.value > 0);
 
   // Weekly attendance trend simulation based on real present headcount
@@ -497,20 +580,20 @@ export default function DashboardPage() {
             </div>
 
             <div className="bg-white/15 backdrop-blur-md border border-white/20 rounded-2xl px-4 py-3 min-w-[135px]">
-              <p className="text-[10px] uppercase font-bold text-orange-100">Today&apos;s Attendance</p>
+              <p className="text-[10px] uppercase font-bold text-orange-100">{isToday ? "Today's" : selectedDashDate} Attendance</p>
               {loading ? (
                 <span className="text-2xl font-black text-white">...</span>
-              ) : m.attendanceMarkedToday ? (
+              ) : dateAttendance.marked ? (
                 <>
                   <div className="flex items-baseline gap-1.5 mt-0.5">
-                    <span className="text-2xl font-black text-white">{m.todayPresent}</span>
+                    <span className="text-2xl font-black text-white">{dateAttendance.present}</span>
                     <span className="text-[10px] text-emerald-200 font-bold">Present</span>
                   </div>
-                  <p className="text-[9px] text-orange-200 mt-0.5">{m.todayAbsent} Absent Today</p>
+                  <p className="text-[9px] text-orange-200 mt-0.5">{dateAttendance.absent} Absent {isToday ? 'Today' : ''}</p>
                 </>
               ) : (
                 <div className="mt-1">
-                  <p className="text-xs font-black text-amber-200">Not Marked Today</p>
+                  <p className="text-xs font-black text-amber-200">Not Marked {isToday ? 'Today' : `(${selectedDashDate})`}</p>
                   <p className="text-[9px] text-orange-100/80 mt-0.5">Daily Log Pending</p>
                 </div>
               )}
@@ -524,6 +607,48 @@ export default function DashboardPage() {
               <p className="text-[9px] text-orange-200 mt-0.5">{loading ? '...' : `${m.payroll.totalRecords} Active Records`}</p>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* 📅 Date Filter Bar */}
+      <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Calendar className="w-4 h-4 text-orange-600" />
+          <span className="font-extrabold text-slate-800">Filter Attendance by Date:</span>
+          {!isToday && (
+            <span className="px-2.5 py-1 rounded-full bg-orange-100 text-orange-700 font-bold text-[10px] border border-orange-200">
+              📅 Viewing: {selectedDashDate}
+            </span>
+          )}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            type="date"
+            value={selectedDashDate}
+            onChange={(e) => setSelectedDashDate(e.target.value)}
+            max={todayStr}
+            className="px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-800 font-bold outline-none cursor-pointer"
+          />
+          <button
+            onClick={() => setSelectedDashDate(todayStr)}
+            className={`px-3 py-1.5 rounded-xl font-bold transition-colors cursor-pointer ${
+              isToday
+                ? 'bg-orange-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Today
+          </button>
+          <button
+            onClick={() => setSelectedDashDate(yesterdayStr)}
+            className={`px-3 py-1.5 rounded-xl font-bold transition-colors cursor-pointer ${
+              selectedDashDate === yesterdayStr
+                ? 'bg-orange-600 text-white shadow-xs'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Yesterday
+          </button>
         </div>
       </div>
 
@@ -554,24 +679,24 @@ export default function DashboardPage() {
         <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm hover:shadow-md transition-all">
           <div className="flex justify-between items-start">
             <div>
-              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Present Today</p>
+              <p className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Present {isToday ? 'Today' : `(${selectedDashDate})`}</p>
               {loading ? (
                 <p className="text-3xl font-black text-slate-400 mt-1">...</p>
-              ) : m.attendanceMarkedToday ? (
+              ) : dateAttendance.marked ? (
                 <>
-                  <p className="text-3xl font-black text-emerald-600 mt-1">{m.todayPresent}</p>
+                  <p className="text-3xl font-black text-emerald-600 mt-1">{dateAttendance.present}</p>
                   <div className="flex items-center gap-2 mt-2">
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                      {m.todayPresent} Present
+                      {dateAttendance.present} Present
                     </span>
                     <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-100 text-red-700">
-                      {m.todayAbsent} Absent
+                      {dateAttendance.absent} Absent
                     </span>
                   </div>
                 </>
               ) : (
                 <div className="mt-2">
-                  <p className="text-sm font-black text-amber-600">Attendance not marked today</p>
+                  <p className="text-sm font-black text-amber-600">Attendance not marked {isToday ? 'today' : `for ${selectedDashDate}`}</p>
                   <p className="text-[10px] text-slate-400 mt-1">Pending from Attendance Specialist</p>
                 </div>
               )}
@@ -658,28 +783,28 @@ export default function DashboardPage() {
               {loading ? (
                 <div className="grid grid-cols-2 gap-2 pt-3 pb-2 text-center">
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <p className="text-[9px] font-bold text-slate-500 uppercase">Present Today</p>
+                    <p className="text-[9px] font-bold text-slate-500 uppercase">Present {isToday ? 'Today' : ''}</p>
                     <p className="text-base font-black text-slate-400 mt-0.5">...</p>
                   </div>
                   <div className="bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <p className="text-[9px] font-bold text-slate-500 uppercase">Absent Today</p>
+                    <p className="text-[9px] font-bold text-slate-500 uppercase">Absent {isToday ? 'Today' : ''}</p>
                     <p className="text-base font-black text-slate-400 mt-0.5">...</p>
                   </div>
                 </div>
-              ) : (m.specialists?.pavitra?.attendanceMarkedToday ?? m.attendanceMarkedToday) ? (
+              ) : dateAttendance.marked ? (
                 <div className="grid grid-cols-2 gap-2 pt-3 pb-2 text-center">
                   <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-100">
-                    <p className="text-[9px] font-bold text-emerald-700 uppercase">Present Today</p>
-                    <p className="text-base font-black text-emerald-800 mt-0.5">{m.specialists?.pavitra?.present ?? m.todayPresent}</p>
+                    <p className="text-[9px] font-bold text-emerald-700 uppercase">Present {isToday ? 'Today' : ''}</p>
+                    <p className="text-base font-black text-emerald-800 mt-0.5">{dateAttendance.present}</p>
                   </div>
                   <div className="bg-red-50 p-2.5 rounded-xl border border-red-100">
-                    <p className="text-[9px] font-bold text-red-700 uppercase">Absent Today</p>
-                    <p className="text-base font-black text-red-800 mt-0.5">{m.specialists?.pavitra?.absent ?? m.todayAbsent}</p>
+                    <p className="text-[9px] font-bold text-red-700 uppercase">Absent {isToday ? 'Today' : ''}</p>
+                    <p className="text-base font-black text-red-800 mt-0.5">{dateAttendance.absent}</p>
                   </div>
                 </div>
               ) : (
                 <div className="my-3 p-2.5 rounded-xl bg-amber-50 border border-amber-200 text-center">
-                  <p className="text-xs font-black text-amber-800">Attendance not marked today</p>
+                  <p className="text-xs font-black text-amber-800">Attendance not marked {isToday ? 'today' : `for ${selectedDashDate}`}</p>
                   <p className="text-[10px] text-amber-600 mt-0.5">Daily attendance sheet pending</p>
                 </div>
               )}
@@ -691,7 +816,7 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-50">
                   <span className="text-[11px] text-slate-500">Late Arrivals</span>
-                  <span className="font-bold text-amber-700">{loading ? '...' : `${m.specialists?.pavitra?.late ?? m.todayLate} Logged`}</span>
+                  <span className="font-bold text-amber-700">{loading ? '...' : `${dateAttendance.late} Logged`}</span>
                 </div>
                 <div className="flex justify-between py-1">
                   <span className="text-[11px] text-slate-500">Pending Leave Requests</span>
@@ -963,28 +1088,30 @@ export default function DashboardPage() {
               </div>
 
               <div className="grid grid-cols-2 gap-2 pt-3 pb-2 text-center">
-                <div className="bg-indigo-50 p-2.5 rounded-xl border border-indigo-100">
-                  <p className="text-[9px] font-bold text-indigo-700 uppercase">Specialist Units</p>
-                  <p className="text-base font-black text-indigo-900 mt-0.5">5 Managed</p>
+                <div className={`p-2.5 rounded-xl border ${(m.specialists?.nandini?.todaySubmitted ?? 0) === 5 ? 'bg-emerald-50 border-emerald-100' : 'bg-amber-50 border-amber-100'}`}>
+                  <p className={`text-[9px] font-bold uppercase ${(m.specialists?.nandini?.todaySubmitted ?? 0) === 5 ? 'text-emerald-700' : 'text-amber-700'}`}>Reports Today</p>
+                  <p className={`text-base font-black mt-0.5 ${(m.specialists?.nandini?.todaySubmitted ?? 0) === 5 ? 'text-emerald-900' : 'text-amber-900'}`}>{loading ? '...' : `${m.specialists?.nandini?.todaySubmitted ?? 0}/5`}</p>
                 </div>
-                <div className="bg-emerald-50 p-2.5 rounded-xl border border-emerald-100">
-                  <p className="text-[9px] font-bold text-emerald-700 uppercase">Audit Score</p>
-                  <p className="text-base font-black text-emerald-800 mt-0.5">100% Verified</p>
+                <div className={`p-2.5 rounded-xl border ${(m.specialists?.nandini?.todayPending ?? 5) === 0 ? 'bg-emerald-50 border-emerald-100' : 'bg-red-50 border-red-100'}`}>
+                  <p className={`text-[9px] font-bold uppercase ${(m.specialists?.nandini?.todayPending ?? 5) === 0 ? 'text-emerald-700' : 'text-red-700'}`}>Pending</p>
+                  <p className={`text-base font-black mt-0.5 ${(m.specialists?.nandini?.todayPending ?? 5) === 0 ? 'text-emerald-900' : 'text-red-900'}`}>{loading ? '...' : (m.specialists?.nandini?.todayPending ?? 5) === 0 ? 'All Done ✅' : `${m.specialists?.nandini?.todayPending ?? 5} Pending`}</p>
                 </div>
               </div>
 
               <div className="space-y-1.5 text-xs text-slate-600 pt-1 pb-3">
                 <div className="flex justify-between py-1 border-b border-slate-50">
-                  <span className="text-[11px] text-slate-500">Daily Review Pipeline</span>
-                  <span className="font-bold text-slate-800">All Reports Reviewed</span>
+                  <span className="text-[11px] text-slate-500">Specialists Managed</span>
+                  <span className="font-bold text-slate-800">5 Active</span>
                 </div>
                 <div className="flex justify-between py-1 border-b border-slate-50">
-                  <span className="text-[11px] text-slate-500">Workforce Health</span>
-                  <span className="font-bold text-emerald-700">96.5% Stable</span>
+                  <span className="text-[11px] text-slate-500">Total Reports (All Time)</span>
+                  <span className="font-bold text-indigo-700">{loading ? '...' : `${m.specialists?.nandini?.totalReports ?? 0} Logged`}</span>
                 </div>
                 <div className="flex justify-between py-1">
-                  <span className="text-[11px] text-slate-500">Operations Control</span>
-                  <span className="font-bold text-indigo-700">Executive Oversight</span>
+                  <span className="text-[11px] text-slate-500">Today&apos;s Status</span>
+                  <span className={`font-bold ${(m.specialists?.nandini?.todayPending ?? 5) === 0 ? 'text-emerald-700' : 'text-amber-700'}`}>
+                    {loading ? '...' : (m.specialists?.nandini?.todayPending ?? 5) === 0 ? 'All Specialists Reported' : `${m.specialists?.nandini?.todayPending ?? 5} Reports Awaited`}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1092,17 +1219,17 @@ export default function DashboardPage() {
             <div>
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
                 <PieChartIcon className="w-4 h-4 text-emerald-600" />
-                <span>Today&apos;s Attendance Ratio</span>
+                <span>{isToday ? "Today's" : selectedDashDate} Attendance Ratio</span>
               </h3>
-              <p className="text-xs text-slate-500 mt-0.5">Live counts from attendance table</p>
+              <p className="text-xs text-slate-500 mt-0.5">{isToday ? 'Live counts from attendance table' : `Attendance data for ${selectedDashDate}`}</p>
             </div>
             {loading ? (
               <span className="text-[11px] font-bold text-slate-500 bg-slate-50 px-2.5 py-1 rounded-full border border-slate-200">
                 ...
               </span>
-            ) : m.attendanceMarkedToday ? (
+            ) : dateAttendance.marked ? (
               <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-full border border-emerald-100">
-                {m.attendanceRate}% Rate
+                {dateAttendance.rate}% Rate
               </span>
             ) : (
               <span className="text-[11px] font-bold text-amber-700 bg-amber-50 px-2.5 py-1 rounded-full border border-amber-200">
@@ -1117,7 +1244,7 @@ export default function DashboardPage() {
                 <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
                 <span>Loading today&apos;s attendance ratio...</span>
               </div>
-            ) : m.attendanceMarkedToday && attendancePieData.length > 0 ? (
+            ) : dateAttendance.marked && attendancePieData.length > 0 ? (
               <>
                 <div className="w-[170px] h-[170px]">
                   <ResponsiveContainer width="100%" height="100%">
@@ -1143,20 +1270,23 @@ export default function DashboardPage() {
                 <div className="space-y-3">
                   <div className="p-3 rounded-2xl bg-emerald-50 border border-emerald-100 min-w-[120px]">
                     <p className="text-[10px] font-bold text-emerald-700 uppercase">Present</p>
-                    <p className="text-xl font-black text-emerald-900 mt-0.5">{m.todayPresent}</p>
+                    <p className="text-xl font-black text-emerald-900 mt-0.5">{dateAttendance.present}</p>
                   </div>
                   <div className="p-3 rounded-2xl bg-red-50 border border-red-100 min-w-[120px]">
                     <p className="text-[10px] font-bold text-red-700 uppercase">Absent</p>
-                    <p className="text-xl font-black text-red-900 mt-0.5">{m.todayAbsent}</p>
+                    <p className="text-xl font-black text-red-900 mt-0.5">{dateAttendance.absent}</p>
                   </div>
                 </div>
               </>
             ) : (
               <div className="flex flex-col items-center justify-center text-center p-6 bg-amber-50/50 rounded-2xl border border-amber-100 w-full">
                 <Clock className="w-8 h-8 text-amber-500 mb-2" />
-                <p className="text-sm font-black text-amber-900">Attendance not marked today</p>
+                <p className="text-sm font-black text-amber-900">Attendance not marked {isToday ? 'today' : `for ${selectedDashDate}`}</p>
                 <p className="text-[11px] text-amber-700 mt-1 max-w-xs">
-                  Pavitra hasn&apos;t marked or submitted today&apos;s attendance report yet.
+                  {isToday
+                    ? "Pavitra hasn't marked or submitted today's attendance report yet."
+                    : `No attendance report found for ${selectedDashDate}.`
+                  }
                 </p>
               </div>
             )}

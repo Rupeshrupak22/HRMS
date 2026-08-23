@@ -16,6 +16,7 @@ import {
   SlidersHorizontal,
   FileSpreadsheet,
   CheckCircle2,
+  Loader2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { veenaApi } from '@/lib/veena-api';
@@ -151,7 +152,7 @@ export default function RecruitmentTrackerPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [viewingEntry, setViewingEntry] = useState<RecruitmentEntry | null>(null);
   const [entries, setEntries] = useState<RecruitmentEntry[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   // Import XLSX Modal State
   const [showImportModal, setShowImportModal] = useState(false);
@@ -974,7 +975,17 @@ export default function RecruitmentTrackerPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {paginatedEntries.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={19} className="text-center py-16 text-slate-500 font-semibold">
+                    <div className="flex flex-col items-center justify-center gap-2.5">
+                      <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                      <span className="text-xs font-bold text-slate-700">Loading recruitment records...</span>
+                      <span className="text-[10px] text-slate-400">Fetching candidate pipeline and applications</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedEntries.length === 0 ? (
                 <tr>
                   <td colSpan={19} className="text-center py-12 text-slate-400 font-medium">
                     No recruitment candidates found. Import an XLSX or add a new candidate.

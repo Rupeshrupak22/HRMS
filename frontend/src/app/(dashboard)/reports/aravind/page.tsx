@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { FileText, ShieldAlert, UserX, UserMinus, LogOut, CreditCard, MessageSquareWarning, ClipboardList, Calendar, Eye, X, Download } from 'lucide-react';
+import { FileText, ShieldAlert, UserX, UserMinus, LogOut, CreditCard, MessageSquareWarning, ClipboardList, Calendar, Eye, X, Download, Trash2 } from 'lucide-react';
 import { aravindApi } from '@/lib/aravind-api';
 import { apiRequest } from '@/lib/api';
 import { Pagination } from '@/components/Pagination';
@@ -16,8 +16,15 @@ export default function AravindReportPage() {
   const [interviews, setInterviews] = useState<any[]>([]);
   const [dailyReports, setDailyReports] = useState<any[]>([]);
   const [filterDate, setFilterDate] = useState('');
+  const [filterMonth, setFilterMonth] = useState('');
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const todayStr = new Date().toISOString().split('T')[0];
+  const currentMonthStr = (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  })();
 
   // Pagination states
   const [pageRet, setPageRet] = useState(1);
@@ -71,24 +78,51 @@ export default function AravindReportPage() {
     loadData();
   }, []);
 
-  const filterByDate = (records: any[]) => {
-    if (!filterDate) return records;
+  const filterByDateOrMonth = (records: any[]) => {
+    if (!filterDate && !filterMonth) return records;
     return records.filter((r) => {
       const created = r.date || r.reportDate || r.dateOfResignation || r.lastWorkingDay || (r.createdAt ? r.createdAt.split('T')[0] : '');
-      return created === filterDate;
+      if (filterDate) return created === filterDate;
+      if (filterMonth) return created.startsWith(filterMonth);
+      return true;
     });
   };
 
-  const filteredRetention = filterByDate(retention);
-  const filteredResignation = filterByDate(resignation);
-  const filteredAbscond = filterByDate(abscond);
-  const filteredExit = filterByDate(exit);
-  const filteredFnf = filterByDate(fnf);
-  const filteredComplaints = filterByDate(complaints);
-  const filteredInterviews = filterByDate(interviews);
-  const filteredDailyReports = filterDate
-    ? dailyReports.filter((r) => r.reportDate === filterDate || r.date === filterDate || (r.createdAt && r.createdAt.split('T')[0] === filterDate))
-    : dailyReports;
+  const filteredRetention = filterByDateOrMonth(retention);
+  const filteredResignation = filterByDateOrMonth(resignation);
+  const filteredAbscond = filterByDateOrMonth(abscond);
+  const filteredExit = filterByDateOrMonth(exit);
+  const filteredFnf = filterByDateOrMonth(fnf);
+  const filteredComplaints = filterByDateOrMonth(complaints);
+  const filteredInterviews = filterByDateOrMonth(interviews);
+  const filteredDailyReports = filterByDateOrMonth(dailyReports);
+
+  const handleDeleteReport = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this daily report? It will be removed from all records and dashboards.')) return;
+    try {
+      await apiRequest(`/reports/daily/${id}`, { method: 'DELETE' });
+      try { await aravindApi.deleteDailyReport(id); } catch {}
+      setDailyReports((prev) => prev.filter((r) => r.id !== id));
+      if (selectedReport?.id === id) setSelectedReport(null);
+      alert('Daily report deleted successfully from all records.');
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete daily report');
+    }
+  };
+
+  const resetFilters = () => {
+    setFilterDate('');
+    setFilterMonth('');
+    setPageRet(1);
+    setPageRes(1);
+    setPageAbs(1);
+    setPageExit(1);
+    setPageFnf(1);
+    setPageComp(1);
+    setPageIntv(1);
+    setPageRep(1);
+  };
 
   return (
     <div className="space-y-8 max-w-[1400px] mx-auto font-sans">
@@ -103,54 +137,118 @@ export default function AravindReportPage() {
             Exit & Resignation specialist — comprehensive operations & daily logs
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-white/10 border border-white/20 shadow-xs">
-            <Calendar className="w-4 h-4 text-sky-400" />
+      </div>
+
+      {/* 📅 Date & Month Filter Controls Bar */}
+      <div className="p-4 rounded-2xl bg-white border border-slate-200 shadow-sm flex flex-col lg:flex-row lg:items-center justify-between gap-3 text-xs">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Calendar className="w-4 h-4 text-sky-600" />
+          <span className="font-extrabold text-slate-800">Filter Exit/Resignation Data:</span>
+          {filterDate && (
+            <span className="px-2.5 py-1 rounded-full bg-sky-100 text-sky-800 font-bold text-[10px] border border-sky-200">
+              📅 Specific Date: {filterDate}
+            </span>
+          )}
+          {filterMonth && !filterDate && (
+            <span className="px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-800 font-bold text-[10px] border border-indigo-200">
+              📆 Monthly View: {filterMonth}
+            </span>
+          )}
+          {!filterDate && !filterMonth && (
+            <span className="px-2.5 py-1 rounded-full bg-slate-100 text-slate-600 font-bold text-[10px]">
+              🌐 All-Time Records
+            </span>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Month Picker */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50">
+            <span className="text-[10px] font-bold text-slate-500 uppercase">Month:</span>
+            <input
+              type="month"
+              value={filterMonth}
+              onChange={(e) => {
+                setFilterMonth(e.target.value);
+                setFilterDate('');
+                resetFilters();
+                setFilterMonth(e.target.value);
+              }}
+              className="text-xs font-bold text-slate-800 outline-none bg-transparent cursor-pointer"
+            />
+          </div>
+
+          {/* Date Picker */}
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 bg-slate-50">
+            <span className="text-[10px] font-bold text-slate-500 uppercase">Date:</span>
             <input
               type="date"
               value={filterDate}
-              onChange={(e) => setFilterDate(e.target.value)}
-              className="text-xs font-bold text-white border-none outline-none bg-transparent cursor-pointer"
+              onChange={(e) => {
+                const val = e.target.value;
+                resetFilters();
+                setFilterDate(val);
+              }}
+              className="text-xs font-bold text-slate-800 outline-none bg-transparent cursor-pointer"
             />
           </div>
-          {filterDate && (
+
+          <button
+            onClick={() => {
+              resetFilters();
+              setFilterDate(todayStr);
+            }}
+            className={`px-3 py-1.5 rounded-xl font-bold transition-colors cursor-pointer ${
+              filterDate === todayStr ? 'bg-sky-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            Today
+          </button>
+
+          <button
+            onClick={() => {
+              resetFilters();
+              setFilterMonth(currentMonthStr);
+            }}
+            className={`px-3 py-1.5 rounded-xl font-bold transition-colors cursor-pointer ${
+              filterMonth === currentMonthStr && !filterDate ? 'bg-indigo-600 text-white shadow-xs' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            This Month
+          </button>
+
+          {(filterDate || filterMonth) && (
             <button
-              onClick={() => setFilterDate('')}
-              className="px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-xs font-bold text-white transition cursor-pointer"
+              onClick={resetFilters}
+              className="px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold transition cursor-pointer border border-rose-200"
             >
-              Clear Filter
+              Reset Filter
             </button>
           )}
         </div>
       </div>
-
-      {filterDate && (
-        <div className="px-4 py-2.5 rounded-2xl bg-sky-50 border border-sky-200 text-xs font-bold text-sky-800">
-          Showing records for: {filterDate}
-        </div>
-      )}
 
       {/* Top 4 KPI Metrics */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-red-100 shadow-xs">
           <p className="text-[11px] font-bold text-red-600 uppercase tracking-wider">Resignations Tracked</p>
           <p className="text-2xl font-black text-slate-900 mt-1">{loading ? '...' : filteredResignation.length}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">Active & Historical Cases</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Total in DB: {resignation.length}</p>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-rose-100 shadow-xs">
           <p className="text-[11px] font-bold text-rose-600 uppercase tracking-wider">Abscond Cases</p>
           <p className="text-2xl font-black text-slate-900 mt-1">{loading ? '...' : filteredAbscond.length}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">Logged Absconders</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Total in DB: {abscond.length}</p>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-emerald-100 shadow-xs">
           <p className="text-[11px] font-bold text-emerald-600 uppercase tracking-wider">F&F Settlements</p>
           <p className="text-2xl font-black text-slate-900 mt-1">{loading ? '...' : filteredFnf.length}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">Final Dues Records</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Total in DB: {fnf.length}</p>
         </div>
         <div className="bg-white p-4 rounded-2xl border border-blue-100 shadow-xs">
-          <p className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Exit Clearances</p>
-          <p className="text-2xl font-black text-slate-900 mt-1">{loading ? '...' : filteredExit.length}</p>
-          <p className="text-[10px] text-slate-400 mt-0.5">Department Approvals</p>
+          <p className="text-[11px] font-bold text-blue-600 uppercase tracking-wider">Daily Reports</p>
+          <p className="text-2xl font-black text-slate-900 mt-1">{loading ? '...' : filteredDailyReports.length}</p>
+          <p className="text-[10px] text-slate-400 mt-0.5">Total in DB: {dailyReports.length}</p>
         </div>
       </div>
 
@@ -309,9 +407,18 @@ export default function AravindReportPage() {
                     <td className="px-4 py-2.5 text-slate-500 max-w-[150px] truncate">{r.issue || r.blockers || 'None'}</td>
                     <td className="px-4 py-2.5"><span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-green-100 text-green-700">{r.status || 'SUBMITTED'}</span></td>
                     <td className="px-4 py-2.5 text-right">
-                      <button onClick={() => setSelectedReport(r)} className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center gap-1 cursor-pointer ml-auto">
-                        <Eye className="w-3 h-3 text-slate-600" /> Full Preview
-                      </button>
+                      <div className="flex items-center justify-end gap-1.5 ml-auto">
+                        <button onClick={() => setSelectedReport(r)} className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-bold flex items-center gap-1 cursor-pointer">
+                          <Eye className="w-3 h-3 text-slate-600" /> Preview
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteReport(r.id, e)}
+                          className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                          title="Delete Daily Report"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}</tbody>
@@ -360,7 +467,14 @@ export default function AravindReportPage() {
                 </div>
               )}
             </div>
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <button
+                onClick={() => handleDeleteReport(selectedReport.id)}
+                className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs transition flex items-center gap-1.5 border border-rose-200 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete Report</span>
+              </button>
               <button onClick={() => setSelectedReport(null)} className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer">Close Preview</button>
             </div>
           </div>

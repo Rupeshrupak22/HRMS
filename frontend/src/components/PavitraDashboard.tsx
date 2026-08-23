@@ -24,6 +24,7 @@ import { apiRequest } from '@/lib/api';
 export function PavitraDashboard() {
   const { user } = useAuth();
   const [reports, setReports] = useState<any[]>([]);
+  const [dayAttendanceStats, setDayAttendanceStats] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const todayStr = new Date().toISOString().split('T')[0];
   const [selectedDate, setSelectedDate] = useState<string>(todayStr);
@@ -49,6 +50,21 @@ export function PavitraDashboard() {
     }
     loadPavitraReports();
   }, []);
+
+  useEffect(() => {
+    async function loadDayStats() {
+      try {
+        const dateToFetch = selectedDate || todayStr;
+        const res = await apiRequest(`/attendance/today-stats?date=${dateToFetch}`);
+        if (res?.data) {
+          setDayAttendanceStats(res.data);
+        }
+      } catch (e) {
+        console.error('Failed to load day attendance stats:', e);
+      }
+    }
+    loadDayStats();
+  }, [selectedDate, todayStr]);
 
   const totalReports = reports.length;
   const approvedReports = reports.filter((r) => r.status === 'APPROVED').length;
@@ -228,6 +244,55 @@ export function PavitraDashboard() {
           </div>
         </div>
       </div>
+
+      {/* Live Day Attendance Counters Banner */}
+      {dayAttendanceStats && (
+        <div className="p-5 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-md space-y-3">
+          <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+            <div className="flex items-center gap-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+              <h3 className="text-xs font-extrabold tracking-tight text-white uppercase">
+                Day-Wise Live Attendance Data — {dayAttendanceStats.date || selectedDate || todayStr}
+              </h3>
+            </div>
+            <div className="text-[11px] text-slate-300 font-semibold">
+              Total Roster: <strong className="text-white">{dayAttendanceStats.totalEmployees || 0}</strong> • Recorded: <strong className="text-emerald-400">{dayAttendanceStats.recordedCount || dayAttendanceStats.present + dayAttendanceStats.absent}</strong>
+            </div>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 text-center">
+            <div className="bg-emerald-500/20 border border-emerald-400/30 rounded-xl p-2.5">
+              <div className="text-[10px] text-emerald-300 font-bold uppercase">Present (P)</div>
+              <div className="text-lg font-black text-emerald-400 mt-0.5">{dayAttendanceStats.present}</div>
+              <div className="text-[9px] text-emerald-200/70">{dayAttendanceStats.late} late</div>
+            </div>
+            <div className="bg-red-500/20 border border-red-400/30 rounded-xl p-2.5">
+              <div className="text-[10px] text-red-300 font-bold uppercase">Absent (A)</div>
+              <div className="text-lg font-black text-red-400 mt-0.5">{dayAttendanceStats.absent}</div>
+              <div className="text-[9px] text-red-200/70">Unexcused</div>
+            </div>
+            <div className="bg-amber-500/20 border border-amber-400/30 rounded-xl p-2.5">
+              <div className="text-[10px] text-amber-300 font-bold uppercase">Late Login (LL)</div>
+              <div className="text-lg font-black text-amber-400 mt-0.5">{dayAttendanceStats.late}</div>
+              <div className="text-[9px] text-amber-200/70">Late arrival</div>
+            </div>
+            <div className="bg-pink-500/20 border border-pink-400/30 rounded-xl p-2.5">
+              <div className="text-[10px] text-pink-300 font-bold uppercase">Half Day (HD)</div>
+              <div className="text-lg font-black text-pink-400 mt-0.5">{dayAttendanceStats.halfDay || 0}</div>
+              <div className="text-[9px] text-pink-200/70">0.5 shift</div>
+            </div>
+            <div className="bg-blue-500/20 border border-blue-400/30 rounded-xl p-2.5">
+              <div className="text-[10px] text-blue-300 font-bold uppercase">On Leave</div>
+              <div className="text-lg font-black text-blue-400 mt-0.5">{dayAttendanceStats.onLeave || 0}</div>
+              <div className="text-[9px] text-blue-200/70">Approved leaves</div>
+            </div>
+            <div className="bg-slate-700/40 border border-slate-600/30 rounded-xl p-2.5">
+              <div className="text-[10px] text-slate-300 font-bold uppercase">Loss of Pay (LOP)</div>
+              <div className="text-lg font-black text-slate-200 mt-0.5">{dayAttendanceStats.lop || 0}</div>
+              <div className="text-[9px] text-slate-400">Unpaid / LOP</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Daily Work Report Summary Card for Selected/Active Date */}
       {activeDateReport ? (

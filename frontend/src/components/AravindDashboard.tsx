@@ -5,7 +5,7 @@ import Link from 'next/link';
 import {
   ShieldAlert, UserX, LogOut, CreditCard,
   MessageSquareWarning, ClipboardList, FileText,
-  Send, TrendingUp, AlertCircle, UserMinus,
+  Send, TrendingUp, AlertCircle, UserMinus, Loader2,
 } from 'lucide-react';
 import { aravindApi } from '@/lib/aravind-api';
 
@@ -28,6 +28,7 @@ interface Stats {
 }
 
 export function AravindDashboard() {
+  const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<Stats>({
     retentionTotal: 0, retentionOpen: 0, retentionRetained: 0,
     resignationTotal: 0, resignationPending: 0,
@@ -40,6 +41,7 @@ export function AravindDashboard() {
 
   useEffect(() => {
     async function load() {
+      setLoading(true);
       try {
         const statsData = await aravindApi.getStats().catch(() => null);
         if (statsData) {
@@ -90,7 +92,10 @@ export function AravindDashboard() {
             reportsTotal: reports.length,
           });
         }
-      } catch (e) {}
+      } catch (e) {
+      } finally {
+        setLoading(false);
+      }
     }
     load();
   }, []);
@@ -155,11 +160,11 @@ export function AravindDashboard() {
               className="p-5 rounded-2xl bg-white border border-slate-200 shadow-xs flex items-center justify-between hover:shadow-md transition-shadow">
               <div>
                 <div className="text-xs text-slate-500 font-semibold">{card.label}</div>
-                <div className={`text-2xl font-black mt-1 ${c.text}`}>{card.value}</div>
-                <div className="text-[10px] text-slate-500 mt-1">{card.sub}</div>
+                <div className={`text-2xl font-black mt-1 ${c.text}`}>{loading ? '...' : card.value}</div>
+                <div className="text-[10px] text-slate-500 mt-1">{loading ? 'Loading...' : card.sub}</div>
               </div>
               <div className={`w-11 h-11 rounded-2xl ${c.iconBg} border ${c.border} flex items-center justify-center ${c.text}`}>
-                <Icon className="w-5 h-5" />
+                {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : <Icon className="w-5 h-5" />}
               </div>
             </Link>
           );

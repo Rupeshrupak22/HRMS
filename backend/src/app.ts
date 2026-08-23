@@ -216,11 +216,38 @@ const postOverallReportHandler = async (req: express.Request, res: express.Respo
   }
 };
 
-// GET & POST /api/v1/overall-report — HR Manager report data (protected)
+const putOverallReportHandler = async (req: express.Request, res: express.Response) => {
+  try {
+    const id = String(req.params.id);
+    const updated = await prisma.overallReport.update({
+      where: { id },
+      data: req.body,
+    });
+    return res.json(updated);
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Update failed' });
+  }
+};
+
+const deleteOverallReportHandler = async (req: express.Request, res: express.Response) => {
+  try {
+    const id = String(req.params.id);
+    await prisma.overallReport.delete({ where: { id } });
+    return res.json({ success: true });
+  } catch (err: any) {
+    return res.status(500).json({ error: err?.message || 'Delete failed' });
+  }
+};
+
+// GET, POST, PUT, DELETE /api/v1/overall-report — HR Manager report data (protected)
 app.get('/api/v1/overall-report', authenticate, getOverallReportsHandler);
 app.get('/api/overall-report', authenticate, getOverallReportsHandler);
 app.post('/api/v1/overall-report', authenticate, postOverallReportHandler);
 app.post('/api/overall-report', authenticate, postOverallReportHandler);
+app.put('/api/v1/overall-report/:id', authenticate, putOverallReportHandler);
+app.put('/api/overall-report/:id', authenticate, putOverallReportHandler);
+app.delete('/api/v1/overall-report/:id', authenticate, deleteOverallReportHandler);
+app.delete('/api/overall-report/:id', authenticate, deleteOverallReportHandler);
 
 const getPayrollPublicHandler = async (_req: express.Request, res: express.Response) => {
   try {

@@ -140,7 +140,11 @@ function sanitizePerformanceData(body: any) {
   if (body.kpi !== undefined) data.kpi = String(body.kpi || '').trim();
   if (body.dailyPerformance !== undefined) data.dailyPerformance = String(body.dailyPerformance || '').trim();
   if (body.weeklyPerformance !== undefined) data.weeklyPerformance = String(body.weeklyPerformance || '').trim();
-  if (body.monthlyPerformance !== undefined) data.monthlyPerformance = String(body.monthlyPerformance || '').trim();
+  if (body.monthlyPerformance !== undefined) {
+    data.monthlyPerformance = String(body.monthlyPerformance || '').trim();
+  } else if (body.monthPerformance !== undefined) {
+    data.monthlyPerformance = String(body.monthPerformance || '').trim();
+  }
   if (body.dailyRevenue !== undefined) data.dailyRevenue = body.dailyRevenue ? String(body.dailyRevenue).trim() : null;
   if (body.weeklyRevenue !== undefined) data.weeklyRevenue = body.weeklyRevenue ? String(body.weeklyRevenue).trim() : null;
   if (body.monthlyRevenue !== undefined) data.monthlyRevenue = body.monthlyRevenue ? String(body.monthlyRevenue).trim() : null;
@@ -152,7 +156,8 @@ function sanitizePerformanceData(body: any) {
   if (body.managerRemark !== undefined) data.managerRemark = body.managerRemark ? String(body.managerRemark).trim() : null;
   if (body.finalRemark !== undefined) data.finalRemark = body.finalRemark ? String(body.finalRemark).trim() : null;
   if (body.furtherActions !== undefined) data.furtherActions = body.furtherActions ? String(body.furtherActions).trim() : null;
-  if (body.monthPerformance !== undefined) data.monthlyPerformance = body.monthPerformance ? String(body.monthPerformance).trim() : '';
+  if (body.performanceMonth !== undefined) data.performanceMonth = String(body.performanceMonth || '').trim();
+  if (body.monthPerformance !== undefined) data.monthPerformance = String(body.monthPerformance || '').trim();
   
   // Persist day-wise and week-wise JSON reliably in DB columns
   if (dailyDataStr !== null) data.employeeExplanation = dailyDataStr;
@@ -184,19 +189,20 @@ router.get('/performance', async (req: AuthRequest, res: Response, next: NextFun
 router.post('/performance', allowNitishaOrAdmin, async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const sanitized = sanitizePerformanceData(req.body);
-    const { performanceMonth, ...sanitizedData } = sanitized as any;
+    const targetMonth = sanitized.performanceMonth || req.body.performanceMonth || '';
 
-    if (sanitizedData.employeeId && performanceMonth) {
+    if (sanitized.employeeId && targetMonth) {
       const existing = await prisma.employeePerformance.findFirst({
         where: {
-          employeeId: sanitizedData.employeeId,
+          employeeId: sanitized.employeeId,
+          performanceMonth: targetMonth,
         },
       });
 
       if (existing) {
         const updated = await prisma.employeePerformance.update({
           where: { id: existing.id },
-          data: sanitizedData,
+          data: sanitized,
         });
         return res.json(mapPerformanceOutput(updated));
       }
@@ -204,7 +210,7 @@ router.post('/performance', allowNitishaOrAdmin, async (req: AuthRequest, res: R
 
     const created = await prisma.employeePerformance.create({
       data: {
-        ...sanitizedData,
+        ...sanitized,
         createdByEmail: req.user?.email || null,
       },
     });
@@ -218,6 +224,7 @@ router.put('/performance/:id', async (req: AuthRequest, res: Response, next: Nex
   try {
     const id = String(req.params.id);
     const sanitized = sanitizePerformanceData(req.body);
+    const targetMonth = sanitized.performanceMonth || req.body.performanceMonth || '';
 
     const existing = await prisma.employeePerformance.findUnique({ where: { id } }).catch(() => null);
     if (existing) {
@@ -227,10 +234,11 @@ router.put('/performance/:id', async (req: AuthRequest, res: Response, next: Nex
       });
       return res.json(mapPerformanceOutput(updated));
     } else {
-      if (sanitized.employeeId) {
+      if (sanitized.employeeId && targetMonth) {
         const byEmpAndMonth = await prisma.employeePerformance.findFirst({
           where: {
             employeeId: sanitized.employeeId,
+            performanceMonth: targetMonth,
           },
         });
 

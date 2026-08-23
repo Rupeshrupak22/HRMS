@@ -11,11 +11,13 @@ import {
   X,
   Download,
   CheckCircle2,
+  XCircle,
   Clock,
   AlertCircle,
   FileSpreadsheet,
   RotateCw,
   UserCheck,
+  Trash2,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { Pagination } from '@/components/Pagination';
@@ -26,6 +28,7 @@ export default function AllDailyReportsPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSpecialist, setSelectedSpecialist] = useState('ALL');
   const [selectedDate, setSelectedDate] = useState('');
+  const [selectedMonth, setSelectedMonth] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedReport, setSelectedReport] = useState<any | null>(null);
@@ -81,15 +84,20 @@ export default function AllDailyReportsPage() {
           (r.employeeName || '').toLowerCase().includes(selectedSpecialist.split('@')[0]);
       }
 
-      const reportDate = r.date || (r.createdAt ? r.createdAt.split('T')[0] : '');
-      const matchesDate = !selectedDate || reportDate === selectedDate;
+      const reportDate = r.date || r.reportDate || (r.createdAt ? r.createdAt.split('T')[0] : '');
+      let matchesDate = true;
+      if (selectedDate) {
+        matchesDate = reportDate === selectedDate;
+      } else if (selectedMonth) {
+        matchesDate = reportDate.startsWith(selectedMonth);
+      }
 
       const matchesStatus =
         selectedStatus === 'ALL' || (r.status || 'SUBMITTED').toUpperCase() === selectedStatus.toUpperCase();
 
       return matchesSearch && matchesSpecialist && matchesDate && matchesStatus;
     });
-  }, [reports, searchTerm, selectedSpecialist, selectedDate, selectedStatus]);
+  }, [reports, searchTerm, selectedSpecialist, selectedDate, selectedMonth, selectedStatus]);
 
   // Reset to page 1 on filter changes
   useEffect(() => {
@@ -101,6 +109,49 @@ export default function AllDailyReportsPage() {
     const start = (currentPage - 1) * PAGE_SIZE;
     return filteredReports.slice(start, start + PAGE_SIZE);
   }, [filteredReports, currentPage]);
+
+  const handleDeleteReport = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this daily report? It will be removed from all records and dashboards.')) return;
+    try {
+      await apiRequest(`/reports/daily/${id}`, { method: 'DELETE' });
+      try { await apiRequest(`/veena-portal/daily-reports/${id}`, { method: 'DELETE' }); } catch {}
+      try { await apiRequest(`/nitisha/daily-reports/${id}`, { method: 'DELETE' }); } catch {}
+      try { await apiRequest(`/aravind/daily-reports/${id}`, { method: 'DELETE' }); } catch {}
+
+      setReports((prev) => prev.filter((r) => r.id !== id));
+      if (selectedReport?.id === id) setSelectedReport(null);
+      alert('Daily report deleted successfully from all records.');
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete daily report');
+    }
+  };
+
+  const handleApproveReport = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      await apiRequest(`/reports/daily/${id}/approve`, { method: 'PUT' });
+      setReports((prev) => prev.map((r) => r.id === id ? { ...r, status: 'APPROVED' } : r));
+      if (selectedReport?.id === id) {
+        setSelectedReport((prev: any) => prev ? { ...prev, status: 'APPROVED' } : null);
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Failed to approve report');
+    }
+  };
+
+  const handleRejectReport = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      await apiRequest(`/reports/daily/${id}/reject`, { method: 'PUT' });
+      setReports((prev) => prev.map((r) => r.id === id ? { ...r, status: 'REJECTED' } : r));
+      if (selectedReport?.id === id) {
+        setSelectedReport((prev: any) => prev ? { ...prev, status: 'REJECTED' } : null);
+      }
+    } catch (err: any) {
+      alert(err?.message || 'Failed to reject report');
+    }
+  };
 
   const exportCSV = () => {
     const headers = ['Employee Name', 'Email', 'Specialization/Role', 'Date', 'Key Tasks & Updates', 'Issues/Blockers', 'Remarks/Comments', 'Status'];
@@ -220,13 +271,30 @@ export default function AllDailyReportsPage() {
             </select>
           </div>
 
+          {/* Month Picker */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-bold text-slate-500">Month:</span>
+            <input
+              type="month"
+              value={selectedMonth}
+              onChange={(e) => {
+                setSelectedMonth(e.target.value);
+                setSelectedDate('');
+              }}
+              className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
+            />
+          </div>
+
           {/* Date Picker */}
           <div className="flex items-center gap-2">
             <span className="text-xs font-bold text-slate-500">Date:</span>
             <input
               type="date"
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(e) => {
+                setSelectedDate(e.target.value);
+                setSelectedMonth('');
+              }}
               className="px-3 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 cursor-pointer"
             />
           </div>
@@ -247,12 +315,13 @@ export default function AllDailyReportsPage() {
           </div>
         </div>
 
-        {(searchTerm || selectedSpecialist !== 'ALL' || selectedDate || selectedStatus !== 'ALL') && (
+        {(searchTerm || selectedSpecialist !== 'ALL' || selectedDate || selectedMonth || selectedStatus !== 'ALL') && (
           <button
             onClick={() => {
               setSearchTerm('');
               setSelectedSpecialist('ALL');
               setSelectedDate('');
+              setSelectedMonth('');
               setSelectedStatus('ALL');
             }}
             className="px-3 py-2 text-xs font-bold text-rose-600 hover:bg-rose-50 rounded-xl transition cursor-pointer"
@@ -347,16 +416,45 @@ export default function AllDailyReportsPage() {
                         </span>
                       </td>
                       <td className="py-3.5 px-4 text-center">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedReport(r);
-                          }}
-                          className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
-                          title="View Full Report Details"
-                        >
-                          <Eye className="w-4 h-4" />
-                        </button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          {statusVal !== 'APPROVED' && (
+                            <button
+                              onClick={(e) => handleApproveReport(r.id, e)}
+                              className="px-2 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 font-bold transition cursor-pointer flex items-center gap-1 text-[10px] border border-emerald-200"
+                              title="Approve Daily Report"
+                            >
+                              <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                              <span>Approve</span>
+                            </button>
+                          )}
+                          {statusVal !== 'REJECTED' && (
+                            <button
+                              onClick={(e) => handleRejectReport(r.id, e)}
+                              className="px-2 py-1 rounded-lg bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold transition cursor-pointer flex items-center gap-1 text-[10px] border border-rose-200"
+                              title="Reject Daily Report"
+                            >
+                              <XCircle className="w-3 h-3 text-rose-600" />
+                              <span>Reject</span>
+                            </button>
+                          )}
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedReport(r);
+                            }}
+                            className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-50 transition cursor-pointer"
+                            title="View Full Report Details"
+                          >
+                            <Eye className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={(e) => handleDeleteReport(r.id, e)}
+                            className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                            title="Delete Daily Report"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -434,13 +532,42 @@ export default function AllDailyReportsPage() {
             </div>
 
             {/* Modal Footer */}
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
-              <button
-                onClick={() => setSelectedReport(null)}
-                className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer"
-              >
-                Close Preview
-              </button>
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleDeleteReport(selectedReport.id)}
+                  className="px-3.5 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs transition flex items-center gap-1.5 border border-rose-200 cursor-pointer"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Delete</span>
+                </button>
+              </div>
+              <div className="flex items-center gap-2">
+                {selectedReport.status !== 'REJECTED' && (
+                  <button
+                    onClick={() => handleRejectReport(selectedReport.id)}
+                    className="px-4 py-2 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-xl text-xs transition flex items-center gap-1.5 border border-amber-200 cursor-pointer"
+                  >
+                    <XCircle className="w-4 h-4 text-amber-600" />
+                    <span>Reject</span>
+                  </button>
+                )}
+                {selectedReport.status !== 'APPROVED' && (
+                  <button
+                    onClick={() => handleApproveReport(selectedReport.id)}
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-xs transition flex items-center gap-1.5 shadow-md shadow-emerald-600/20 cursor-pointer"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Approve Report</span>
+                  </button>
+                )}
+                <button
+                  onClick={() => setSelectedReport(null)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer"
+                >
+                  Close
+                </button>
+              </div>
             </div>
           </div>
         </div>

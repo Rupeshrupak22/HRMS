@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, X, Pencil, Trash2, ShieldAlert, Search } from 'lucide-react';
+import { Plus, X, Pencil, Trash2, ShieldAlert, Search, Loader2 } from 'lucide-react';
 import { nitishaApi } from '@/lib/nitisha-api';
 import { Pagination } from '@/components/Pagination';
 
@@ -21,6 +21,7 @@ export const DISCIPLINE_CASE_TYPES = [
 
 export default function DisciplinePage() {
   const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -41,7 +42,8 @@ export default function DisciplinePage() {
   });
 
   useEffect(() => {
-    nitishaApi.getDiscipline().then(setRecords).catch(() => {});
+    setLoading(true);
+    nitishaApi.getDiscipline().then(setRecords).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   const resetForm = () => {
@@ -346,7 +348,16 @@ export default function DisciplinePage() {
               </tr>
             </thead>
             <tbody>
-              {paginatedRecords.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={10} className="px-4 py-16 text-center text-slate-500 font-semibold">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="w-7 h-7 animate-spin text-orange-500" />
+                      <span className="text-xs font-bold text-slate-700">Loading discipline cases...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedRecords.length === 0 ? (
                 <tr>
                   <td colSpan={10} className="px-4 py-8 text-center text-slate-400">
                     No discipline cases found. Click &quot;Add Discipline Case&quot; to log one.

@@ -14,6 +14,7 @@ import {
   Users,
   RotateCw,
   FileSpreadsheet,
+  Loader2,
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { aravindApi } from '@/lib/aravind-api';
@@ -45,6 +46,7 @@ function findRowValue(row: Record<string, any>, aliases: string[]): any {
 
 export default function AbscondPage() {
   const [records, setRecords] = useState<AbscondRecord[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -66,11 +68,14 @@ export default function AbscondPage() {
   });
 
   const loadData = async () => {
+    setLoading(true);
     try {
       const data = await aravindApi.getAbscond();
       setRecords(Array.isArray(data) ? data : []);
     } catch {
       setRecords([]);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -446,7 +451,17 @@ export default function AbscondPage() {
               </tr>
             </thead>
             <tbody>
-              {paginatedRecords.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-16 text-center text-slate-500 font-semibold">
+                    <div className="flex flex-col items-center justify-center gap-2.5">
+                      <Loader2 className="w-8 h-8 animate-spin text-rose-500" />
+                      <span className="text-xs font-bold text-slate-700">Loading abscond records...</span>
+                      <span className="text-[10px] text-slate-400">Fetching absconding cases & notifications</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedRecords.length === 0 ? (
                 <tr>
                   <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
                     No abscond records found. Click &quot;Add Abscond Case&quot; to add a record.

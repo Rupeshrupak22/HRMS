@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { Plus, X, Pencil, Trash2, AlertCircle, Search, Download, CheckCircle2, Clock } from 'lucide-react';
+import { Plus, X, Pencil, Trash2, AlertCircle, Search, Download, CheckCircle2, Clock, Loader2 } from 'lucide-react';
 import { nitishaApi } from '@/lib/nitisha-api';
 import { Pagination } from '@/components/Pagination';
 
 export default function EmployeeIssuesPage() {
   const [issues, setIssues] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,9 +30,10 @@ export default function EmployeeIssuesPage() {
   });
 
   const loadData = () => {
+    setLoading(true);
     nitishaApi.getIssues().then((res) => {
       setIssues(Array.isArray(res) ? res : []);
-    }).catch(() => setIssues([]));
+    }).catch(() => setIssues([])).finally(() => setLoading(false));
   };
 
   useEffect(() => {
@@ -441,7 +443,16 @@ export default function EmployeeIssuesPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100 font-medium">
-              {paginatedIssues.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={11} className="px-4 py-16 text-center text-slate-500 font-semibold">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <Loader2 className="w-7 h-7 animate-spin text-orange-500" />
+                      <span className="text-xs font-bold text-slate-700">Loading employee issues...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedIssues.length === 0 ? (
                 <tr>
                   <td colSpan={11} className="px-4 py-12 text-center text-slate-400 font-semibold">
                     No employee issues found. Click &quot;New Employee Issue&quot; above to log an issue.

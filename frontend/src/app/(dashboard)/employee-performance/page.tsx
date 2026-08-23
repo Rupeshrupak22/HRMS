@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, X, Pencil, Trash2, TrendingUp, Search, Download, Upload, Calendar, History, CheckCircle2, AlertCircle } from 'lucide-react';
+import { Plus, X, Pencil, Trash2, TrendingUp, Search, Download, Upload, Calendar, History, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
 import { nitishaApi } from '@/lib/nitisha-api';
 import { Pagination } from '@/components/Pagination';
 import * as XLSX from 'xlsx';
@@ -88,6 +88,7 @@ function getRecordCreationDay(r: any): number {
 
 export default function EmployeePerformancePage() {
   const [records, setRecords] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [historyEmp, setHistoryEmp] = useState<any | null>(null);
@@ -137,6 +138,7 @@ export default function EmployeePerformancePage() {
   });
 
   useEffect(() => {
+    setLoading(true);
     nitishaApi
       .getPerformances()
       .then((res) => {
@@ -148,6 +150,9 @@ export default function EmployeePerformancePage() {
       })
       .catch((err) => {
         console.warn('Load performances notice:', err?.message);
+      })
+      .finally(() => {
+        setLoading(false);
       });
   }, []);
 
@@ -422,6 +427,8 @@ export default function EmployeePerformancePage() {
       ...form,
       dailyPerformance: isTechOrHR ? '' : form.dailyPerformance,
       weeklyPerformance: isTechOrHR ? '' : form.weeklyPerformance,
+      monthlyPerformance: form.monthlyPerformance,
+      monthPerformance: form.monthlyPerformance,
       dailyRevenue: form.department === 'Sales' ? form.dailyRevenue : '',
       weeklyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.weeklyRevenue : '',
       monthlyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.monthlyRevenue : '',
@@ -476,10 +483,15 @@ export default function EmployeePerformancePage() {
       }
     }
 
-    // Refresh from DB
-    nitishaApi.getPerformances().then((fresh) => {
-      if (Array.isArray(fresh)) setRecords(fresh);
-    }).catch(() => {});
+    // Refresh from DB immediately
+    try {
+      const fresh = await nitishaApi.getPerformances();
+      if (Array.isArray(fresh)) {
+        setRecords(fresh);
+      } else if (fresh && Array.isArray((fresh as any).data)) {
+        setRecords((fresh as any).data);
+      }
+    } catch {}
 
     resetForm();
   };
@@ -807,7 +819,15 @@ export default function EmployeePerformancePage() {
             <span className="text-xs font-bold text-slate-700">
               Showing Records for: <span className="text-orange-600">{MONTHS_2026.find((m) => m.value === selectedMonth)?.label || selectedMonth}</span>
             </span>
-            <span className="text-[11px] text-slate-400">({filteredRecords.length} employees)</span>
+            <span className="text-[11px] text-slate-400">
+              ({loading ? (
+                <span className="inline-flex items-center gap-1 text-orange-600 font-bold">
+                  <Loader2 className="w-3 h-3 animate-spin" /> Loading records...
+                </span>
+              ) : (
+                `${filteredRecords.length} employees`
+              )})
+            </span>
           </div>
           <span className="text-[11px] text-slate-500">
             Click <strong>History</strong> to view full 12-month track record of any employee
@@ -909,13 +929,22 @@ export default function EmployeePerformancePage() {
 
                 <th className="px-4 py-3 text-left font-bold text-slate-600">Monthly Rev</th>
                 <th className="px-4 py-3 text-left font-bold text-slate-600">PIP</th>
-                <th className="px-4 py-3 text-left font-bold text-slate-600">Rating</th>
                 <th className="px-4 py-3 text-left font-bold text-slate-600">Further Actions</th>
                 <th className="px-4 py-3 text-center font-bold text-slate-600">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {paginatedRecords.length === 0 ? (
+              {loading ? (
+                <tr>
+                  <td colSpan={16} className="px-4 py-16 text-center text-slate-500">
+                    <div className="flex flex-col items-center justify-center gap-2.5">
+                      <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
+                      <span className="text-xs font-bold text-slate-700">Loading performance records...</span>
+                      <span className="text-[10px] text-slate-400">Fetching live evaluations and PIP trackers</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : paginatedRecords.length === 0 ? (
                 <tr>
                   <td colSpan={16} className="px-4 py-8 text-center text-slate-400">
                     No performance records found for {MONTHS_2026.find((m) => m.value === selectedMonth)?.label}.
@@ -1000,7 +1029,6 @@ export default function EmployeePerformancePage() {
                           <span className="text-slate-300">—</span>
                         )}
                       </td>
-                      <td className="px-4 py-3 text-slate-700">{r.monthPerformance || <span className="text-slate-300">—</span>}</td>
                       <td className="px-4 py-3 text-slate-700 max-w-[140px] truncate" title={r.furtherActions}>
                         {r.furtherActions || <span className="text-slate-300">—</span>}
                       </td>
@@ -1469,7 +1497,6 @@ export default function EmployeePerformancePage() {
                     <th className="px-3 py-2 text-left">Monthly Perf</th>
                     <th className="px-3 py-2 text-left">Monthly Rev</th>
                     <th className="px-3 py-2 text-left">PIP</th>
-                    <th className="px-3 py-2 text-left">Rating</th>
                     <th className="px-3 py-2 text-left">Remarks</th>
                     <th className="px-3 py-2 text-center">Action</th>
                   </tr>
@@ -1498,7 +1525,6 @@ export default function EmployeePerformancePage() {
                           </span>
                         ) : '—'}
                       </td>
-                      <td className="px-3 py-2.5 text-slate-700">{record?.monthPerformance || '—'}</td>
                       <td className="px-3 py-2.5 text-slate-600 max-w-[200px] truncate" title={record?.furtherActions || ''}>
                         {record?.furtherActions || '—'}
                       </td>

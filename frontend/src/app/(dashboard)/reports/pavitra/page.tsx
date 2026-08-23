@@ -13,6 +13,7 @@ import {
   Users,
   Search,
   Filter,
+  Trash2,
 } from 'lucide-react';
 import { apiRequest } from '@/lib/api';
 import { Pagination } from '@/components/Pagination';
@@ -58,24 +59,11 @@ export default function PavitraReportPage() {
         logs = res.data;
       }
 
-      const savedAtt = typeof window !== 'undefined' ? localStorage.getItem('adyapan_imported_attendance_logs') : null;
-      let localAtt: any[] = [];
-      try { localAtt = savedAtt ? JSON.parse(savedAtt) : []; } catch { localAtt = []; }
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('adyapan_imported_attendance_logs');
+      }
 
-      const map = new Map();
-      for (const item of logs) {
-        const key = item.id || `${item.empId || item.employeeId || item.employeeCode}_${item.date}`;
-        map.set(key, item);
-      }
-      for (const item of localAtt) {
-        // Only include local items that belong to the currently selected month
-        const itemDateStr = String(item.date || item.createdAt || '').split('T')[0];
-        if (itemDateStr.startsWith(selectedMonth)) {
-          const key = item.id || `${item.empId || item.employeeId || item.employeeCode}_${item.date}`;
-          if (!map.has(key)) map.set(key, item);
-        }
-      }
-      setAttendance(Array.from(map.values()));
+      setAttendance(logs);
     } catch (error) {
       console.error('Failed to fetch attendance', error);
     } finally {
@@ -195,6 +183,19 @@ export default function PavitraReportPage() {
       }
     } catch (err: any) {
       alert(err.message || 'Failed to reject');
+    }
+  };
+
+  const handleDeleteReport = async (id: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    if (!confirm('Are you sure you want to delete this daily report? It will be removed from all records and dashboards.')) return;
+    try {
+      await apiRequest(`/reports/daily/${id}`, { method: 'DELETE' });
+      setDailyReports((prev) => prev.filter((r) => r.id !== id));
+      if (selectedReport?.id === id) setSelectedReport(null);
+      alert('Daily report deleted successfully from all records.');
+    } catch (err: any) {
+      alert(err?.message || 'Failed to delete daily report');
     }
   };
 
@@ -525,6 +526,53 @@ export default function PavitraReportPage() {
     return filteredDailyReports.slice(start, start + PAGE_SIZE);
   }, [filteredDailyReports, repPage]);
 
+  const dayWiseReportStats = useMemo(() => {
+    let p = 0, a = 0, ll = 0, hd = 0, leave = 0, lop = 0, recorded = 0;
+    
+    let targetDay = 0;
+    if (filterDate) {
+      const parts = filterDate.split('-');
+      if (parts.length === 3) targetDay = parseInt(parts[2], 10);
+    }
+
+    filteredGroupedAttendance.forEach((emp) => {
+      if (targetDay > 0) {
+        const code = normalizeStatusToCode(emp.days[targetDay] || '');
+        if (code && code !== '-') {
+          recorded++;
+          if (code === 'P' || code === 'WFH' || code === 'OT') p++;
+          else if (code === 'A') a++;
+          else if (code === 'LL') ll++;
+          else if (code === 'HD') hd++;
+          else if (code === 'LOP') lop++;
+          else if (code === 'SL' || code === 'CL' || code === 'PL' || code === 'E_L' || code === 'LLV' || code === 'PeL') leave++;
+        }
+      } else {
+        p += emp.presentCount;
+        a += emp.absentCount;
+        ll += emp.lateLoginCount;
+        hd += emp.halfDayCount;
+        leave += emp.sickLeaveCount + emp.casualLeaveCount;
+        lop += emp.lopCount;
+        recorded += (emp.presentCount + emp.absentCount + emp.lopCount + emp.sickLeaveCount + emp.casualLeaveCount);
+      }
+    });
+
+    return {
+      isDaySpecific: targetDay > 0,
+      targetDay,
+      total: filteredGroupedAttendance.length,
+      recorded,
+      present: p,
+      purePresent: p,
+      absent: a,
+      late: ll,
+      halfDay: hd,
+      leave,
+      lop,
+    };
+  }, [filteredGroupedAttendance, filterDate]);
+
   const downloadReportExcel = () => {
     const headers = ['Sl#', 'Emp ID', 'Employee Name', 'Department'];
     for (let i = 1; i <= daysInMonth; i++) headers.push(i.toString());
@@ -782,7 +830,7 @@ export default function PavitraReportPage() {
           <div className="flex items-center gap-2">
             <Clock className="w-4 h-4 text-emerald-600" />
             <h2 className="text-sm font-black text-slate-900">
-              Attendance Records — Monthly Grid ({loading ? 'Loading...' : `${filteredGroupedAttendance.length} employees`})
+              Attendance Records — {dayWiseReportStats.isDaySpecific ? `Day ${dayWiseReportStats.targetDay} (${filterDate})` : `Monthly Grid (${selectedMonth})`} ({loading ? 'Loading...' : `${filteredGroupedAttendance.length} employees`})
             </h2>
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs">
@@ -814,6 +862,53 @@ export default function PavitraReportPage() {
                   <option key={d} value={d}>{d}</option>
                 ))}
               </select>
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic Day-Wise Live Attendance Counters */}
+        <div className="p-4 rounded-2xl bg-gradient-to-r from-slate-900 via-indigo-950 to-slate-900 text-white shadow-xs">
+          <div className="flex items-center justify-between border-b border-white/10 pb-2 mb-3 text-xs">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="font-bold tracking-tight text-white">
+                {dayWiseReportStats.isDaySpecific ? `Day-Wise Counters for ${filterDate}` : `Monthly Aggregate Totals for ${selectedMonth}`}
+              </span>
+            </div>
+            <span className="text-slate-400 text-[11px]">
+              {dayWiseReportStats.total} Total Active Staff
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5 text-center">
+            <div className="bg-emerald-500/20 border border-emerald-400/30 rounded-xl p-2.5">
+              <div className="text-[10px] text-emerald-300 font-bold uppercase">Present (P)</div>
+              <div className="text-lg font-black text-emerald-400 mt-0.5">{dayWiseReportStats.present}</div>
+              <div className="text-[9px] text-emerald-200/70">{dayWiseReportStats.late} late</div>
+            </div>
+            <div className="bg-red-500/20 border border-red-400/30 rounded-xl p-2.5">
+              <div className="text-[10px] text-red-300 font-bold uppercase">Absent (A)</div>
+              <div className="text-lg font-black text-red-400 mt-0.5">{dayWiseReportStats.absent}</div>
+              <div className="text-[9px] text-red-200/70">Unexcused</div>
+            </div>
+            <div className="bg-amber-500/20 border border-amber-400/30 rounded-xl p-2.5">
+              <div className="text-[10px] text-amber-300 font-bold uppercase">Late Login (LL)</div>
+              <div className="text-lg font-black text-amber-400 mt-0.5">{dayWiseReportStats.late}</div>
+              <div className="text-[9px] text-amber-200/70">Late arrivals</div>
+            </div>
+            <div className="bg-pink-500/20 border border-pink-400/30 rounded-xl p-2.5">
+              <div className="text-[10px] text-pink-300 font-bold uppercase">Half Day (HD)</div>
+              <div className="text-lg font-black text-pink-400 mt-0.5">{dayWiseReportStats.halfDay}</div>
+              <div className="text-[9px] text-pink-200/70">0.5 day</div>
+            </div>
+            <div className="bg-blue-500/20 border border-blue-400/30 rounded-xl p-2.5">
+              <div className="text-[10px] text-blue-300 font-bold uppercase">On Leave</div>
+              <div className="text-lg font-black text-blue-400 mt-0.5">{dayWiseReportStats.leave}</div>
+              <div className="text-[9px] text-blue-200/70">SL/CL/PL</div>
+            </div>
+            <div className="bg-slate-700/40 border border-slate-600/30 rounded-xl p-2.5">
+              <div className="text-[10px] text-slate-300 font-bold uppercase">Loss of Pay (LOP)</div>
+              <div className="text-lg font-black text-slate-200 mt-0.5">{dayWiseReportStats.lop}</div>
+              <div className="text-[9px] text-slate-400">Unpaid</div>
             </div>
           </div>
         </div>
@@ -1039,6 +1134,13 @@ export default function PavitraReportPage() {
                               </button>
                             </>
                           )}
+                          <button
+                            onClick={(e) => handleDeleteReport(r.id, e)}
+                            className="p-1 text-rose-600 hover:bg-rose-50 rounded-lg transition cursor-pointer"
+                            title="Delete Daily Report"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1101,7 +1203,14 @@ export default function PavitraReportPage() {
               )}
             </div>
 
-            <div className="p-4 bg-slate-50 border-t border-slate-200 flex justify-end">
+            <div className="p-4 bg-slate-50 border-t border-slate-200 flex items-center justify-between">
+              <button
+                onClick={() => handleDeleteReport(selectedReport.id)}
+                className="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold rounded-xl text-xs transition flex items-center gap-1.5 border border-rose-200 cursor-pointer"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>Delete Report</span>
+              </button>
               <button
                 onClick={() => setSelectedReport(null)}
                 className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs transition cursor-pointer"

@@ -13,6 +13,7 @@ import {
   Calendar,
   AlertCircle,
   Sparkles,
+  Trash2,
 } from 'lucide-react';
 import { AravindDailyReport } from '@/components/AravindDailyReport';
 import { NitishaDailyReport } from '@/components/NitishaDailyReport';
@@ -177,6 +178,17 @@ export default function DailyReportsPage() {
     }
   };
 
+  const handleDeleteReport = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this daily report? It will be removed from all records and dashboards.')) return;
+    try {
+      await apiRequest(`/reports/daily/${id}`, { method: 'DELETE' });
+      setReports((prev) => prev.filter((r) => r.id !== id));
+      alert('Daily report deleted successfully.');
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete report');
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header Banner */}
@@ -317,17 +329,26 @@ export default function DailyReportsPage() {
                       <span className="font-extrabold text-slate-900">{rep.employeeName}</span>
                       <span className="text-[10px] text-slate-400">({rep.userEmail})</span>
                     </div>
-                    <span
-                      className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${
-                        rep.status === 'APPROVED'
-                          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                          : rep.status === 'REJECTED'
-                          ? 'bg-red-50 text-red-700 border border-red-200'
-                          : 'bg-amber-50 text-amber-700 border border-amber-200'
-                      }`}
-                    >
-                      {rep.status}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`px-2.5 py-0.5 rounded text-[10px] font-bold ${
+                          rep.status === 'APPROVED'
+                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                            : rep.status === 'REJECTED'
+                            ? 'bg-red-50 text-red-700 border border-red-200'
+                            : 'bg-amber-50 text-amber-700 border border-amber-200'
+                        }`}
+                      >
+                        {rep.status}
+                      </span>
+                      <button
+                        onClick={() => handleDeleteReport(rep.id)}
+                        className="p-1 rounded text-rose-600 hover:bg-rose-50 transition cursor-pointer"
+                        title="Delete Daily Report"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
 
                   <div className="text-[11px] text-slate-500 flex items-center gap-4">
