@@ -89,6 +89,7 @@ function getRecordCreationDay(r: any): number {
 export default function EmployeePerformancePage() {
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [historyEmp, setHistoryEmp] = useState<any | null>(null);
@@ -404,96 +405,101 @@ export default function EmployeePerformancePage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const isTechOrHR = form.department === 'Tech' || form.department === 'HR';
-    const targetMonth = form.performanceMonth || selectedMonth || '';
-
-    // Merge current daily inputs into dailyData[activeFormDay]
-    const updatedDaily = { ...form.dailyData };
-    updatedDaily[String(activeFormDay)] = {
-      ...(updatedDaily[String(activeFormDay)] || {}),
-      dailyPerformance: isTechOrHR ? '' : form.dailyPerformance,
-      dailyRevenue: form.department === 'Sales' ? form.dailyRevenue : '',
-    };
-
-    // Merge current weekly inputs into weeklyData[activeFormWeek]
-    const updatedWeekly = { ...form.weeklyData };
-    updatedWeekly[activeFormWeek] = {
-      ...(updatedWeekly[activeFormWeek] || {}),
-      weeklyPerformance: isTechOrHR ? '' : form.weeklyPerformance,
-      weeklyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.weeklyRevenue : '',
-    };
-
-    const payload = {
-      ...form,
-      dailyPerformance: isTechOrHR ? '' : form.dailyPerformance,
-      weeklyPerformance: isTechOrHR ? '' : form.weeklyPerformance,
-      monthlyPerformance: form.monthlyPerformance,
-      monthPerformance: form.monthlyPerformance,
-      dailyRevenue: form.department === 'Sales' ? form.dailyRevenue : '',
-      weeklyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.weeklyRevenue : '',
-      monthlyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.monthlyRevenue : '',
-      performanceMonth: targetMonth,
-      dailyData: JSON.stringify(updatedDaily),
-      weeklyData: JSON.stringify(updatedWeekly),
-    };
-
-    const existingInSameMonth =
-      !editingId &&
-      records.find(
-        (r) =>
-          !r._isPlaceholder &&
-          (r.id || r._id) &&
-          !String(r.id || r._id).startsWith('perf-') &&
-          r.employeeId === payload.employeeId &&
-          (r.performanceMonth === targetMonth || (!r.performanceMonth && r.createdAt?.slice(0, 7) === targetMonth))
-      );
-
-    const actualEditId =
-      editingId && !editingId.startsWith('perf-')
-        ? editingId
-        : existingInSameMonth
-        ? existingInSameMonth.id || existingInSameMonth._id
-        : null;
-
-    if (actualEditId) {
-      try {
-        const res = await nitishaApi.updatePerformance(actualEditId, payload);
-        if (res && (res.id || res._id)) {
-          const updatedId = res.id || res._id;
-          setRecords((prev) =>
-            prev.map((r) => ((r.id || r._id) === actualEditId || (r.id || r._id) === updatedId ? { ...r, ...res, _isPlaceholder: false } : r))
-          );
-        }
-      } catch (e) {
-        console.error('Update performance failed:', e);
-      }
-    } else {
-      try {
-        const res = await nitishaApi.createPerformance(payload);
-        if (res && (res.id || res._id)) {
-          setRecords((prev) => {
-            const filtered = prev.filter(
-              (r) => !(r._isPlaceholder && r.employeeId === payload.employeeId && r.performanceMonth === targetMonth)
-            );
-            return [res, ...filtered];
-          });
-        }
-      } catch (e) {
-        console.error('Create performance failed:', e);
-      }
-    }
-
-    // Refresh from DB immediately
+    setSaving(true);
     try {
-      const fresh = await nitishaApi.getPerformances();
-      if (Array.isArray(fresh)) {
-        setRecords(fresh);
-      } else if (fresh && Array.isArray((fresh as any).data)) {
-        setRecords((fresh as any).data);
-      }
-    } catch {}
+      const isTechOrHR = form.department === 'Tech' || form.department === 'HR';
+      const targetMonth = form.performanceMonth || selectedMonth || '';
 
-    resetForm();
+      // Merge current daily inputs into dailyData[activeFormDay]
+      const updatedDaily = { ...form.dailyData };
+      updatedDaily[String(activeFormDay)] = {
+        ...(updatedDaily[String(activeFormDay)] || {}),
+        dailyPerformance: isTechOrHR ? '' : form.dailyPerformance,
+        dailyRevenue: form.department === 'Sales' ? form.dailyRevenue : '',
+      };
+
+      // Merge current weekly inputs into weeklyData[activeFormWeek]
+      const updatedWeekly = { ...form.weeklyData };
+      updatedWeekly[activeFormWeek] = {
+        ...(updatedWeekly[activeFormWeek] || {}),
+        weeklyPerformance: isTechOrHR ? '' : form.weeklyPerformance,
+        weeklyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.weeklyRevenue : '',
+      };
+
+      const payload = {
+        ...form,
+        dailyPerformance: isTechOrHR ? '' : form.dailyPerformance,
+        weeklyPerformance: isTechOrHR ? '' : form.weeklyPerformance,
+        monthlyPerformance: form.monthlyPerformance,
+        monthPerformance: form.monthlyPerformance,
+        dailyRevenue: form.department === 'Sales' ? form.dailyRevenue : '',
+        weeklyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.weeklyRevenue : '',
+        monthlyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.monthlyRevenue : '',
+        performanceMonth: targetMonth,
+        dailyData: JSON.stringify(updatedDaily),
+        weeklyData: JSON.stringify(updatedWeekly),
+      };
+
+      const existingInSameMonth =
+        !editingId &&
+        records.find(
+          (r) =>
+            !r._isPlaceholder &&
+            (r.id || r._id) &&
+            !String(r.id || r._id).startsWith('perf-') &&
+            r.employeeId === payload.employeeId &&
+            (r.performanceMonth === targetMonth || (!r.performanceMonth && r.createdAt?.slice(0, 7) === targetMonth))
+        );
+
+      const actualEditId =
+        editingId && !editingId.startsWith('perf-')
+          ? editingId
+          : existingInSameMonth
+          ? existingInSameMonth.id || existingInSameMonth._id
+          : null;
+
+      if (actualEditId) {
+        try {
+          const res = await nitishaApi.updatePerformance(actualEditId, payload);
+          if (res && (res.id || res._id)) {
+            const updatedId = res.id || res._id;
+            setRecords((prev) =>
+              prev.map((r) => ((r.id || r._id) === actualEditId || (r.id || r._id) === updatedId ? { ...r, ...res, _isPlaceholder: false } : r))
+            );
+          }
+        } catch (e) {
+          console.error('Update performance failed:', e);
+        }
+      } else {
+        try {
+          const res = await nitishaApi.createPerformance(payload);
+          if (res && (res.id || res._id)) {
+            setRecords((prev) => {
+              const filtered = prev.filter(
+                (r) => !(r._isPlaceholder && r.employeeId === payload.employeeId && r.performanceMonth === targetMonth)
+              );
+              return [res, ...filtered];
+            });
+          }
+        } catch (e) {
+          console.error('Create performance failed:', e);
+        }
+      }
+
+      // Refresh from DB immediately
+      try {
+        const fresh = await nitishaApi.getPerformances();
+        if (Array.isArray(fresh)) {
+          setRecords(fresh);
+        } else if (fresh && Array.isArray((fresh as any).data)) {
+          setRecords((fresh as any).data);
+        }
+      } catch {}
+
+      resetForm();
+    } finally {
+      setSaving(false);
+    }
   };
 
   // Resolution Helpers for cells
@@ -1450,15 +1456,18 @@ export default function EmployeePerformancePage() {
                 <button
                   type="button"
                   onClick={resetForm}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
+                  disabled={saving}
+                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-xs font-bold transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-xs cursor-pointer"
+                  disabled={saving}
+                  className="px-5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-2"
                 >
-                  {editingId ? 'Update Record' : 'Save Record'}
+                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                  <span>{saving ? 'Saving...' : editingId ? 'Update Record' : 'Save Record'}</span>
                 </button>
               </div>
             </form>
