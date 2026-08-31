@@ -1,40 +1,29 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { crmFetch } from '@/lib/crm-client';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
-
-const CRM_BACKEND_URL = process.env.CRM_BACKEND_URL || 'https://adyapancrm.in';
-const CRM_SYNC_API_KEY = process.env.CRM_SYNC_API_KEY || 'hrms-sync-key-2026';
 
 export async function GET(request: NextRequest) {
   try {
     const url = new URL(request.url);
     const employeeId = url.searchParams.get('employeeId') || '';
 
-    let targetUrl = `${CRM_BACKEND_URL}/api/hrms-sync/documents`;
+    let path = '/api/hrms-sync/documents';
     if (employeeId) {
-      targetUrl += `?employeeId=${encodeURIComponent(employeeId)}`;
+      path += `?employeeId=${encodeURIComponent(employeeId)}`;
     }
 
-    const response = await fetch(targetUrl, {
-      method: 'GET',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-HRMS-API-KEY': CRM_SYNC_API_KEY,
-      },
-      cache: 'no-store',
-    });
+    const res = await crmFetch(path);
 
-    if (!response.ok) {
+    if (!res.ok) {
       return NextResponse.json(
-        { success: false, documents: [], message: `CRM documents API returned ${response.status}` },
+        { success: false, documents: [], message: `CRM documents API returned ${res.status}` },
         { status: 200 }
       );
     }
 
-    const data = await response.json();
-    return NextResponse.json(data);
+    return NextResponse.json(res.data);
   } catch (error: any) {
     console.error('CRM documents proxy error:', error.message);
     return NextResponse.json(

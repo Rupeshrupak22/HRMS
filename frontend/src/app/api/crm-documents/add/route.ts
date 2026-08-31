@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { crmFetch } from '@/lib/crm-client';
 
 export const dynamic = 'force-dynamic';
-
-const CRM_BACKEND_URL = process.env.CRM_BACKEND_URL || 'https://adyapancrm.in';
-const CRM_SYNC_API_KEY = process.env.CRM_SYNC_API_KEY || 'hrms-sync-key-2026';
 
 // POST /api/crm-documents/add — Add document to employee in CRM
 export async function POST(request: NextRequest) {
@@ -18,26 +16,47 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const response = await fetch(`${CRM_BACKEND_URL}/api/hrms-sync/employees/${employeeId}/documents`, {
+    const payload: any = {
+      name: docData.name?.trim() || 'Document',
+      documentType: docData.documentType || 'OTHER',
+      fileUrl: docData.fileUrl?.trim() || '',
+      status: docData.status || 'ACTIVE',
+      notes: docData.notes?.trim() || null,
+    };
+
+    if (docData.issuedAt) {
+      try {
+        payload.issuedAt = new Date(docData.issuedAt).toISOString();
+      } catch {
+        payload.issuedAt = null;
+      }
+    } else {
+      payload.issuedAt = null;
+    }
+
+    if (docData.expiresAt) {
+      try {
+        payload.expiresAt = new Date(docData.expiresAt).toISOString();
+      } catch {
+        payload.expiresAt = null;
+      }
+    } else {
+      payload.expiresAt = null;
+    }
+
+    const res = await crmFetch(`/api/hrms-sync/employees/${employeeId}/documents`, {
       method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-        'X-HRMS-API-KEY': CRM_SYNC_API_KEY,
-      },
-      body: JSON.stringify(docData),
+      body: payload,
     });
 
-    const data = await response.json().catch(() => null);
-
-    if (!response.ok) {
+    if (!res.ok) {
       return NextResponse.json(
-        data || { success: false, message: `CRM document add failed (${response.status})` },
-        { status: response.status }
+        res.data || { success: false, message: `CRM document add failed (${res.status})` },
+        { status: res.status }
       );
     }
 
-    return NextResponse.json(data || { success: true });
+    return NextResponse.json(res.data || { success: true });
   } catch (error: any) {
     console.error('CRM document add error:', error.message);
     return NextResponse.json(

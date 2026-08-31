@@ -27,29 +27,53 @@ export default function TeamLeadersPage() {
     async function loadLeaders() {
       setLoading(true);
       try {
-        // Fetch employees and filter team leaders by role or designation
-        const data = await apiRequest('/employees?status=ACTIVE');
-        const allEmployees = data || [];
-        // Filter team leaders based on user role in their linked account or designation
+        let allEmployees: any[] = [];
+        try {
+          const crmRes = await fetch('/api/crm-employees');
+          if (crmRes.ok) {
+            const crmJson = await crmRes.json();
+            allEmployees = Array.isArray(crmJson) ? crmJson : (crmJson.employees || crmJson.data || []);
+          }
+        } catch (e) {
+          console.warn('CRM fetch failed for team leaders, falling back to DB:', e);
+        }
+
+        if (allEmployees.length === 0) {
+          const data = await apiRequest('/employees?status=ACTIVE');
+          allEmployees = Array.isArray(data) ? data : (data?.data || []);
+        }
+
+        // Filter team leaders based on role or designation
         const teamLeaders = allEmployees.filter(
           (emp: any) =>
+            emp.role === 'TEAM_LEADER' ||
+            emp.role === 'TECH_LEAD' ||
+            emp.role === 'TEAM_LEAD' ||
+            emp.role === 'MANAGER' ||
             emp.user?.role === 'TEAM_LEADER' ||
-            emp.designation?.title?.toLowerCase().includes('team lead') ||
-            emp.designation?.title?.toLowerCase().includes('manager') ||
+            String(emp.designation?.title || emp.designation || '').toLowerCase().includes('team lead') ||
+            String(emp.designation?.title || emp.designation || '').toLowerCase().includes('tl') ||
+            String(emp.designation?.title || emp.designation || '').toLowerCase().includes('manager') ||
+            String(emp.designation?.title || emp.designation || '').toLowerCase().includes('atl') ||
             emp.employmentType === 'TEAM_LEADER'
         );
-        const mapped: TeamLeader[] = teamLeaders.map((emp: any) => ({
-          id: emp.id,
-          firstName: emp.firstName,
-          lastName: emp.lastName,
-          email: emp.personalEmail || emp.user?.email || '',
-          mobileNumber: emp.mobileNumber || '',
-          joiningDate: emp.joiningDate,
-          status: emp.status || 'ACTIVE',
-          designation: emp.designation?.title || 'Team Leader',
-          department: emp.department?.name || '',
-          employeeCode: emp.employeeCode,
-        }));
+
+        const mapped: TeamLeader[] = teamLeaders.map((emp: any) => {
+          const names = (emp.name || `${emp.firstName || ''} ${emp.lastName || ''}`).trim().split(' ');
+          return {
+            id: emp.id || emp._id,
+            firstName: emp.firstName || names[0] || 'Team',
+            lastName: emp.lastName || names.slice(1).join(' ') || 'Leader',
+            email: emp.email || emp.personalEmail || emp.user?.email || '',
+            mobileNumber: emp.mobile || emp.mobileNumber || '',
+            joiningDate: emp.joiningDate,
+            status: emp.isActive !== false && emp.status !== 'INACTIVE' ? 'ACTIVE' : 'INACTIVE',
+            designation: (typeof emp.designation === 'object' ? emp.designation?.title : emp.designation) || 'Team Leader',
+            department: (typeof emp.department === 'object' ? emp.department?.name : emp.department) || '',
+            employeeCode: emp.employeeId || emp.employeeCode || '',
+          };
+        });
+
         setLeaders(mapped);
         setFiltered(mapped);
       } catch {

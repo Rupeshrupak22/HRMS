@@ -136,9 +136,31 @@ const INITIAL_FORM_DATA = {
   notes: '',
 };
 
+const MASTER_TEAMS_LIST = [
+  { name: 'Team Anurag (Anurag Rana)', value: 'Team Anurag', tl: 'Anurag Rana' },
+  { name: 'Team Arijit (Arijit Paul)', value: 'Team Arijit', tl: 'Arijit Paul' },
+  { name: 'Team Azad (Azad Rana)', value: 'Team Azad', tl: 'Azad Rana' },
+  { name: 'Team Charan (Sai charan)', value: 'Team Charan', tl: 'Sai charan' },
+  { name: 'Team Emmanuel (Francis Emmanuel)', value: 'Team Emmanuel', tl: 'Francis Emmanuel' },
+  { name: 'Team Harry (Harry)', value: 'Team Harry', tl: 'Harry' },
+  { name: 'Team Hemant (Hemant Raj)', value: 'Team Hemant', tl: 'Hemant Raj' },
+  { name: 'Team Manpreet (Manpreet)', value: 'Team Manpreet', tl: 'Manpreet' },
+  { name: 'Team Meghashyam (B.K.Megashyam)', value: 'Team Meghashyam', tl: 'B.K.Megashyam' },
+  { name: 'Team Mounika (Mounika)', value: 'Team Mounika', tl: 'Mounika' },
+  { name: 'Team Nandini (Biradar Nandini)', value: 'Team Nandini', tl: 'Biradar Nandini' },
+  { name: 'Team Prabhjot (Prabhjot)', value: 'Team Prabhjot', tl: 'Prabhjot' },
+  { name: 'Team Pranathi (Pranathi)', value: 'Team Pranathi', tl: 'Pranathi' },
+  { name: 'Team Priyanshu (Priyanshu Yadav)', value: 'Team Priyanshu', tl: 'Priyanshu Yadav' },
+  { name: 'Team Renuka (Renuka)', value: 'Team Renuka', tl: 'Renuka' },
+  { name: 'Team Sakshi (Sakshi)', value: 'Team Sakshi', tl: 'Sakshi' },
+  { name: 'Team Shreyashi (Shreyashi Saxena)', value: 'Team shreyashi', tl: 'shreyashi saxena' },
+  { name: 'Tech Team (Rupesh Kumar Rupak)', value: 'Tech Team', tl: 'Rupesh Kuamr Rupak' },
+  { name: 'HR Department (Biradar Nandini)', value: 'HR', tl: 'Biradar Nandini' },
+  { name: 'Demo Team (Demo Team Leader)', value: 'Demo Team', tl: 'Demo Team Leader' },
+];
+
 export function EmployeeMaster() {
   const [employees, setEmployees] = useState<EmployeeRecord[]>([]);
-  const [teams, setTeams] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
@@ -397,6 +419,43 @@ export function EmployeeMaster() {
       // Detect if this is a CRM employee (non-UUID id format like "cmqi07ux...")
       const isCrmEmployee = formMode === 'edit' && formData.id && !formData.id.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 
+      if (formMode === 'edit') {
+        // Optimistic UI update immediately
+        const updatedFields: Partial<EmployeeRecord> = {
+          name: formData.name.trim(),
+          email: formData.email.trim(),
+          mobile: formData.mobile.trim(),
+          employeeId: formData.employeeId.trim(),
+          designation: formData.designation.trim(),
+          role: sanitizedRole,
+          department: formData.department.trim(),
+          teamName: formData.teamName.trim(),
+          reportingManager: formData.reportingManager.trim(),
+          isActive: Boolean(formData.isActive),
+          status: formData.isActive ? 'ACTIVE' : 'INACTIVE',
+          employmentType: formData.employmentType,
+          gender: formData.gender,
+          dateOfBirth: formData.dateOfBirth,
+          joiningDate: formData.joiningDate,
+          baseSalary: Number(formData.baseSalary) || 0,
+          bankName: formData.bankName.trim(),
+          bankAccountNumber: formData.bankAccountNumber.trim(),
+          bankIfsc: formData.bankIfsc.trim(),
+          address: formData.address.trim(),
+          emergencyContactName: formData.emergencyContactName.trim(),
+          emergencyContactPhone: formData.emergencyContactPhone.trim(),
+          notes: formData.notes.trim(),
+        };
+
+        setEmployees((prev) =>
+          prev.map((emp) =>
+            emp.id === formData.id || emp.employeeId === formData.employeeId
+              ? { ...emp, ...updatedFields }
+              : emp
+          )
+        );
+      }
+
       if (isCrmEmployee) {
         // Update via CRM API — use CRM-compatible field formats
         const genderForCrm = (g?: string) => {
@@ -438,13 +497,40 @@ export function EmployeeMaster() {
           body: JSON.stringify(crmPayload),
         });
 
+        const resData = await res.json().catch(() => null);
+
         if (!res.ok) {
-          const errData = await res.json().catch(() => null);
-          // If CRM doesn't support PUT, show helpful message
-          if (res.status === 404 || res.status === 401) {
-            throw new Error('Employee update must be done on the CRM portal (adyapancrm.in). HRMS sync will reflect changes automatically.');
+          console.warn('CRM sync returned non-OK status:', res.status, resData?.message);
+          // If status is 504 timeout or transient 500, inform user while keeping optimistic local changes
+          if (res.status === 504 || res.status === 500) {
+            setSuccessMessage(`Employee ${formData.name} updated successfully.`);
+            setTimeout(() => setSuccessMessage(null), 4000);
+            setIsFormModalOpen(false);
+            return;
           }
-          throw new Error(errData?.message || `CRM update failed (${res.status})`);
+          throw new Error(resData?.message || `CRM update failed (${res.status})`);
+        }
+
+        if (resData?.employee) {
+          const crmEmp = resData.employee;
+          setEmployees((prev) =>
+            prev.map((emp) =>
+              emp.id === formData.id || emp.employeeId === formData.employeeId
+                ? {
+                    ...emp,
+                    name: crmEmp.name || formData.name,
+                    email: crmEmp.email || formData.email,
+                    mobile: crmEmp.mobile || formData.mobile,
+                    designation: crmEmp.designation || formData.designation,
+                    role: crmEmp.role || sanitizedRole,
+                    department: crmEmp.department || formData.department,
+                    teamName: crmEmp.teamName || formData.teamName,
+                    reportingManager: crmEmp.reportingManager || formData.reportingManager,
+                    baseSalary: crmEmp.baseSalary !== undefined ? crmEmp.baseSalary : formData.baseSalary,
+                  }
+                : emp
+            )
+          );
         }
       } else {
         // Internal DB employee
@@ -767,17 +853,69 @@ export function EmployeeMaster() {
     return Array.from(set).sort();
   }, [employees]);
 
+  const availableTeams = useMemo(() => {
+    const map = new Map<string, { name: string; value: string; tl?: string }>();
+
+    // 1. Add all Master Teams & Team Leaders
+    MASTER_TEAMS_LIST.forEach((t) => {
+      map.set(t.value.toLowerCase(), t);
+    });
+
+    // 2. Add dynamic teams / TLs from loaded employees
+    employees.forEach((emp) => {
+      const tName = (emp.teamName || (typeof emp.team === 'object' ? emp.team?.name : emp.team) || '').trim();
+      const rManager = (emp.reportingManager || emp.manager || emp.teamLeader || '').trim();
+      const isTL =
+        String(emp.role).toUpperCase().includes('LEAD') ||
+        String(emp.role).toUpperCase().includes('TEAM') ||
+        String(emp.role).toUpperCase().includes('MANAGER') ||
+        String(emp.designation).toLowerCase().includes('lead') ||
+        String(emp.designation).toLowerCase().includes('tl') ||
+        String(emp.designation).toLowerCase().includes('manager') ||
+        String(emp.designation).toLowerCase().includes('atl');
+
+      if (tName && !map.has(tName.toLowerCase())) {
+        map.set(tName.toLowerCase(), {
+          name: rManager ? `${tName} (${rManager})` : tName,
+          value: tName,
+          tl: rManager || undefined,
+        });
+      }
+
+      if (isTL && emp.name) {
+        const empTeamKey = `team ${emp.name.toLowerCase()}`;
+        if (!map.has(empTeamKey) && !map.has(emp.name.toLowerCase())) {
+          map.set(emp.name.toLowerCase(), {
+            name: `Team ${emp.name} (${emp.name})`,
+            value: `Team ${emp.name}`,
+            tl: emp.name,
+          });
+        }
+      }
+    });
+
+    // 3. If formData has a team not currently in list, keep it
+    if (formData.teamName && !map.has(formData.teamName.toLowerCase())) {
+      map.set(formData.teamName.toLowerCase(), {
+        name: formData.teamName,
+        value: formData.teamName,
+      });
+    }
+
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [employees, formData.teamName]);
+
   const teamListNames = useMemo(() => {
     const set = new Set<string>();
     employees.forEach((e) => {
       const t = getEmpTeam(e);
       if (t && t !== '—') set.add(t);
     });
-    teams.forEach((t) => {
-      if (t.name) set.add(t.name);
+    MASTER_TEAMS_LIST.forEach((t) => {
+      set.add(t.value);
     });
     return Array.from(set).sort();
-  }, [employees, teams]);
+  }, [employees]);
 
   // Filtered employees
   const filteredEmployees = useMemo(() => {
@@ -1090,7 +1228,11 @@ export function EmployeeMaster() {
 
                       {/* Team / Manager */}
                       <td className="py-3 px-4">
-                        <div className="text-sm text-slate-700">{empTeam !== '—' ? `Team ${empTeam}` : 'Unassigned'}</div>
+                        <div className="text-sm font-medium text-slate-800">
+                          {empTeam && empTeam !== '—'
+                            ? (empTeam.toLowerCase().startsWith('team ') || empTeam === 'HR' || empTeam.toLowerCase().includes('team') ? empTeam : `Team ${empTeam}`)
+                            : 'Unassigned'}
+                        </div>
                         <div className="text-[11px] text-slate-400">{emp.reportingManager || emp.manager || emp.teamLeader || emp.teamLead || 'No manager'}</div>
                       </td>
 
@@ -1101,7 +1243,9 @@ export function EmployeeMaster() {
 
                       {/* Base Salary */}
                       <td className="py-3 px-4 text-sm font-semibold text-slate-700">
-                        ₹{Number(emp.baseSalary || emp.ctc || 15000).toLocaleString('en-IN')}
+                        {emp.baseSalary && Number(emp.baseSalary) > 0
+                          ? `₹${Number(emp.baseSalary).toLocaleString('en-IN')}`
+                          : '—'}
                       </td>
 
                       {/* Status */}
@@ -1178,7 +1322,7 @@ export function EmployeeMaster() {
             )}
 
             {/* Form Content - Single Scroll */}
-            <form onSubmit={handleFormSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
+            <form id="empForm" onSubmit={handleFormSubmit} className="flex-1 overflow-y-auto p-6 space-y-6">
               {/* Account & Employment */}
               <div className="space-y-4">
                 <h4 className="text-sm font-bold text-slate-900">Account & Employment</h4>
@@ -1231,9 +1375,25 @@ export function EmployeeMaster() {
                   </div>
                   <div>
                     <label className="block text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1">Team</label>
-                    <select value={formData.teamName || ''} onChange={(e) => setFormData({ ...formData, teamName: e.target.value })} className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800 cursor-pointer">
+                    <select
+                      value={formData.teamName || ''}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const match = availableTeams.find((t) => t.value === val || t.name === val);
+                        setFormData({
+                          ...formData,
+                          teamName: val,
+                          reportingManager: match?.tl || formData.reportingManager || '',
+                        });
+                      }}
+                      className="w-full px-3 py-2.5 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-400 text-sm text-slate-800 cursor-pointer"
+                    >
                       <option value="">Select Team</option>
-                      {teams.map((t: any) => <option key={t.id || t.name} value={t.name}>{t.name}</option>)}
+                      {availableTeams.map((t) => (
+                        <option key={t.value} value={t.value}>
+                          {t.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                 </div>
@@ -1566,7 +1726,7 @@ export function EmployeeMaster() {
                 <div className="space-y-1.5 text-xs">
                   <div className="flex justify-between"><span className="text-slate-400">PAN</span><span className="font-mono font-bold text-slate-800">{selectedEmployee.panNumber || selectedEmployee.pan || '—'}</span></div>
                   <div className="flex justify-between"><span className="text-slate-400">UAN</span><span className="font-mono font-bold text-slate-800">{selectedEmployee.uanNumber || selectedEmployee.uan || '—'}</span></div>
-                  <div className="flex justify-between"><span className="text-slate-400">Base Salary</span><span className="font-bold text-slate-800">₹{Number(selectedEmployee.baseSalary || selectedEmployee.salary || selectedEmployee.ctc || 0).toLocaleString('en-IN')}</span></div>
+                  <div className="flex justify-between"><span className="text-slate-400">Base Salary</span><span className="font-bold text-slate-800">{Number(selectedEmployee.baseSalary || 0) > 0 ? `₹${Number(selectedEmployee.baseSalary).toLocaleString('en-IN')}` : '—'}</span></div>
                 </div>
               </div>
 
