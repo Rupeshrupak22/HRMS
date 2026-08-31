@@ -1,7 +1,25 @@
 'use client';
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Plus, X, Pencil, Trash2, TrendingUp, Search, Download, Upload, Calendar, History, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import {
+  Plus,
+  X,
+  Pencil,
+  Trash2,
+  TrendingUp,
+  Search,
+  Download,
+  Upload,
+  Calendar,
+  History,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  FileSpreadsheet,
+  Check,
+  ArrowRight,
+  Sparkles,
+} from 'lucide-react';
 import { nitishaApi } from '@/lib/nitisha-api';
 import { Pagination } from '@/components/Pagination';
 import * as XLSX from 'xlsx';
@@ -90,6 +108,16 @@ export default function EmployeePerformancePage() {
   const [records, setRecords] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [saveSuccess, setSaveSuccess] = useState<{
+    show: boolean;
+    employeeName: string;
+    employeeId: string;
+    month: string;
+    department: string;
+    isEdit: boolean;
+  } | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [historyEmp, setHistoryEmp] = useState<any | null>(null);
@@ -98,8 +126,23 @@ export default function EmployeePerformancePage() {
     const now = new Date();
     return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
   });
+  const [selectedDate, setSelectedDate] = useState('');
   const [page, setPage] = useState(1);
   const PAGE_SIZE = 20;
+
+  // Import Modal State
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importFileName, setImportFileName] = useState('');
+  const [importRows, setImportRows] = useState<any[]>([]);
+  const [importTargetMonth, setImportTargetMonth] = useState(selectedMonth);
+  const [importing, setImporting] = useState(false);
+  const [importSuccessData, setImportSuccessData] = useState<{
+    total: number;
+    inserted: number;
+    updated: number;
+    month: string;
+  } | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Independent column dropdown states
@@ -138,23 +181,22 @@ export default function EmployeePerformancePage() {
     finalRemark: '',
   });
 
+  const fetchRecords = async () => {
+    try {
+      const res = await nitishaApi.getPerformances();
+      if (Array.isArray(res)) {
+        setRecords(res);
+      } else if (res && Array.isArray((res as any).data)) {
+        setRecords((res as any).data);
+      }
+    } catch (err: any) {
+      console.warn('Load performances notice:', err?.message);
+    }
+  };
+
   useEffect(() => {
     setLoading(true);
-    nitishaApi
-      .getPerformances()
-      .then((res) => {
-        if (Array.isArray(res)) {
-          setRecords(res);
-        } else if (res && Array.isArray((res as any).data)) {
-          setRecords((res as any).data);
-        }
-      })
-      .catch((err) => {
-        console.warn('Load performances notice:', err?.message);
-      })
-      .finally(() => {
-        setLoading(false);
-      });
+    fetchRecords().finally(() => setLoading(false));
   }, []);
 
   const totalDaysInMonth = useMemo(() => getDaysInMonth(selectedMonth), [selectedMonth]);
@@ -163,6 +205,42 @@ export default function EmployeePerformancePage() {
     return Array.from({ length: totalDaysInMonth }, (_, i) => i + 1);
   }, [totalDaysInMonth]);
 
+  // Master directory of all distinct employees across all months / records
+  const masterEmployees = useMemo(() => {
+    const map = new Map<string, any>();
+    records.forEach((r) => {
+      const rawId = (r.employeeId || '').trim();
+      const rawName = (r.employeeName || '').trim();
+      const key = rawId ? rawId.toUpperCase() : rawName.toUpperCase();
+      if (!key) return;
+
+      if (!map.has(key)) {
+        map.set(key, {
+          employeeName: r.employeeName || '',
+          employeeId: r.employeeId || '',
+          department: r.department || '',
+          designation: r.designation || '',
+          kpi: r.kpi || '',
+          joiningDate: r.joiningDate || '',
+          createdAt: r.createdAt || r.date || '',
+        });
+      } else {
+        const curr = map.get(key);
+        map.set(key, {
+          employeeName: curr.employeeName || r.employeeName || '',
+          employeeId: curr.employeeId || r.employeeId || '',
+          department: curr.department || r.department || '',
+          designation: curr.designation || r.designation || '',
+          kpi: curr.kpi || r.kpi || '',
+          joiningDate: curr.joiningDate || r.joiningDate || '',
+          createdAt: curr.createdAt || r.createdAt || r.date || '',
+        });
+      }
+    });
+    return map;
+  }, [records]);
+
+  // Filtered records for the selected month with multi-month carryover & deduplication
   const filteredRecords = useMemo(() => {
     const getRecMonth = (r: any) => {
       if (r.performanceMonth) return String(r.performanceMonth).trim().slice(0, 7);
@@ -178,85 +256,100 @@ export default function EmployeePerformancePage() {
       return '';
     };
 
-    let monthRecords = records.filter((r) => {
-      const q = searchTerm.toLowerCase().trim();
-      const matchesSearch =
-        !q ||
+    // 1. Collect all evaluated records for the selected month
+    const monthEvaluatedMap = new Map<string, any>();
+    records.forEach((r) => {
+      const recMonth = getRecMonth(r);
+      if (recMonth === selectedMonth || (!recMonth && !r._isPlaceholder)) {
+        const rawId = (r.employeeId || '').trim();
+        const rawName = (r.employeeName || '').trim();
+        const key = rawId ? rawId.toUpperCase() : rawName.toUpperCase();
+        if (key) {
+          // If already set, keep the one with evaluated data / real id
+          const existing = monthEvaluatedMap.get(key);
+          if (!existing || (r.dailyPerformance || r.monthlyPerformance || r.pipCase || r.id)) {
+            monthEvaluatedMap.set(key, r);
+          }
+        }
+      }
+    });
+
+    // 2. Build complete list of rows: evaluated records + placeholders for any remaining master employees
+    const monthRows: any[] = [];
+    const processedKeys = new Set<string>();
+
+    // Add evaluated records
+    monthEvaluatedMap.forEach((rec, key) => {
+      processedKeys.add(key);
+      monthRows.push({
+        ...rec,
+        _isPlaceholder: false,
+      });
+    });
+
+    // Carry forward all remaining employees from masterEmployees as placeholders for this month
+    masterEmployees.forEach((emp, key) => {
+      if (!processedKeys.has(key)) {
+        processedKeys.add(key);
+        monthRows.push({
+          ...emp,
+          performanceMonth: selectedMonth,
+          dailyPerformance: '',
+          weeklyPerformance: '',
+          monthlyPerformance: '',
+          dailyRevenue: '',
+          weeklyRevenue: '',
+          monthlyRevenue: '',
+          dailyData: '{}',
+          weeklyData: '{}',
+          pipCase: '',
+          furtherActions: '',
+          monthPerformance: '',
+          _isPlaceholder: true,
+        });
+      }
+    });
+
+    // 3. Date-wise Filter (if a specific date is selected)
+    let filtered = monthRows;
+    if (selectedDate) {
+      filtered = filtered.filter((r) => {
+        const dateStr = r.createdAt || r.date || '';
+        if (!dateStr) return false;
+        try {
+          const d = new Date(dateStr);
+          if (!isNaN(d.getTime())) {
+            const formatted = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+              d.getDate()
+            ).padStart(2, '0')}`;
+            return formatted === selectedDate || dateStr.slice(0, 10) === selectedDate;
+          }
+        } catch {}
+        return dateStr.slice(0, 10) === selectedDate;
+      });
+    }
+
+    // 4. Search Filter
+    const q = searchTerm.toLowerCase().trim();
+    filtered = filtered.filter((r) => {
+      if (!q) return true;
+      return (
         (r.employeeName || '').toLowerCase().includes(q) ||
         (r.employeeId || '').toLowerCase().includes(q) ||
         (r.department || '').toLowerCase().includes(q) ||
         (r.designation || '').toLowerCase().includes(q) ||
-        (r.kpi || '').toLowerCase().includes(q);
-
-      let matchesMonth = true;
-      if (selectedMonth) {
-        const recMonth = getRecMonth(r);
-        matchesMonth = !recMonth || recMonth === selectedMonth;
-      }
-
-      return matchesSearch && matchesMonth;
+        (r.kpi || '').toLowerCase().includes(q)
+      );
     });
 
-    if (selectedMonth) {
-      const existingEmpIds = new Set(
-        monthRecords
-          .filter((r) => {
-            const m = getRecMonth(r);
-            return !m || m === selectedMonth;
-          })
-          .map((r) => r.employeeId)
-          .filter(Boolean)
-      );
-
-      const allEmployees = new Map<string, any>();
-      records.forEach((r) => {
-        if (r.employeeId && !allEmployees.has(r.employeeId)) {
-          allEmployees.set(r.employeeId, {
-            employeeName: r.employeeName || '',
-            employeeId: r.employeeId || '',
-            department: r.department || '',
-            designation: r.designation || '',
-            kpi: r.kpi || '',
-            joiningDate: r.joiningDate || '',
-          });
-        }
-      });
-
-      allEmployees.forEach((emp, empId) => {
-        if (!existingEmpIds.has(empId)) {
-          const q = searchTerm.toLowerCase().trim();
-          const matchesSearch =
-            !q ||
-            emp.employeeName.toLowerCase().includes(q) ||
-            emp.employeeId.toLowerCase().includes(q) ||
-            emp.department.toLowerCase().includes(q) ||
-            emp.designation.toLowerCase().includes(q) ||
-            emp.kpi.toLowerCase().includes(q);
-
-          if (matchesSearch) {
-            monthRecords.push({
-              ...emp,
-              performanceMonth: selectedMonth,
-              dailyPerformance: '',
-              weeklyPerformance: '',
-              monthlyPerformance: '',
-              dailyRevenue: '',
-              weeklyRevenue: '',
-              monthlyRevenue: '',
-              dailyData: '{}',
-              weeklyData: '{}',
-              pipCase: '',
-              furtherActions: '',
-              monthPerformance: '',
-              _isPlaceholder: true,
-            });
-          }
-        }
-      });
-    }
-
-    return monthRecords;
-  }, [records, searchTerm, selectedMonth]);
+    // 5. Stable sort: Evaluated records first, then by Employee ID or Name
+    return filtered.sort((a, b) => {
+      if (a._isPlaceholder !== b._isPlaceholder) {
+        return a._isPlaceholder ? 1 : -1;
+      }
+      return (a.employeeName || '').localeCompare(b.employeeName || '');
+    });
+  }, [records, masterEmployees, selectedMonth, selectedDate, searchTerm]);
 
   const paginatedRecords = useMemo(() => {
     const start = (page - 1) * PAGE_SIZE;
@@ -297,6 +390,8 @@ export default function EmployeePerformancePage() {
     });
     setEditingId(null);
     setShowForm(false);
+    setSaveSuccess(null);
+    setSaveError(null);
   };
 
   const handleEdit = (record: any, targetMonth?: string, targetDay?: number) => {
@@ -307,7 +402,6 @@ export default function EmployeePerformancePage() {
     const dayToUse = targetDay || perfDailyDay || Math.min(new Date().getDate(), totalDaysInMonth);
     const weekToUse = perfWeeklyWeek !== 'ALL' ? perfWeeklyWeek : getWeekForDay(dayToUse);
 
-    // Auto seed parsedDaily with existing record dailyPerformance if empty
     const creationDay = getRecordCreationDay(record);
     if (Object.keys(parsedDaily).length === 0 && (rest.dailyPerformance || rest.dailyRevenue)) {
       parsedDaily[String(creationDay)] = {
@@ -336,11 +430,27 @@ export default function EmployeePerformancePage() {
       department: rest.department || '',
       designation: rest.designation || '',
       kpi: rest.kpi || '',
-      dailyPerformance: dayEntry.dailyPerformance !== undefined ? dayEntry.dailyPerformance : (dayToUse === creationDay ? (rest.dailyPerformance || '') : ''),
-      weeklyPerformance: weekEntry.weeklyPerformance !== undefined ? weekEntry.weeklyPerformance : (rest.weeklyPerformance || ''),
+      dailyPerformance:
+        dayEntry.dailyPerformance !== undefined
+          ? dayEntry.dailyPerformance
+          : dayToUse === creationDay
+          ? rest.dailyPerformance || ''
+          : '',
+      weeklyPerformance:
+        weekEntry.weeklyPerformance !== undefined
+          ? weekEntry.weeklyPerformance
+          : rest.weeklyPerformance || '',
       monthlyPerformance: rest.monthlyPerformance || '',
-      dailyRevenue: dayEntry.dailyRevenue !== undefined ? dayEntry.dailyRevenue : (dayToUse === creationDay ? (rest.dailyRevenue || '') : ''),
-      weeklyRevenue: weekEntry.weeklyRevenue !== undefined ? weekEntry.weeklyRevenue : (rest.weeklyRevenue || ''),
+      dailyRevenue:
+        dayEntry.dailyRevenue !== undefined
+          ? dayEntry.dailyRevenue
+          : dayToUse === creationDay
+          ? rest.dailyRevenue || ''
+          : '',
+      weeklyRevenue:
+        weekEntry.weeklyRevenue !== undefined
+          ? weekEntry.weeklyRevenue
+          : rest.weeklyRevenue || '',
       monthlyRevenue: rest.monthlyRevenue || '',
       pipCase: rest.pipCase || '',
       furtherActions: rest.furtherActions || '',
@@ -355,14 +465,15 @@ export default function EmployeePerformancePage() {
       managerRemark: rest.managerRemark || '',
       finalRemark: rest.finalRemark || '',
     });
-    setEditingId(record._isPlaceholder ? null : (id || _id));
+    setEditingId(record._isPlaceholder ? null : id || _id);
+    setSaveSuccess(null);
+    setSaveError(null);
     setShowForm(true);
     setHistoryEmp(null);
   };
 
   const handleFormDayChange = (newDay: number) => {
     const updatedDaily = { ...form.dailyData };
-    // Save current values to activeFormDay
     updatedDaily[String(activeFormDay)] = {
       ...(updatedDaily[String(activeFormDay)] || {}),
       dailyPerformance: form.dailyPerformance,
@@ -384,7 +495,8 @@ export default function EmployeePerformancePage() {
     updatedWeekly[activeFormWeek] = {
       ...(updatedWeekly[activeFormWeek] || {}),
       weeklyPerformance: form.weeklyPerformance,
-      weeklyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.weeklyRevenue : '',
+      weeklyRevenue:
+        form.department === 'Sales' || form.department === 'Operation' ? form.weeklyRevenue : '',
     };
 
     setActiveFormWeek(newWeek);
@@ -399,18 +511,24 @@ export default function EmployeePerformancePage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this record?')) return;
-    await nitishaApi.deletePerformance(id);
-    setRecords(records.filter((r) => (r.id || r._id) !== id));
+    try {
+      await nitishaApi.deletePerformance(id);
+      setRecords((prev) => prev.filter((r) => (r.id || r._id) !== id));
+    } catch (e: any) {
+      alert('Failed to delete record: ' + (e?.message || 'Unknown error'));
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
+    setSaveError(null);
+    setSaveSuccess(null);
+
     try {
       const isTechOrHR = form.department === 'Tech' || form.department === 'HR';
-      const targetMonth = form.performanceMonth || selectedMonth || '';
+      const targetMonth = (form.performanceMonth || selectedMonth || '').trim();
 
-      // Merge current daily inputs into dailyData[activeFormDay]
       const updatedDaily = { ...form.dailyData };
       updatedDaily[String(activeFormDay)] = {
         ...(updatedDaily[String(activeFormDay)] || {}),
@@ -418,23 +536,34 @@ export default function EmployeePerformancePage() {
         dailyRevenue: form.department === 'Sales' ? form.dailyRevenue : '',
       };
 
-      // Merge current weekly inputs into weeklyData[activeFormWeek]
       const updatedWeekly = { ...form.weeklyData };
       updatedWeekly[activeFormWeek] = {
         ...(updatedWeekly[activeFormWeek] || {}),
         weeklyPerformance: isTechOrHR ? '' : form.weeklyPerformance,
-        weeklyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.weeklyRevenue : '',
+        weeklyRevenue:
+          form.department === 'Sales' || form.department === 'Operation'
+            ? form.weeklyRevenue
+            : '',
       };
 
       const payload = {
         ...form,
+        employeeName: form.employeeName.trim(),
+        employeeId: form.employeeId.trim(),
+        department: form.department.trim(),
+        designation: form.designation.trim(),
+        kpi: form.kpi.trim(),
         dailyPerformance: isTechOrHR ? '' : form.dailyPerformance,
         weeklyPerformance: isTechOrHR ? '' : form.weeklyPerformance,
         monthlyPerformance: form.monthlyPerformance,
         monthPerformance: form.monthlyPerformance,
         dailyRevenue: form.department === 'Sales' ? form.dailyRevenue : '',
-        weeklyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.weeklyRevenue : '',
-        monthlyRevenue: form.department === 'Sales' || form.department === 'Operation' ? form.monthlyRevenue : '',
+        weeklyRevenue:
+          form.department === 'Sales' || form.department === 'Operation' ? form.weeklyRevenue : '',
+        monthlyRevenue:
+          form.department === 'Sales' || form.department === 'Operation'
+            ? form.monthlyRevenue
+            : '',
         performanceMonth: targetMonth,
         dailyData: JSON.stringify(updatedDaily),
         weeklyData: JSON.stringify(updatedWeekly),
@@ -447,8 +576,9 @@ export default function EmployeePerformancePage() {
             !r._isPlaceholder &&
             (r.id || r._id) &&
             !String(r.id || r._id).startsWith('perf-') &&
-            r.employeeId === payload.employeeId &&
-            (r.performanceMonth === targetMonth || (!r.performanceMonth && r.createdAt?.slice(0, 7) === targetMonth))
+            (r.employeeId || '').trim().toUpperCase() === payload.employeeId.toUpperCase() &&
+            (r.performanceMonth === targetMonth ||
+              (!r.performanceMonth && r.createdAt?.slice(0, 7) === targetMonth))
         );
 
       const actualEditId =
@@ -459,44 +589,26 @@ export default function EmployeePerformancePage() {
           : null;
 
       if (actualEditId) {
-        try {
-          const res = await nitishaApi.updatePerformance(actualEditId, payload);
-          if (res && (res.id || res._id)) {
-            const updatedId = res.id || res._id;
-            setRecords((prev) =>
-              prev.map((r) => ((r.id || r._id) === actualEditId || (r.id || r._id) === updatedId ? { ...r, ...res, _isPlaceholder: false } : r))
-            );
-          }
-        } catch (e) {
-          console.error('Update performance failed:', e);
-        }
+        await nitishaApi.updatePerformance(actualEditId, payload);
       } else {
-        try {
-          const res = await nitishaApi.createPerformance(payload);
-          if (res && (res.id || res._id)) {
-            setRecords((prev) => {
-              const filtered = prev.filter(
-                (r) => !(r._isPlaceholder && r.employeeId === payload.employeeId && r.performanceMonth === targetMonth)
-              );
-              return [res, ...filtered];
-            });
-          }
-        } catch (e) {
-          console.error('Create performance failed:', e);
-        }
+        await nitishaApi.createPerformance(payload);
       }
 
-      // Refresh from DB immediately
-      try {
-        const fresh = await nitishaApi.getPerformances();
-        if (Array.isArray(fresh)) {
-          setRecords(fresh);
-        } else if (fresh && Array.isArray((fresh as any).data)) {
-          setRecords((fresh as any).data);
-        }
-      } catch {}
+      // Re-fetch all records fresh from DB
+      await fetchRecords();
 
-      resetForm();
+      // Show in-modal success state so the user can verify and exit explicitly
+      setSaveSuccess({
+        show: true,
+        employeeName: payload.employeeName,
+        employeeId: payload.employeeId,
+        month: targetMonth,
+        department: payload.department,
+        isEdit: Boolean(actualEditId),
+      });
+    } catch (err: any) {
+      console.error('Save performance error:', err);
+      setSaveError(err?.message || 'Failed to save performance record. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -510,18 +622,17 @@ export default function EmployeePerformancePage() {
     const dailyMap = parseJSON<Record<string, any>>(r.dailyData, {});
     const dayKey = String(perfDailyDay);
 
-    // 1. Direct match in dailyData
     if (dailyMap[dayKey] && dailyMap[dayKey].dailyPerformance !== undefined) {
       return dailyMap[dayKey].dailyPerformance;
     }
 
-    // 2. If dailyData has any explicitly logged days but NOT this day -> return blank
-    const loggedDayKeys = Object.keys(dailyMap).filter(k => !isNaN(parseInt(k, 10)) && dailyMap[k]?.dailyPerformance);
+    const loggedDayKeys = Object.keys(dailyMap).filter(
+      (k) => !isNaN(parseInt(k, 10)) && dailyMap[k]?.dailyPerformance
+    );
     if (loggedDayKeys.length > 0) {
       return '';
     }
 
-    // 3. Fallback for legacy records without dailyData: check record creation day
     const recDay = getRecordCreationDay(r);
     if (recDay === perfDailyDay) {
       return r.dailyPerformance || '';
@@ -536,26 +647,27 @@ export default function EmployeePerformancePage() {
     }
     const weeklyMap = parseJSON<Record<string, any>>(r.weeklyData, {});
 
-    // 1. Direct match in weeklyData
     if (weeklyMap[perfWeeklyWeek] && weeklyMap[perfWeeklyWeek].weeklyPerformance !== undefined) {
       return weeklyMap[perfWeeklyWeek].weeklyPerformance;
     }
 
-    // 2. Check if dailyData has days logged in this week
     const dailyMap = parseJSON<Record<string, any>>(r.dailyData, {});
     const daysInWeek = getDaysForWeek(perfWeeklyWeek, totalDaysInMonth);
-    const loggedInThisWeek = daysInWeek.filter(d => dailyMap[String(d)]?.dailyPerformance);
+    const loggedInThisWeek = daysInWeek.filter((d) => dailyMap[String(d)]?.dailyPerformance);
     if (loggedInThisWeek.length > 0) {
-      return dailyMap[String(loggedInThisWeek[loggedInThisWeek.length - 1])]?.dailyPerformance || `${loggedInThisWeek.length} days active`;
+      return (
+        dailyMap[String(loggedInThisWeek[loggedInThisWeek.length - 1])]?.dailyPerformance ||
+        `${loggedInThisWeek.length} days active`
+      );
     }
 
-    // 3. If other days/weeks are logged -> return blank
-    const allLoggedDays = Object.keys(dailyMap).filter(k => !isNaN(parseInt(k, 10)) && dailyMap[k]?.dailyPerformance);
+    const allLoggedDays = Object.keys(dailyMap).filter(
+      (k) => !isNaN(parseInt(k, 10)) && dailyMap[k]?.dailyPerformance
+    );
     if (allLoggedDays.length > 0 || Object.keys(weeklyMap).length > 0) {
       return '';
     }
 
-    // 4. Fallback for legacy records without weeklyData: check week of record creation
     const recDay = getRecordCreationDay(r);
     const recWeek = getWeekForDay(recDay);
     if (recWeek === perfWeeklyWeek) {
@@ -576,7 +688,9 @@ export default function EmployeePerformancePage() {
       return dailyMap[dayKey].dailyRevenue;
     }
 
-    const loggedRevKeys = Object.keys(dailyMap).filter(k => !isNaN(parseInt(k, 10)) && dailyMap[k]?.dailyRevenue);
+    const loggedRevKeys = Object.keys(dailyMap).filter(
+      (k) => !isNaN(parseInt(k, 10)) && dailyMap[k]?.dailyRevenue
+    );
     if (loggedRevKeys.length > 0) {
       return '';
     }
@@ -603,7 +717,7 @@ export default function EmployeePerformancePage() {
     const daysInWeek = getDaysForWeek(revWeeklyWeek, totalDaysInMonth);
     let weekRevSum = 0;
     let hasRev = false;
-    daysInWeek.forEach(d => {
+    daysInWeek.forEach((d) => {
       const rev = dailyMap[String(d)]?.dailyRevenue;
       if (rev) {
         weekRevSum += cleanCurrency(rev);
@@ -614,7 +728,9 @@ export default function EmployeePerformancePage() {
       return formatCurrency(weekRevSum);
     }
 
-    const allLoggedDays = Object.keys(dailyMap).filter(k => !isNaN(parseInt(k, 10)) && dailyMap[k]?.dailyRevenue);
+    const allLoggedDays = Object.keys(dailyMap).filter(
+      (k) => !isNaN(parseInt(k, 10)) && dailyMap[k]?.dailyRevenue
+    );
     if (allLoggedDays.length > 0 || Object.keys(weeklyMap).length > 0) {
       return '';
     }
@@ -647,6 +763,7 @@ export default function EmployeePerformancePage() {
       'Monthly Revenue',
       'PIP Case',
       'Further Actions',
+      'Joining Date',
     ];
     const sample = [
       'John Doe',
@@ -654,14 +771,15 @@ export default function EmployeePerformancePage() {
       'Sales',
       'Team Lead',
       'Revenue Target',
-      '5 calls',
-      '25 calls',
-      '100 calls',
+      'Excellent',
+      'Good',
+      'Good',
       '₹5,000',
       '₹25,000',
       '₹1,00,000',
       'No',
-      '',
+      'On track for quarterly promotion',
+      '2025-01-15',
     ];
     const ws = XLSX.utils.aoa_to_sheet([headers, sample]);
     const wb = XLSX.utils.book_new();
@@ -669,54 +787,185 @@ export default function EmployeePerformancePage() {
     XLSX.writeFile(wb, `Performance_Template_${selectedMonth}.xlsx`);
   };
 
-  const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Trigger file selection for Import Modal
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+
+    setImportFileName(file.name);
+    setImportTargetMonth(selectedMonth);
+    setImportError(null);
+    setImportSuccessData(null);
+
     const reader = new FileReader();
     reader.onload = async (evt) => {
       try {
         const data = new Uint8Array(evt.target?.result as ArrayBuffer);
         const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData: any[] = XLSX.utils.sheet_to_json(sheet);
+        const rawJson: any[] = XLSX.utils.sheet_to_json(sheet);
 
-        for (const row of jsonData) {
-          const payload = {
-            employeeName: row['Employee Name'] || '',
-            employeeId: row['Employee ID'] || '',
-            department: row['Department'] || '',
-            designation: row['Designation'] || '',
-            kpi: row['KPI'] || '',
-            dailyPerformance: row['Daily Performance'] || '',
-            weeklyPerformance: row['Weekly Performance'] || '',
-            monthlyPerformance: row['Monthly Performance'] || '',
-            dailyRevenue: row['Daily Revenue'] || '',
-            weeklyRevenue: row['Weekly Revenue'] || '',
-            monthlyRevenue: row['Monthly Revenue'] || '',
-            pipCase: row['PIP Case'] || 'No',
-            furtherActions: row['Further Actions'] || '',
-            joiningDate: row['Joining Date'] || '',
-            performanceMonth: selectedMonth,
-            dailyData: '{}',
-            weeklyData: '{}',
-            reasonForPip: '',
-            performanceGap: '',
-            currentPerformance: '',
-            improvementAction: '',
-            managerRemark: '',
-            finalRemark: '',
-          };
-          try {
-            const created = await nitishaApi.createPerformance(payload);
-            setRecords((prev) => [created, ...prev]);
-          } catch { }
+        if (!rawJson || rawJson.length === 0) {
+          alert('The uploaded Excel file contains no data rows.');
+          return;
         }
-      } catch {
-        alert('Failed to parse file. Please use the template format.');
+
+        // Deduplicate and sanitize rows within the spreadsheet
+        const parsedMap = new Map<string, any>();
+        rawJson.forEach((row: any) => {
+          const empName = (
+            row['Employee Name'] ||
+            row['employeeName'] ||
+            row['Name'] ||
+            row['name'] ||
+            ''
+          ).trim();
+          const empId = (
+            row['Employee ID'] ||
+            row['employeeId'] ||
+            row['Emp ID'] ||
+            row['ID'] ||
+            row['id'] ||
+            ''
+          ).trim();
+
+          if (!empName && !empId) return;
+
+          const key = empId ? empId.toUpperCase() : empName.toUpperCase();
+          parsedMap.set(key, {
+            employeeName: empName,
+            employeeId: empId,
+            department: (
+              row['Department'] ||
+              row['department'] ||
+              row['Dept'] ||
+              'Sales'
+            ).trim(),
+            designation: (
+              row['Designation'] ||
+              row['designation'] ||
+              row['Role'] ||
+              'Associate'
+            ).trim(),
+            kpi: (row['KPI'] || row['kpi'] || row['Target'] || '').trim(),
+            dailyPerformance: (
+              row['Daily Performance'] ||
+              row['dailyPerformance'] ||
+              row['Daily'] ||
+              ''
+            ).trim(),
+            weeklyPerformance: (
+              row['Weekly Performance'] ||
+              row['weeklyPerformance'] ||
+              row['Weekly'] ||
+              ''
+            ).trim(),
+            monthlyPerformance: (
+              row['Monthly Performance'] ||
+              row['monthlyPerformance'] ||
+              row['Monthly'] ||
+              ''
+            ).trim(),
+            dailyRevenue: (
+              row['Daily Revenue'] ||
+              row['dailyRevenue'] ||
+              row['Daily Rev'] ||
+              ''
+            ).trim(),
+            weeklyRevenue: (
+              row['Weekly Revenue'] ||
+              row['weeklyRevenue'] ||
+              row['Weekly Rev'] ||
+              ''
+            ).trim(),
+            monthlyRevenue: (
+              row['Monthly Revenue'] ||
+              row['monthlyRevenue'] ||
+              row['Monthly Rev'] ||
+              ''
+            ).trim(),
+            pipCase: (row['PIP Case'] || row['pipCase'] || row['PIP'] || 'No').trim(),
+            furtherActions: (
+              row['Further Actions'] ||
+              row['furtherActions'] ||
+              row['Remarks'] ||
+              ''
+            ).trim(),
+            joiningDate: (
+              row['Joining Date'] ||
+              row['joiningDate'] ||
+              row['DOJ'] ||
+              ''
+            ).trim(),
+          });
+        });
+
+        const distinctRows = Array.from(parsedMap.values());
+        if (distinctRows.length === 0) {
+          alert('Could not find valid employee records in this spreadsheet.');
+          return;
+        }
+
+        setImportRows(distinctRows);
+        setShowImportModal(true);
+      } catch (err: any) {
+        alert('Failed to parse Excel file: ' + (err?.message || 'Please use valid Excel/CSV format.'));
       }
     };
     reader.readAsArrayBuffer(file);
     if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Perform bulk import to API
+  const handleExecuteImport = async () => {
+    if (importRows.length === 0) return;
+    setImporting(true);
+    setImportError(null);
+    setImportSuccessData(null);
+
+    try {
+      const payloadItems = importRows.map((r) => ({
+        ...r,
+        performanceMonth: importTargetMonth,
+        dailyData: '{}',
+        weeklyData: '{}',
+        reasonForPip: '',
+        performanceGap: '',
+        currentPerformance: '',
+        improvementAction: '',
+        managerRemark: '',
+        finalRemark: '',
+      }));
+
+      const res: any = await nitishaApi.createPerformanceBulk(payloadItems);
+      const inserted = res?.insertedCount ?? importRows.length;
+      const updated = res?.updatedCount ?? 0;
+      const total = res?.count ?? importRows.length;
+
+      // Re-fetch all records fresh from DB
+      await fetchRecords();
+
+      // Show in-modal success confirmation before exiting
+      setImportSuccessData({
+        total,
+        inserted,
+        updated,
+        month: importTargetMonth,
+      });
+    } catch (err: any) {
+      console.error('Import error:', err);
+      setImportError(err?.message || 'Failed to import Excel data. Please check network connection.');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleCloseImportModal = () => {
+    setShowImportModal(false);
+    setImportRows([]);
+    setImportFileName('');
+    setImportSuccessData(null);
+    setImportError(null);
   };
 
   const employeeHistoryData = useMemo(() => {
@@ -724,8 +973,10 @@ export default function EmployeePerformancePage() {
     return MONTHS_2026.map((m) => {
       const found = records.find(
         (r) =>
-          r.employeeId === historyEmp.employeeId &&
-          (r.performanceMonth === m.value || (!r.performanceMonth && r.createdAt?.slice(0, 7) === m.value))
+          (r.employeeId || '').trim().toUpperCase() ===
+            (historyEmp.employeeId || '').trim().toUpperCase() &&
+          (r.performanceMonth === m.value ||
+            (!r.performanceMonth && r.createdAt?.slice(0, 7) === m.value))
       );
       return {
         month: m,
@@ -800,6 +1051,33 @@ export default function EmployeePerformancePage() {
             </select>
           </div>
 
+          {/* Date Added Filter (view added employees either manually or excel) */}
+          <div className="flex items-center gap-2 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs">
+            <Calendar className="w-3.5 h-3.5 text-blue-500" />
+            <span className="text-slate-500 font-semibold uppercase text-[10px]">Date Added:</span>
+            <input
+              type="date"
+              value={selectedDate}
+              onChange={(e) => {
+                setSelectedDate(e.target.value);
+                setPage(1);
+              }}
+              className="border-none outline-none text-xs font-bold text-slate-800 bg-transparent cursor-pointer"
+            />
+            {selectedDate && (
+              <button
+                onClick={() => {
+                  setSelectedDate('');
+                  setPage(1);
+                }}
+                className="text-[10px] text-slate-400 hover:text-red-500 font-bold ml-1 cursor-pointer"
+                title="Clear Date Filter"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
           <div className="ml-auto flex items-center gap-2">
             <button
               onClick={handleDownloadTemplate}
@@ -809,10 +1087,16 @@ export default function EmployeePerformancePage() {
               Template
             </button>
 
-            <label className="flex items-center gap-1.5 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 hover:bg-slate-100 transition cursor-pointer">
-              <Upload className="w-3.5 h-3.5 text-slate-500" />
-              Import
-              <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleImport} className="hidden" />
+            <label className="flex items-center gap-1.5 px-3 py-2 bg-orange-50 border border-orange-200 rounded-xl text-xs font-bold text-orange-700 hover:bg-orange-100 transition cursor-pointer shadow-2xs">
+              <Upload className="w-3.5 h-3.5 text-orange-600" />
+              Import Excel
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleFileSelect}
+                className="hidden"
+              />
             </label>
           </div>
         </div>
@@ -821,17 +1105,27 @@ export default function EmployeePerformancePage() {
       {/* Main Table */}
       <div className="rounded-2xl bg-white border border-slate-200 shadow-xs overflow-hidden">
         <div className="px-4 py-3 bg-slate-50/70 border-b border-slate-200 flex items-center justify-between">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs font-bold text-slate-700">
-              Showing Records for: <span className="text-orange-600">{MONTHS_2026.find((m) => m.value === selectedMonth)?.label || selectedMonth}</span>
+              Showing Records for:{' '}
+              <span className="text-orange-600">
+                {MONTHS_2026.find((m) => m.value === selectedMonth)?.label || selectedMonth}
+              </span>
+              {selectedDate && (
+                <span className="ml-2 px-2 py-0.5 rounded-md bg-blue-100 text-blue-800 text-[10px] font-bold">
+                  Date: {selectedDate}
+                </span>
+              )}
             </span>
-            <span className="text-[11px] text-slate-400">
+            <span className="text-[11px] text-slate-500 font-medium">
               ({loading ? (
                 <span className="inline-flex items-center gap-1 text-orange-600 font-bold">
                   <Loader2 className="w-3 h-3 animate-spin" /> Loading records...
                 </span>
               ) : (
-                `${filteredRecords.length} employees`
+                <span className="font-bold text-slate-800">
+                  {filteredRecords.length} employees
+                </span>
               )})
             </span>
           </div>
@@ -857,7 +1151,9 @@ export default function EmployeePerformancePage() {
                     <span>Daily</span>
                     <select
                       value={perfDailyDay ?? ''}
-                      onChange={(e) => setPerfDailyDay(e.target.value ? parseInt(e.target.value, 10) : null)}
+                      onChange={(e) =>
+                        setPerfDailyDay(e.target.value ? parseInt(e.target.value, 10) : null)
+                      }
                       className="px-1.5 py-0.5 text-[10px] font-semibold rounded border border-slate-300 bg-white text-slate-700 focus:outline-none focus:border-orange-500 cursor-pointer"
                     >
                       <option value="">All Days</option>
@@ -899,7 +1195,9 @@ export default function EmployeePerformancePage() {
                     <span>Daily Rev</span>
                     <select
                       value={revDailyDay ?? ''}
-                      onChange={(e) => setRevDailyDay(e.target.value ? parseInt(e.target.value, 10) : null)}
+                      onChange={(e) =>
+                        setRevDailyDay(e.target.value ? parseInt(e.target.value, 10) : null)
+                      }
                       className="px-1.5 py-0.5 text-[10px] font-semibold rounded border border-slate-300 bg-white text-slate-700 focus:outline-none focus:border-orange-500 cursor-pointer"
                     >
                       <option value="">All Days</option>
@@ -946,14 +1244,23 @@ export default function EmployeePerformancePage() {
                     <div className="flex flex-col items-center justify-center gap-2.5">
                       <Loader2 className="w-8 h-8 animate-spin text-orange-500" />
                       <span className="text-xs font-bold text-slate-700">Loading performance records...</span>
-                      <span className="text-[10px] text-slate-400">Fetching live evaluations and PIP trackers</span>
+                      <span className="text-[10px] text-slate-400">Fetching live evaluations and multi-month trackers</span>
                     </div>
                   </td>
                 </tr>
               ) : paginatedRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={16} className="px-4 py-8 text-center text-slate-400">
-                    No performance records found for {MONTHS_2026.find((m) => m.value === selectedMonth)?.label}.
+                  <td colSpan={16} className="px-4 py-12 text-center text-slate-400">
+                    <div className="flex flex-col items-center justify-center gap-2">
+                      <TrendingUp className="w-8 h-8 text-slate-300" />
+                      <p className="text-xs font-bold text-slate-600">
+                        No performance records found for {MONTHS_2026.find((m) => m.value === selectedMonth)?.label}
+                        {selectedDate ? ` on ${selectedDate}` : ''}.
+                      </p>
+                      <p className="text-[11px] text-slate-400">
+                        Click <strong>Add Performance Record</strong> or <strong>Import Excel</strong> to get started.
+                      </p>
+                    </div>
                   </td>
                 </tr>
               ) : (
@@ -965,8 +1272,10 @@ export default function EmployeePerformancePage() {
 
                   return (
                     <tr
-                      key={r.id || r._id || `placeholder-${r.employeeId}-${idx}`}
-                      className={`border-b border-slate-100 ${r._isPlaceholder ? 'bg-slate-50/40' : 'hover:bg-orange-50/30'}`}
+                      key={r.id || r._id || `row-${r.employeeId}-${idx}`}
+                      className={`border-b border-slate-100 ${
+                        r._isPlaceholder ? 'bg-slate-50/40' : 'hover:bg-orange-50/30'
+                      }`}
                     >
                       <td className="px-4 py-3">
                         {r._isPlaceholder ? (
@@ -980,7 +1289,9 @@ export default function EmployeePerformancePage() {
                         )}
                       </td>
                       <td className="px-4 py-3 font-semibold text-slate-800">{r.employeeName}</td>
-                      <td className="px-4 py-3 text-slate-700 font-mono text-[11px]">{r.employeeId}</td>
+                      <td className="px-4 py-3 text-slate-700 font-mono text-[11px] font-semibold">
+                        {r.employeeId || '—'}
+                      </td>
                       <td className="px-4 py-3">
                         <span
                           className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
@@ -996,37 +1307,43 @@ export default function EmployeePerformancePage() {
                           {r.department || '—'}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-slate-700">{r.designation}</td>
+                      <td className="px-4 py-3 text-slate-700">{r.designation || '—'}</td>
                       <td className="px-4 py-3 text-slate-700">{r.kpi || <span className="text-slate-300">—</span>}</td>
 
-                      {/* 1. Daily Performance Cell (changes based on Daily dropdown) */}
+                      {/* 1. Daily Performance Cell */}
                       <td className="px-4 py-3 text-slate-700">
                         {dailyPerfVal ? dailyPerfVal : <span className="text-slate-300">—</span>}
                       </td>
 
-                      {/* 2. Weekly Performance Cell (changes based on Weekly dropdown) */}
+                      {/* 2. Weekly Performance Cell */}
                       <td className="px-4 py-3 text-slate-700">
                         {weeklyPerfVal ? weeklyPerfVal : <span className="text-slate-300">—</span>}
                       </td>
 
-                      <td className="px-4 py-3 text-slate-700">{r.monthlyPerformance || <span className="text-slate-300">—</span>}</td>
+                      <td className="px-4 py-3 text-slate-700">
+                        {r.monthlyPerformance || <span className="text-slate-300">—</span>}
+                      </td>
 
-                      {/* 3. Daily Revenue Cell (changes based on Daily Rev dropdown) */}
+                      {/* 3. Daily Revenue Cell */}
                       <td className="px-4 py-3 text-slate-700 font-mono">
                         {dailyRevVal ? dailyRevVal : <span className="text-slate-300">—</span>}
                       </td>
 
-                      {/* 4. Weekly Revenue Cell (changes based on Weekly Rev dropdown) */}
+                      {/* 4. Weekly Revenue Cell */}
                       <td className="px-4 py-3 text-slate-700 font-mono">
                         {weeklyRevVal ? weeklyRevVal : <span className="text-slate-300">—</span>}
                       </td>
 
-                      <td className="px-4 py-3 text-slate-700 font-mono">{r.monthlyRevenue || <span className="text-slate-300">—</span>}</td>
+                      <td className="px-4 py-3 text-slate-700 font-mono">
+                        {r.monthlyRevenue || <span className="text-slate-300">—</span>}
+                      </td>
                       <td className="px-4 py-3">
                         {r.pipCase ? (
                           <span
                             className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              r.pipCase === 'Yes' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'
+                              r.pipCase === 'Yes'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-green-100 text-green-700'
                             }`}
                           >
                             {r.pipCase}
@@ -1083,10 +1400,15 @@ export default function EmployeePerformancePage() {
             </tbody>
           </table>
         </div>
-        <Pagination currentPage={page} totalItems={filteredRecords.length} pageSize={PAGE_SIZE} onPageChange={setPage} />
+        <Pagination
+          currentPage={page}
+          totalItems={filteredRecords.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+        />
       </div>
 
-      {/* Form (Add / Edit Popup Modal) */}
+      {/* Form (Add / Edit Popup Modal with Saving & Success Confirmation) */}
       {showForm && (
         <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-3xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto">
@@ -1103,7 +1425,9 @@ export default function EmployeePerformancePage() {
                   <p className="text-[11px] text-slate-500">
                     Target Month:{' '}
                     <span className="font-semibold text-orange-600">
-                      {MONTHS_2026.find((m) => m.value === (form.performanceMonth || selectedMonth))?.label || selectedMonth}
+                      {MONTHS_2026.find(
+                        (m) => m.value === (form.performanceMonth || selectedMonth)
+                      )?.label || selectedMonth}
                     </span>
                   </p>
                 </div>
@@ -1117,360 +1441,701 @@ export default function EmployeePerformancePage() {
               </button>
             </div>
 
-            {/* Modal Body Form */}
-            <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Employee Name *</label>
-                  <input
-                    type="text"
-                    required
-                    value={form.employeeName}
-                    onChange={(e) => setForm({ ...form, employeeName: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
+            {/* Modal Body: Success Screen OR Input Form */}
+            {saveSuccess ? (
+              <div className="p-8 flex flex-col items-center justify-center text-center space-y-4">
+                <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-xs">
+                  <Check className="w-8 h-8 stroke-[3]" />
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Joining Date *</label>
-                  <input
-                    type="date"
-                    required
-                    value={form.joiningDate}
-                    onChange={(e) => setForm({ ...form, joiningDate: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
+                <div className="space-y-1">
+                  <h3 className="text-base font-black text-slate-900">
+                    {saveSuccess.isEdit ? 'Record Updated Successfully!' : 'Record Saved Successfully!'}
+                  </h3>
+                  <p className="text-xs text-slate-500 max-w-md">
+                    The evaluation record for{' '}
+                    <strong className="text-slate-800">{saveSuccess.employeeName}</strong> (
+                    {saveSuccess.employeeId}) has been successfully saved for{' '}
+                    <strong className="text-orange-600">
+                      {MONTHS_2026.find((m) => m.value === saveSuccess.month)?.label ||
+                        saveSuccess.month}
+                    </strong>
+                    .
+                  </p>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Employee ID *</label>
-                  <input
-                    type="text"
-                    required
-                    value={form.employeeId}
-                    onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
+
+                <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-600 space-y-1 max-w-sm w-full text-left">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Employee:</span>
+                    <span className="font-bold text-slate-800">{saveSuccess.employeeName}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Employee ID:</span>
+                    <span className="font-mono font-semibold text-slate-800">{saveSuccess.employeeId}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Department:</span>
+                    <span className="font-semibold text-slate-800">{saveSuccess.department}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Month:</span>
+                    <span className="font-semibold text-orange-700">{saveSuccess.month}</span>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Department *</label>
-                  <select
-                    required
-                    value={form.department}
-                    onChange={(e) => setForm({ ...form, department: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
+
+                <div className="pt-3 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSaveSuccess(null);
+                      setForm((prev) => ({
+                        ...prev,
+                        employeeName: '',
+                        employeeId: '',
+                        dailyPerformance: '',
+                        weeklyPerformance: '',
+                        monthlyPerformance: '',
+                        dailyRevenue: '',
+                        weeklyRevenue: '',
+                        monthlyRevenue: '',
+                        pipCase: '',
+                        furtherActions: '',
+                        dailyData: {},
+                        weeklyData: {},
+                      }));
+                      setEditingId(null);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition cursor-pointer"
                   >
-                    <option value="">Select Department</option>
-                    <option value="Sales">Sales</option>
-                    <option value="Tech">Tech</option>
-                    <option value="Operation">Operation</option>
-                    <option value="HR">HR</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Designation *</label>
-                  <input
-                    type="text"
-                    required
-                    value={form.designation}
-                    onChange={(e) => setForm({ ...form, designation: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">KPI *</label>
-                  <input
-                    type="text"
-                    required
-                    value={form.kpi}
-                    onChange={(e) => setForm({ ...form, kpi: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-                </div>
-
-                {/* Daily Performance Section with Day Selector */}
-                {showDailyWeeklyPerf && (
-                  <>
-                    <div className="bg-orange-50/50 p-2.5 rounded-xl border border-orange-200">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-bold text-orange-900">
-                          Daily Performance *
-                        </label>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-slate-500 font-semibold">Day:</span>
-                          <select
-                            value={activeFormDay}
-                            onChange={(e) => handleFormDayChange(parseInt(e.target.value, 10))}
-                            className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-white border border-orange-300 text-orange-800 cursor-pointer focus:outline-none"
-                          >
-                            {monthDaysList.map((d) => (
-                              <option key={d} value={d}>
-                                Day {d}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
-                      <select
-                        required
-                        value={form.dailyPerformance}
-                        onChange={(e) => setForm({ ...form, dailyPerformance: e.target.value })}
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      >
-                        <option value="">Select Performance</option>
-                        <option value="Excellent">Excellent</option>
-                        <option value="Good">Good</option>
-                        <option value="Above Average">Above Average</option>
-                        <option value="Average">Average</option>
-                        <option value="Below Average">Below Average</option>
-                        <option value="Bad">Bad</option>
-                      </select>
-                    </div>
-
-                    <div className="bg-orange-50/50 p-2.5 rounded-xl border border-orange-200">
-                      <div className="flex items-center justify-between mb-1">
-                        <label className="block text-xs font-bold text-orange-900">
-                          Weekly Performance *
-                        </label>
-                        <div className="flex items-center gap-1">
-                          <span className="text-[10px] text-slate-500 font-semibold">Week:</span>
-                          <select
-                            value={activeFormWeek}
-                            onChange={(e) => handleFormWeekChange(e.target.value)}
-                            className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-white border border-orange-300 text-orange-800 cursor-pointer focus:outline-none"
-                          >
-                            <option value="Week 1">Week 1 (1–7)</option>
-                            <option value="Week 2">Week 2 (8–14)</option>
-                            <option value="Week 3">Week 3 (15–21)</option>
-                            <option value="Week 4">Week 4 (22–28)</option>
-                            {totalDaysInMonth > 28 && <option value="Week 5">Week 5 (29–{totalDaysInMonth})</option>}
-                          </select>
-                        </div>
-                      </div>
-                      <select
-                        required
-                        value={form.weeklyPerformance}
-                        onChange={(e) => setForm({ ...form, weeklyPerformance: e.target.value })}
-                        className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
-                      >
-                        <option value="">Select Performance</option>
-                        <option value="Excellent">Excellent</option>
-                        <option value="Good">Good</option>
-                        <option value="Above Average">Above Average</option>
-                        <option value="Average">Average</option>
-                        <option value="Below Average">Below Average</option>
-                        <option value="Bad">Bad</option>
-                      </select>
-                    </div>
-                  </>
-                )}
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Monthly Performance *</label>
-                  <select
-                    required
-                    value={form.monthlyPerformance}
-                    onChange={(e) => setForm({ ...form, monthlyPerformance: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    + Add Another Record
+                  </button>
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    className="px-6 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
                   >
-                    <option value="">Select Performance</option>
-                    <option value="Excellent">Excellent</option>
-                    <option value="Good">Good</option>
-                    <option value="Above Average">Above Average</option>
-                    <option value="Average">Average</option>
-                    <option value="Below Average">Below Average</option>
-                    <option value="Bad">Bad</option>
-                  </select>
+                    <span>Done & Exit</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
                 </div>
-
-                {/* Daily Revenue with Day tag */}
-                {isSales && (
-                  <div className="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="block text-xs font-bold text-amber-900">
-                        Daily Revenue (Day {activeFormDay}) *
-                      </label>
-                    </div>
-                    <input
-                      type="text"
-                      required
-                      placeholder="e.g. ₹10,000"
-                      value={form.dailyRevenue}
-                      onChange={(e) => setForm({ ...form, dailyRevenue: e.target.value })}
-                      className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm bg-white font-mono focus:outline-none focus:ring-2 focus:ring-orange-500"
-                    />
+              </div>
+            ) : (
+              <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4">
+                {saveError && (
+                  <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-xs text-red-700">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{saveError}</span>
                   </div>
                 )}
 
-                {/* Weekly & Monthly Revenue */}
-                {isRevenueDept && (
-                  <>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Employee Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={form.employeeName}
+                      onChange={(e) => setForm({ ...form, employeeName: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Joining Date *
+                    </label>
+                    <input
+                      type="date"
+                      required
+                      value={form.joiningDate}
+                      onChange={(e) => setForm({ ...form, joiningDate: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Employee ID *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={form.employeeId}
+                      onChange={(e) => setForm({ ...form, employeeId: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Department *
+                    </label>
+                    <select
+                      required
+                      value={form.department}
+                      onChange={(e) => setForm({ ...form, department: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
+                    >
+                      <option value="">Select Department</option>
+                      <option value="Sales">Sales</option>
+                      <option value="Tech">Tech</option>
+                      <option value="Operation">Operation</option>
+                      <option value="HR">HR</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Designation *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={form.designation}
+                      onChange={(e) => setForm({ ...form, designation: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">KPI *</label>
+                    <input
+                      type="text"
+                      required
+                      value={form.kpi}
+                      onChange={(e) => setForm({ ...form, kpi: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+
+                  {/* Daily Performance Section with Day Selector */}
+                  {showDailyWeeklyPerf && (
+                    <>
+                      <div className="bg-orange-50/50 p-2.5 rounded-xl border border-orange-200">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-orange-900">
+                            Daily Performance *
+                          </label>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-slate-500 font-semibold">Day:</span>
+                            <select
+                              value={activeFormDay}
+                              onChange={(e) => handleFormDayChange(parseInt(e.target.value, 10))}
+                              className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-white border border-orange-300 text-orange-800 cursor-pointer focus:outline-none"
+                            >
+                              {monthDaysList.map((d) => (
+                                <option key={d} value={d}>
+                                  Day {d}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                        <select
+                          required
+                          value={form.dailyPerformance}
+                          onChange={(e) => setForm({ ...form, dailyPerformance: e.target.value })}
+                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="">Select Performance</option>
+                          <option value="Excellent">Excellent</option>
+                          <option value="Good">Good</option>
+                          <option value="Above Average">Above Average</option>
+                          <option value="Average">Average</option>
+                          <option value="Below Average">Below Average</option>
+                          <option value="Bad">Bad</option>
+                        </select>
+                      </div>
+
+                      <div className="bg-orange-50/50 p-2.5 rounded-xl border border-orange-200">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-orange-900">
+                            Weekly Performance *
+                          </label>
+                          <div className="flex items-center gap-1">
+                            <span className="text-[10px] text-slate-500 font-semibold">Week:</span>
+                            <select
+                              value={activeFormWeek}
+                              onChange={(e) => handleFormWeekChange(e.target.value)}
+                              className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-white border border-orange-300 text-orange-800 cursor-pointer focus:outline-none"
+                            >
+                              <option value="Week 1">Week 1 (1–7)</option>
+                              <option value="Week 2">Week 2 (8–14)</option>
+                              <option value="Week 3">Week 3 (15–21)</option>
+                              <option value="Week 4">Week 4 (22–28)</option>
+                              {totalDaysInMonth > 28 && (
+                                <option value="Week 5">Week 5 (29–{totalDaysInMonth})</option>
+                              )}
+                            </select>
+                          </div>
+                        </div>
+                        <select
+                          required
+                          value={form.weeklyPerformance}
+                          onChange={(e) => setForm({ ...form, weeklyPerformance: e.target.value })}
+                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        >
+                          <option value="">Select Performance</option>
+                          <option value="Excellent">Excellent</option>
+                          <option value="Good">Good</option>
+                          <option value="Above Average">Above Average</option>
+                          <option value="Average">Average</option>
+                          <option value="Below Average">Below Average</option>
+                          <option value="Bad">Bad</option>
+                        </select>
+                      </div>
+                    </>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Monthly Performance *
+                    </label>
+                    <select
+                      required
+                      value={form.monthlyPerformance}
+                      onChange={(e) => setForm({ ...form, monthlyPerformance: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="">Select Performance</option>
+                      <option value="Excellent">Excellent</option>
+                      <option value="Good">Good</option>
+                      <option value="Above Average">Above Average</option>
+                      <option value="Average">Average</option>
+                      <option value="Below Average">Below Average</option>
+                      <option value="Bad">Bad</option>
+                    </select>
+                  </div>
+
+                  {/* Daily Revenue */}
+                  {isSales && (
                     <div className="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200">
                       <div className="flex items-center justify-between mb-1">
                         <label className="block text-xs font-bold text-amber-900">
-                          Weekly Revenue ({activeFormWeek}) *
+                          Daily Revenue (Day {activeFormDay}) *
                         </label>
                       </div>
                       <input
                         type="text"
                         required
-                        placeholder="e.g. ₹50,000"
-                        value={form.weeklyRevenue}
-                        onChange={(e) => setForm({ ...form, weeklyRevenue: e.target.value })}
+                        placeholder="e.g. ₹10,000"
+                        value={form.dailyRevenue}
+                        onChange={(e) => setForm({ ...form, dailyRevenue: e.target.value })}
                         className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm bg-white font-mono focus:outline-none focus:ring-2 focus:ring-orange-500"
                       />
                     </div>
+                  )}
+
+                  {/* Weekly & Monthly Revenue */}
+                  {isRevenueDept && (
+                    <>
+                      <div className="bg-amber-50/50 p-2.5 rounded-xl border border-amber-200">
+                        <div className="flex items-center justify-between mb-1">
+                          <label className="block text-xs font-bold text-amber-900">
+                            Weekly Revenue ({activeFormWeek}) *
+                          </label>
+                        </div>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. ₹50,000"
+                          value={form.weeklyRevenue}
+                          onChange={(e) => setForm({ ...form, weeklyRevenue: e.target.value })}
+                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 text-sm bg-white font-mono focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-xs font-semibold text-slate-600 mb-1">
+                          Monthly Revenue *
+                        </label>
+                        <input
+                          type="text"
+                          required
+                          placeholder="e.g. ₹2,00,000"
+                          value={form.monthlyRevenue}
+                          onChange={(e) => setForm({ ...form, monthlyRevenue: e.target.value })}
+                          className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        />
+                      </div>
+                    </>
+                  )}
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      PIP Case *
+                    </label>
+                    <select
+                      required
+                      value={form.pipCase}
+                      onChange={(e) => setForm({ ...form, pipCase: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    >
+                      <option value="">Select</option>
+                      <option value="Yes">Yes</option>
+                      <option value="No">No</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Performance Month *
+                    </label>
+                    <select
+                      value={form.performanceMonth || selectedMonth}
+                      onChange={(e) => setForm({ ...form, performanceMonth: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
+                    >
+                      {MONTHS_2026.map((m) => (
+                        <option key={m.value} value={m.value}>
+                          {m.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Rating <span className="text-slate-400 font-normal">(Grade)</span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. 8.5/10, 6/10"
+                      value={form.monthPerformance}
+                      onChange={(e) => setForm({ ...form, monthPerformance: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+
+                  <div className="sm:col-span-2 lg:col-span-3">
+                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                      Further Actions / Remarks
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Warning letter issued / Promoted / Mentorship"
+                      value={form.furtherActions}
+                      onChange={(e) => setForm({ ...form, furtherActions: e.target.value })}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                    />
+                  </div>
+                </div>
+
+                {form.pipCase === 'Yes' && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-3 border-t border-slate-100 bg-red-50/50 p-3.5 rounded-xl">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Monthly Revenue *</label>
+                      <label className="block text-xs font-semibold text-red-700 mb-1">
+                        Reason for PIP *
+                      </label>
                       <input
                         type="text"
                         required
-                        placeholder="e.g. ₹2,00,000"
-                        value={form.monthlyRevenue}
-                        onChange={(e) => setForm({ ...form, monthlyRevenue: e.target.value })}
-                        className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-orange-500"
+                        value={form.reasonForPip}
+                        onChange={(e) => setForm({ ...form, reasonForPip: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
                       />
                     </div>
-                  </>
+                    <div>
+                      <label className="block text-xs font-semibold text-red-700 mb-1">
+                        Performance Gap *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={form.performanceGap}
+                        onChange={(e) => setForm({ ...form, performanceGap: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-red-700 mb-1">
+                        Current Performance *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={form.currentPerformance}
+                        onChange={(e) => setForm({ ...form, currentPerformance: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-red-700 mb-1">
+                        Improvement Action *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={form.improvementAction}
+                        onChange={(e) => setForm({ ...form, improvementAction: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-red-700 mb-1">
+                        Manager Remark *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={form.managerRemark}
+                        onChange={(e) => setForm({ ...form, managerRemark: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-semibold text-red-700 mb-1">
+                        Final Remark *
+                      </label>
+                      <input
+                        type="text"
+                        required
+                        value={form.finalRemark}
+                        onChange={(e) => setForm({ ...form, finalRemark: e.target.value })}
+                        className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
+                      />
+                    </div>
+                  </div>
                 )}
 
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">PIP Case *</label>
-                  <select
-                    required
-                    value={form.pipCase}
-                    onChange={(e) => setForm({ ...form, pipCase: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+                {/* Sticky / Bottom Action Buttons */}
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2.5">
+                  <button
+                    type="button"
+                    onClick={resetForm}
+                    disabled={saving}
+                    className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-xs font-bold transition cursor-pointer"
                   >
-                    <option value="">Select</option>
-                    <option value="Yes">Yes</option>
-                    <option value="No">No</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Performance Month *</label>
-                  <select
-                    value={form.performanceMonth || selectedMonth}
-                    onChange={(e) => setForm({ ...form, performanceMonth: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-orange-500 cursor-pointer"
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="px-5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-2"
                   >
-                    {MONTHS_2026.map((m) => (
-                      <option key={m.value} value={m.value}>
-                        {m.label}
-                      </option>
-                    ))}
-                  </select>
+                    {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                    <span>{saving ? 'Saving...' : editingId ? 'Update Record' : 'Save Record'}</span>
+                  </button>
                 </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
 
+      {/* Excel Import Modal with Preview, Progress & Success Confirmation */}
+      {showImportModal && (
+        <div className="fixed inset-0 z-50 bg-slate-900/50 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-150 my-auto">
+            {/* Modal Header */}
+            <div className="px-5 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-xl bg-emerald-100 text-emerald-700">
+                  <FileSpreadsheet className="w-5 h-5" />
+                </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Rating <span className="text-slate-400 font-normal">(Grade)</span>
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="e.g. 8.5/10, 6/10"
-                    value={form.monthPerformance}
-                    onChange={(e) => setForm({ ...form, monthPerformance: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
-                </div>
-
-                <div className="sm:col-span-2 lg:col-span-3">
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Further Actions / Remarks</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Warning letter issued / Promoted / Mentorship"
-                    value={form.furtherActions}
-                    onChange={(e) => setForm({ ...form, furtherActions: e.target.value })}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
-                  />
+                  <h3 className="text-sm font-bold text-slate-900">
+                    Import Employee Performance from Excel
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    File: <span className="font-semibold text-slate-700">{importFileName}</span>
+                  </p>
                 </div>
               </div>
+              {!importing && (
+                <button
+                  type="button"
+                  onClick={handleCloseImportModal}
+                  className="p-1.5 rounded-xl text-slate-400 hover:text-slate-700 hover:bg-slate-200 transition cursor-pointer"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
 
-              {form.pipCase === 'Yes' && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3.5 pt-3 border-t border-slate-100 bg-red-50/50 p-3.5 rounded-xl">
-                  <div>
-                    <label className="block text-xs font-semibold text-red-700 mb-1">Reason for PIP *</label>
-                    <input
-                      type="text"
-                      required
-                      value={form.reasonForPip}
-                      onChange={(e) => setForm({ ...form, reasonForPip: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                    />
+            {/* Modal Content */}
+            <div className="p-5 space-y-4 flex-1 overflow-y-auto">
+              {importSuccessData ? (
+                /* Success View */
+                <div className="py-6 flex flex-col items-center justify-center text-center space-y-4">
+                  <div className="w-16 h-16 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-xs">
+                    <Check className="w-9 h-9 stroke-[3]" />
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-red-700 mb-1">Performance Gap *</label>
-                    <input
-                      type="text"
-                      required
-                      value={form.performanceGap}
-                      onChange={(e) => setForm({ ...form, performanceGap: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                    />
+                  <div className="space-y-1">
+                    <h4 className="text-base font-black text-slate-900">
+                      Excel Imported Successfully!
+                    </h4>
+                    <p className="text-xs text-slate-500 max-w-md">
+                      All employee records have been saved to the database. They will now appear in{' '}
+                      <strong className="text-orange-600">
+                        {MONTHS_2026.find((m) => m.value === importSuccessData.month)?.label ||
+                          importSuccessData.month}
+                      </strong>{' '}
+                      and carry forward to all 2026 months without duplicates.
+                    </p>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-red-700 mb-1">Current Performance *</label>
-                    <input
-                      type="text"
-                      required
-                      value={form.currentPerformance}
-                      onChange={(e) => setForm({ ...form, currentPerformance: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                    />
+
+                  <div className="grid grid-cols-3 gap-3 max-w-md w-full pt-2">
+                    <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-center">
+                      <div className="text-lg font-black text-slate-900">
+                        {importSuccessData.total}
+                      </div>
+                      <div className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
+                        Total Processed
+                      </div>
+                    </div>
+                    <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-center">
+                      <div className="text-lg font-black text-emerald-700">
+                        {importSuccessData.inserted}
+                      </div>
+                      <div className="text-[10px] text-emerald-600 font-bold uppercase tracking-wider">
+                        New Saved
+                      </div>
+                    </div>
+                    <div className="p-3 bg-blue-50 rounded-xl border border-blue-200 text-center">
+                      <div className="text-lg font-black text-blue-700">
+                        {importSuccessData.updated}
+                      </div>
+                      <div className="text-[10px] text-blue-600 font-bold uppercase tracking-wider">
+                        Updated
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-red-700 mb-1">Improvement Action *</label>
-                    <input
-                      type="text"
-                      required
-                      value={form.improvementAction}
-                      onChange={(e) => setForm({ ...form, improvementAction: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                    />
+
+                  <div className="pt-4">
+                    <button
+                      type="button"
+                      onClick={handleCloseImportModal}
+                      className="px-8 py-2.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-2"
+                    >
+                      <span>Done & Exit</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-red-700 mb-1">Manager Remark *</label>
-                    <input
-                      type="text"
-                      required
-                      value={form.managerRemark}
-                      onChange={(e) => setForm({ ...form, managerRemark: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                    />
+                </div>
+              ) : importing ? (
+                /* In-Progress Loading View */
+                <div className="py-12 flex flex-col items-center justify-center text-center space-y-3">
+                  <Loader2 className="w-10 h-10 animate-spin text-orange-500" />
+                  <h4 className="text-sm font-bold text-slate-900">
+                    Importing {importRows.length} Employee Records...
+                  </h4>
+                  <p className="text-xs text-slate-500 max-w-sm">
+                    Saving performance entries and syncing profiles across months without creating
+                    duplicates. Please do not close this window.
+                  </p>
+                </div>
+              ) : (
+                /* Preview & Confirmation View */
+                <div className="space-y-4">
+                  {importError && (
+                    <div className="p-3 bg-red-50 border border-red-200 rounded-xl flex items-center gap-2 text-xs text-red-700">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{importError}</span>
+                    </div>
+                  )}
+
+                  <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-orange-50/60 border border-orange-200 rounded-xl text-xs">
+                    <div className="flex items-center gap-2">
+                      <Sparkles className="w-4 h-4 text-orange-600" />
+                      <span className="font-bold text-orange-950">
+                        {importRows.length} unique employees detected
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-slate-600 font-semibold text-[11px]">
+                        Target Month:
+                      </span>
+                      <select
+                        value={importTargetMonth}
+                        onChange={(e) => setImportTargetMonth(e.target.value)}
+                        className="px-2 py-1 bg-white border border-orange-300 rounded-lg text-xs font-bold text-slate-800 cursor-pointer focus:outline-none"
+                      >
+                        {MONTHS_2026.map((m) => (
+                          <option key={m.value} value={m.value}>
+                            {m.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
                   </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-red-700 mb-1">Final Remark *</label>
-                    <input
-                      type="text"
-                      required
-                      value={form.finalRemark}
-                      onChange={(e) => setForm({ ...form, finalRemark: e.target.value })}
-                      className="w-full px-3 py-2 rounded-lg border border-red-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-red-500"
-                    />
+
+                  {/* Preview Table */}
+                  <div className="space-y-1.5">
+                    <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                      Preview First {Math.min(4, importRows.length)} Records:
+                    </span>
+                    <div className="border border-slate-200 rounded-xl overflow-hidden text-xs">
+                      <table className="w-full">
+                        <thead className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold text-[11px]">
+                          <tr>
+                            <th className="px-3 py-2 text-left">Name</th>
+                            <th className="px-3 py-2 text-left">Emp ID</th>
+                            <th className="px-3 py-2 text-left">Dept</th>
+                            <th className="px-3 py-2 text-left">Designation</th>
+                            <th className="px-3 py-2 text-left">KPI</th>
+                            <th className="px-3 py-2 text-left">Month Perf</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {importRows.slice(0, 4).map((r, i) => (
+                            <tr key={i} className="hover:bg-slate-50">
+                              <td className="px-3 py-2 font-semibold text-slate-800">
+                                {r.employeeName || '—'}
+                              </td>
+                              <td className="px-3 py-2 font-mono text-slate-600">
+                                {r.employeeId || '—'}
+                              </td>
+                              <td className="px-3 py-2 text-slate-600">{r.department || '—'}</td>
+                              <td className="px-3 py-2 text-slate-600">{r.designation || '—'}</td>
+                              <td className="px-3 py-2 text-slate-600">{r.kpi || '—'}</td>
+                              <td className="px-3 py-2 text-slate-600 font-semibold">
+                                {r.monthlyPerformance || '—'}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                    {importRows.length > 4 && (
+                      <p className="text-[10px] text-slate-400 italic text-right">
+                        ...and {importRows.length - 4} more records
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px] text-slate-600 space-y-1">
+                    <p className="font-semibold text-slate-800">💡 Multi-Month Carryover Notice:</p>
+                    <p>
+                      Imported employees will be assigned to{' '}
+                      <strong>
+                        {MONTHS_2026.find((m) => m.value === importTargetMonth)?.label ||
+                          importTargetMonth}
+                      </strong>
+                      . All {importRows.length} employees will also automatically carry forward to
+                      every other month as pending evaluations without creating duplicate rows.
+                    </p>
                   </div>
                 </div>
               )}
+            </div>
 
-              {/* Sticky / Bottom Action Buttons */}
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-end gap-2.5">
+            {/* Modal Footer (only visible when not in success view and not importing) */}
+            {!importSuccessData && !importing && (
+              <div className="p-4 border-t border-slate-200 bg-slate-50 flex items-center justify-end gap-2.5">
                 <button
                   type="button"
-                  onClick={resetForm}
-                  disabled={saving}
-                  className="px-4 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 disabled:opacity-50 text-slate-700 text-xs font-bold transition cursor-pointer"
+                  onClick={handleCloseImportModal}
+                  className="px-4 py-2 rounded-xl bg-slate-200 hover:bg-slate-300 text-slate-700 text-xs font-bold transition cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 disabled:opacity-50 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-2"
+                  type="button"
+                  onClick={handleExecuteImport}
+                  className="px-5 py-2 rounded-xl bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold transition shadow-xs cursor-pointer flex items-center gap-1.5"
                 >
-                  {saving && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  <span>{saving ? 'Saving...' : editingId ? 'Update Record' : 'Save Record'}</span>
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Confirm & Import {importRows.length} Records</span>
                 </button>
               </div>
-            </form>
+            )}
           </div>
         </div>
       )}
@@ -1486,7 +2151,8 @@ export default function EmployeePerformancePage() {
                   <span>2026 Month-Wise Performance History</span>
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  <strong className="text-slate-800">{historyEmp.employeeName}</strong> ({historyEmp.employeeId}) • {historyEmp.department} - {historyEmp.designation}
+                  <strong className="text-slate-800">{historyEmp.employeeName}</strong> (
+                  {historyEmp.employeeId}) • {historyEmp.department} - {historyEmp.designation}
                 </p>
               </div>
               <button
@@ -1525,16 +2191,31 @@ export default function EmployeePerformancePage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5 text-slate-700">{record?.monthlyPerformance || '—'}</td>
-                      <td className="px-3 py-2.5 font-mono text-slate-700">{record?.monthlyRevenue || '—'}</td>
+                      <td className="px-3 py-2.5 text-slate-700">
+                        {record?.monthlyPerformance || '—'}
+                      </td>
+                      <td className="px-3 py-2.5 font-mono text-slate-700">
+                        {record?.monthlyRevenue || '—'}
+                      </td>
                       <td className="px-3 py-2.5">
                         {record?.pipCase ? (
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${record.pipCase === 'Yes' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>
+                          <span
+                            className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              record.pipCase === 'Yes'
+                                ? 'bg-red-100 text-red-700'
+                                : 'bg-green-100 text-green-700'
+                            }`}
+                          >
                             {record.pipCase}
                           </span>
-                        ) : '—'}
+                        ) : (
+                          '—'
+                        )}
                       </td>
-                      <td className="px-3 py-2.5 text-slate-600 max-w-[200px] truncate" title={record?.furtherActions || ''}>
+                      <td
+                        className="px-3 py-2.5 text-slate-600 max-w-[200px] truncate"
+                        title={record?.furtherActions || ''}
+                      >
                         {record?.furtherActions || '—'}
                       </td>
                       <td className="px-3 py-2.5 text-center">
@@ -1547,7 +2228,9 @@ export default function EmployeePerformancePage() {
                           </button>
                         ) : (
                           <button
-                            onClick={() => handleEdit({ ...historyEmp, _isPlaceholder: true }, month.value)}
+                            onClick={() =>
+                              handleEdit({ ...historyEmp, _isPlaceholder: true }, month.value)
+                            }
                             className="px-2.5 py-1 rounded-lg bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-bold transition cursor-pointer"
                           >
                             + Fill {month.label.split(' ')[0]}

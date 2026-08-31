@@ -158,7 +158,7 @@ function sanitizePerformanceData(body: any) {
   if (body.furtherActions !== undefined) data.furtherActions = body.furtherActions ? String(body.furtherActions).trim() : null;
   if (body.performanceMonth !== undefined) data.performanceMonth = String(body.performanceMonth || '').trim();
   if (body.monthPerformance !== undefined) data.monthPerformance = String(body.monthPerformance || '').trim();
-  
+
   // Persist day-wise and week-wise JSON reliably in DB columns
   if (dailyDataStr !== null) data.employeeExplanation = dailyDataStr;
   if (weeklyDataStr !== null) data.managerExplanation = weeklyDataStr;
@@ -267,7 +267,7 @@ router.put('/performance/:id', async (req: AuthRequest, res: Response, next: Nex
 router.delete('/performance/:id', async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     const id = String(req.params.id);
-    await prisma.employeePerformance.delete({ where: { id } }).catch(() => {});
+    await prisma.employeePerformance.delete({ where: { id } }).catch(() => { });
     return res.json({ success: true });
   } catch (e: any) {
     next(e);
@@ -278,25 +278,60 @@ router.post('/performance/bulk', async (req: AuthRequest, res: Response, next: N
   try {
     const rawItems: any[] = Array.isArray(req.body) ? req.body : (Array.isArray(req.body?.items) ? req.body.items : []);
     if (rawItems.length === 0) {
-      return res.json({ success: true, count: 0 });
+      return res.json({ success: true, count: 0, insertedCount: 0, updatedCount: 0, message: 'No records to process' });
     }
     let count = 0;
+    let insertedCount = 0;
+    let updatedCount = 0;
+
     for (const item of rawItems) {
       if (!item.employeeName && !item.employeeId) continue;
       try {
         const sanitized = sanitizePerformanceData(item);
+        const targetMonth = (sanitized.performanceMonth || item.performanceMonth || '').trim();
+
+        if (sanitized.employeeId && targetMonth) {
+          const existing = await prisma.employeePerformance.findFirst({
+            where: {
+              employeeId: sanitized.employeeId,
+              performanceMonth: targetMonth,
+            },
+          });
+
+          if (existing) {
+            await prisma.employeePerformance.update({
+              where: { id: existing.id },
+              data: {
+                ...sanitized,
+                performanceMonth: targetMonth,
+              },
+            });
+            updatedCount++;
+            count++;
+            continue;
+          }
+        }
+
         await prisma.employeePerformance.create({
           data: {
             ...sanitized,
+            performanceMonth: targetMonth || null,
             createdByEmail: req.user?.email || null,
           },
         });
+        insertedCount++;
         count++;
       } catch (e) {
         console.error('Error inserting performance item:', e);
       }
     }
-    return res.status(201).json({ success: true, count, message: `Successfully saved ${count} records` });
+    return res.status(201).json({
+      success: true,
+      count,
+      insertedCount,
+      updatedCount,
+      message: `Successfully processed ${count} records (${insertedCount} new, ${updatedCount} updated)`
+    });
   } catch (e: any) {
     next(e);
   }
