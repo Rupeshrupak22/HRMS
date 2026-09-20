@@ -132,7 +132,8 @@ router.get('/session-events', authenticate, async (req: AuthRequest, res: Respon
   if (token) {
     try {
       const jwt = (await import('jsonwebtoken')).default;
-      const decoded = jwt.decode(token) as any;
+      // Verify signature (token already validated by authenticate middleware — this closes any forge gap)
+      const decoded = jwt.verify(token, env.JWT_SECRET) as any;
       if (decoded) {
         tokenTv = decoded.tv || 0;
         tokenDeviceId = decoded.deviceId || '';

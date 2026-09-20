@@ -126,6 +126,10 @@ app.use(express.json({
 }));
 app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
+// Sanitize request body — strip system fields to prevent mass assignment
+import { sanitizeBody } from './middleware/sanitizeBody';
+app.use(sanitizeBody);
+
 // Security monitoring — blocks IPs with excessive failed logins
 app.use(securityGate);
 
@@ -141,7 +145,20 @@ app.all(['/', '/health', '/api/health'], (_req, res) => {
 });
 
 // API Routes — mounted at both /api and /api/v1 for frontend compatibility
+import { perUserLimiter, heavyEndpointLimiter } from './middleware/userRateLimit';
 const apiRouter = Router();
+
+// Per-user rate limit (60 req/min per authenticated user)
+apiRouter.use(perUserLimiter);
+
+// Heavy endpoint limits (10 req/min per user)
+apiRouter.use('/reports/dashboard-metrics', heavyEndpointLimiter);
+apiRouter.use('/ai/copilot', heavyEndpointLimiter);
+apiRouter.use('/attendance/bulk-import', heavyEndpointLimiter);
+apiRouter.use('/veena-portal/recruitment/bulk', heavyEndpointLimiter);
+apiRouter.use('/veena-portal/onboarding/bulk', heavyEndpointLimiter);
+apiRouter.use('/nitisha/performance/bulk', heavyEndpointLimiter);
+
 apiRouter.use('/auth', authRoutes);
 apiRouter.use('/auth', adminSeedRoutes);
 apiRouter.use('/employees', employeeRoutes);
