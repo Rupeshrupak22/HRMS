@@ -9,8 +9,8 @@ export const env = {
   DATABASE_URL: process.env.DATABASE_URL!,
   JWT_SECRET: process.env.JWT_SECRET || 'change-me',
   JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'change-me-refresh',
-  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '30d',
-  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '90d',
+  JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '8h',
+  JWT_REFRESH_EXPIRES_IN: process.env.JWT_REFRESH_EXPIRES_IN || '7d',
   CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:3000',
   COOKIE_SECRET: process.env.COOKIE_SECRET || 'change-me-cookie-secret',
   REDIS_URL: process.env.REDIS_URL || 'redis://localhost:6379',
@@ -51,6 +51,20 @@ export function validateSecrets(): void {
 
   if (isProduction && (!process.env.CORS_ORIGIN || process.env.CORS_ORIGIN === '*')) {
     errors.push('CORS_ORIGIN must be explicitly set in production (no wildcard)');
+  }
+
+  // Enforce minimum secret strength in production (blocks weak set-but-short secrets)
+  const MIN_SECRET_LENGTH = 32;
+  if (isProduction) {
+    if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < MIN_SECRET_LENGTH) {
+      errors.push(`JWT_SECRET must be at least ${MIN_SECRET_LENGTH} characters in production`);
+    }
+    if (process.env.JWT_REFRESH_SECRET && process.env.JWT_REFRESH_SECRET.length < MIN_SECRET_LENGTH) {
+      errors.push(`JWT_REFRESH_SECRET must be at least ${MIN_SECRET_LENGTH} characters in production`);
+    }
+    if (process.env.COOKIE_SECRET && process.env.COOKIE_SECRET.length < MIN_SECRET_LENGTH) {
+      errors.push(`COOKIE_SECRET must be at least ${MIN_SECRET_LENGTH} characters in production`);
+    }
   }
 
   if (errors.length > 0) {
